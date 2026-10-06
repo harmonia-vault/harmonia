@@ -57,7 +57,8 @@ function accountFromRequest(req: Request): string | null {
 export async function route(req: Request, backend: Backend, clientIp: string): Promise<Response> {
   try {
     const url = new URL(req.url);
-    const local = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+    // 本地开发：本机与 Android 模拟器访问宿主机的 10.0.2.2。
+    const local = ["localhost", "127.0.0.1", "[::1]", "10.0.2.2"].includes(url.hostname);
     if (url.protocol !== "https:" && !local) throw bad("只允许通过 HTTPS 访问。");
     const path = url.pathname;
     const { directory, config } = backend;

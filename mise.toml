@@ -5,6 +5,7 @@ pnpm = "11.5.2"
 flutter = "3.47.6"
 java = "temurin-17.0.16+8"
 android-sdk = "19.0"
+cmake = "3.31.8"
 
 [env]
 ANDROID_HOME = "{{env.HOME}}/.local/share/mise/installs/android-sdk/19.0"

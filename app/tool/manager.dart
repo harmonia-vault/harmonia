@@ -1,4 +1,5 @@
 // 无界面的“管理手机”，供端到端测试使用：与 App 共用 lib/core 的全部逻辑。
+// ignore_for_file: avoid_print
 // 用法：dart run tool/manager.dart --home <目录> <命令> [参数...]
 import 'dart:io';
 

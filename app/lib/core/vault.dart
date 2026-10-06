@@ -423,12 +423,12 @@ class Vault {
   // ---- 恢复码轮换 ----
 
   /// 用新恢复码轮换。全部环境钥与账号根密钥重新封装给新恢复钥，提交成功后旧恢复码失效。
-  Future<RotationAttempt> rotateRecovery(Uint8List newCode, {String? newPassword}) async {
+  Future<RotationAttempt> rotateRecovery(Uint8List newCode, {String? newPassword, String? key}) async {
     final r = _root();
     final rec = crypto.deriveRecovery(newCode);
     final generation = int.parse((cache.manager!['recovery'] as Map)['generation'] as String) + 1;
     final rootSealed = crypto.seal(r.seed, rec.box.pub);
-    final attempt = RotationAttempt(crypto.newId(), generation);
+    final attempt = RotationAttempt(key ?? crypto.newId(), generation);
     final body = <String, dynamic>{
       'idempotencyKey': attempt.key,
       'generation': '$generation',
