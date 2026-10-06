@@ -60,7 +60,7 @@
 
 ### 2.3 信任锚：rootPub 钉住
 
-- 每台设备在第一次接触服务器时（首次设置、登录、恢复）读取 `rootPub` 并保存在本地，此后不再接受变更。
+- 每台设备在第一次接触账号时读取 `rootPub` 并保存在本地，此后不再接受变更：首次初始化时由本机生成；登录后从 `GET /account` 读取；恢复时由恢复码解开的 root 种子推出。
 - 配对请求中包含设备钉住的 `rootPub`，并纳入配对指纹。管理设备在批准前检查它是否等于真实的 `rootPub`，不一致就拒绝（提示服务器可能被篡改）。
 - 因此，服务器无法偷换封装：封装必须由 root 签名；也无法塞入假设备：设备证书必须由 root 签名。
 
@@ -75,52 +75,93 @@ fp = SHA-256(C(["harmonia.pairing", pairingId, signPub, boxPub, rootPub]))
 ## 3. HTTP API
 
 - 基础路径为 `/api/v1`。请求和响应都是 JSON，只允许 HTTPS（本地开发时允许 `http://localhost`、`http://127.0.0.1`）。
-- 认证头为 `Authorization: Bearer <token>`。
 - 错误响应：`{"error": "<code>", "message": "<中文说明>"}`。
+
+### 3.0 账号与寻址
+
+- 一个实例可以有多个相互隔离的账号，账号以**邮箱**标识。服务端为每个账号使用一个独立的 Durable Object，另有一个目录 Durable Object 负责“邮箱 → 账号 ID”的映射和注册策略。
+- 注册策略由两个部署变量控制：
+  - `ALLOW_REGISTRATION`：为 `false` 时只允许注册第一个账号。
+  - `REQUIRE_EMAIL_VERIFICATION`：为 `true` 时注册需要验证邮箱（默认 `true`）。
+- 账号状态：
+  - `pending`：邮箱未验证。15 分钟内不验证，该注册作废，可以重新注册。
+  - `active`：可以登录。
+  - `initialized`：已在手机上完成密钥初始化，账号公钥 `rootPub` 确定。
+- 寻址方式：
+  - 会话令牌的格式为 `<accountId>.<随机串>`，服务端据此定位账号。
+  - 不带令牌的账号内请求（设备登录、配对状态查询、恢复登录），在请求头 `X-Harmonia-Account` 中给出账号 ID。
+  - 以邮箱为入口的请求（注册、登录、找回密码、重置账号、开始恢复），由目录解析邮箱。
+- 邮件验证码：8 位，字符取自 Base32 字母表，不区分大小写；15 分钟内有效；每个验证码最多尝试 5 次；重发间隔不少于 60 秒。用途包括注册验证、找回密码、重置账号。
 
 ### 3.1 会话
 
 | 类型 | 获取方式 | 有效期 | 允许的操作 |
 | --- | --- | --- | --- |
-| password | `POST /auth/login` | 15 分钟 | 创建配对请求 |
+| password | `POST /auth/login` | 15 分钟 | 查看账号信息、首次初始化密钥、创建配对请求 |
 | device | `POST /auth/device-session` | 1 小时 | 按设备当前的权限 |
 | recovery | `POST /recovery/session` | 15 分钟 | 读取恢复材料、登记本机 |
 
-`rotationRequired=true` 的管理设备只允许调用：`/sync`、`/events`、`/recovery/rotate*`、`/devices/self/revoke`。
+`rotationRequired=true` 的管理设备只允许调用：`/sync`、`/events`、`/account`、`/recovery/rotate*`、`/devices/self/revoke`。
 
 ### 3.2 端点
 
+**以邮箱为入口（由目录解析）：**
+
+| 方法与路径 | 说明 |
+| --- | --- |
+| `GET /instance` | `{product:"harmonia", version, protocol:1, registration:{open, emailVerification}}` |
+| `POST /register` | `{email, kdfSalt, authKey}` → `{accountId, verificationRequired}`。邮箱已被注册时返回 `conflict`，注册未开放时返回 `forbidden` |
+| `POST /register/verify` | `{email, code}` → `{ok}` |
+| `POST /register/resend` | `{email}` → `{ok}` |
+| `GET /auth/prelogin?email=` | `{kdfSalt, opsLimit, memLimit}` |
+| `POST /auth/login` | `{email, authKey}` → `{token, expiresAt, accountId}`；邮箱未验证时返回 `email_unverified` |
+| `POST /password-reset/request` | `{email}` → `{ok}`，发送找回密码验证码 |
+| `POST /password-reset/complete` | `{email, code, kdfSalt, authKey}` → `{ok}`，只修改密码，数据保留 |
+| `POST /account-reset/request` | `{email}` → `{ok}`，发送重置账号验证码 |
+| `POST /account-reset/complete` | `{email, code}` → `{ok}`，**永久删除**该账号的全部数据和设备，邮箱可以重新注册 |
+| `POST /recovery/challenge` | `{email}` → `{accountId, nonce, expiresAt}` |
+
+**账号内：**
+
 | 方法与路径 | 会话 | 说明 |
 | --- | --- | --- |
-| `GET /instance` | — | `{product:"harmonia", version, protocol:1, initialized, rootPub?}` |
-| `POST /setup` | — | 仅在未初始化时可用：创建账号和第一台管理设备 |
-| `GET /auth/prelogin` | — | `{kdfSalt, opsLimit, memLimit}` |
-| `POST /auth/login` | — | `{login, authKey}` → `{token, expiresAt}` |
-| `POST /auth/challenge` | — | `{deviceId}` → `{nonce, expiresAt}`，nonce 只能使用一次，2 分钟内有效 |
-| `POST /auth/device-session` | — | `{deviceId, nonce, signature}` → `{token, expiresAt}` |
+| `GET /account` | password 或 device | `{accountId, email, initialized, rootPub?}` |
+| `POST /account/setup` | password，且账号未初始化 | 首次初始化：创建 root 和第一台管理设备，见 3.2.1 |
 | `PUT /account/password` | device（管理设备） | `{kdfSalt, authKey}` |
+| `POST /auth/challenge` | 请求头 `X-Harmonia-Account` | `{deviceId}` → `{nonce, expiresAt}`，nonce 只能使用一次，2 分钟内有效 |
+| `POST /auth/device-session` | 请求头 `X-Harmonia-Account` | `{deviceId, nonce, signature}` → `{token, expiresAt}` |
 | `POST /pairings` | password | `{name, platform, signPub, boxPub, rootPub}` → `{id, secret, expiresAt}`，10 分钟内有效 |
-| `GET /pairings/{id}/status` | 请求头 `X-Pairing-Secret` | `{status}`：`pending` / `approved` / `rejected` / `expired` |
+| `GET /pairings/{id}/status` | 请求头 `X-Harmonia-Account` 和 `X-Pairing-Secret` | `{status}`：`pending` / `approved` / `rejected` / `expired` |
 | `GET /pairings` | device（管理设备） | 列出待处理的请求 |
 | `POST /pairings/{id}/approve` | device（管理设备） | 见 3.3 |
 | `POST /pairings/{id}/reject` | device（管理设备） | — |
 | `GET /sync?since=N` | device | 见 3.4 |
 | `GET /events` | device | WebSocket，见 3.5 |
-| `POST /environments` | device（管理设备） | `{id, name, envelopes:[{recipient, sealed, sig}]}`，必须覆盖全部活跃的管理设备和 `recovery` |
+| `POST /environments` | device（管理设备） | `{id, name, envelopes:[{recipient, keyVersion, sealed, sig}]}`，必须覆盖全部活跃的管理设备和 `recovery` |
 | `PATCH /environments/{id}` | 管理设备或该环境的 admin | `{name}` |
 | `DELETE /environments/{id}` | 管理设备或该环境的 admin | 删除环境和其中全部变量 |
 | `PUT /environments/{id}/variables/{name}` | rw、admin 或管理设备 | `{value, keyVersion}`，请求头带 `Idempotency-Key` |
 | `DELETE /environments/{id}/variables/{name}` | 同上 | 请求头带 `Idempotency-Key` |
 | `PUT /devices/{id}/grants` | 管理设备 | `{grants:[{envId, role, expiresAt}], envelopes:[{envId, keyVersion, sealed, sig}]}`，整体替换；新授权的环境必须附带封装 |
 | `PATCH /devices/{id}` | 管理设备 | `{name}` |
-| `POST /devices/{id}/revoke` | 管理设备 | 撤销 |
-| `POST /devices/self/revoke` | device | 本机退出 |
-| `POST /recovery/challenge` | — | `{nonce, expiresAt}` |
-| `POST /recovery/session` | — | `{nonce, signature}` → `{token, expiresAt}` |
+| `POST /devices/{id}/revoke` | 管理设备 | 撤销。不能撤销最后一台管理设备 |
+| `POST /devices/self/revoke` | device | 本机退出。最后一台管理设备需要带上 `{confirmLast:true}` |
+| `POST /recovery/session` | 请求头 `X-Harmonia-Account` | `{nonce, signature}` → `{token, expiresAt}` |
 | `GET /recovery/material` | recovery | `{rootPub, generation, rootEnvelope:{sealed, sig}, environments:[{id, name, keyVersion}], envelopes:[{envId, keyVersion, sealed, sig}]}` |
 | `POST /recovery/enroll` | recovery | `{device:{id, name, platform, signPub, boxPub, cert}, rootSealed, envelopes:[...]}`；新设备成为 `rotationRequired=true` 的管理设备，恢复会话随即作废 |
 | `POST /recovery/rotate` | device（管理设备） | 见 3.6 |
 | `GET /recovery/rotate/{key}` | device（管理设备） | `{state: "complete" \| "absent", generation?}` |
+
+#### 3.2.1 首次初始化
+
+```json
+{
+  "rootPub": "...",
+  "device": {"id": "...", "name": "...", "platform": "android", "signPub": "...", "boxPub": "...", "cert": "..."},
+  "rootSealed": "<封装给本设备的 root 种子>",
+  "recovery": {"generation": "1", "signPub": "...", "boxPub": "...", "rootSealed": "...", "rootSig": "<恢复签名钥对 root-recovery 原文的签名>"}
+}
+```
 
 ### 3.3 批准配对
 
@@ -202,6 +243,8 @@ fp = SHA-256(C(["harmonia.pairing", pairingId, signPub, boxPub, rootPub]))
 | `not_found` | 404 | 不存在 |
 | `conflict` | 409 | 状态冲突，例如已初始化、配对已处理、幂等键对应的内容不同、代际不对 |
 | `rate_limited` | 429 | 请求过于频繁 |
+| `email_unverified` | 403 | 邮箱还没有验证 |
+| `email_unavailable` | 503 | 服务器没有配置发信，无法发送验证码 |
 | `internal` | 500 | 服务器内部错误 |
 
 ## 4. 规则摘要
@@ -210,4 +253,4 @@ fp = SHA-256(C(["harmonia.pairing", pairingId, signPub, boxPub, rootPub]))
 - **写入**：同一变量按服务器接受顺序，后写覆盖先写。客户端不做乐观更新，以同步结果为准。
 - **到期**：服务器拒绝已到期的授权；客户端离线时同样停用到期的环境。
 - **撤销**：服务器删除该设备的授权、封装和会话，推送 `revoked`；客户端收到 `revoked` 推送或 `device_revoked` 错误后，清除本地全部数据。
-- **限流**：login、recovery/challenge、recovery/session、pairings、auth/challenge 按 IP 每分钟最多 10 次失败或请求。
+- **限流**：注册、登录、找回密码、重置账号、恢复、配对、设备登录挑战按 IP 限制每分钟的请求次数；发送邮件另按账号限制重发间隔。

@@ -1,0 +1,24 @@
+{
+  "name": "harmonia-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Harmonia（和弦）服务端：Cloudflare Workers + Durable Object",
+  "scripts": {
+    "dev": "wrangler dev --local --port 8787",
+    "deploy": "wrangler deploy",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "packageManager": "pnpm@11.5.2",
+  "dependencies": {
+    "hono": "^4.13.13"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261005.1",
+    "@types/node": "^26.6.4",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3",
+    "wrangler": "^4.147.0"
+  }
+}
