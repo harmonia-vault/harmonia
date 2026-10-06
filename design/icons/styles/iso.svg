@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="1024" height="1024">
+    <rect width="100" height="100" fill="#DCE6E0"/>
+    <polygon points="23.979999999999997,62 58.62,82 56.022,86.5 21.381999999999998,66.5" fill="#B9C9C0"/>
+    <path d="M41.3 31 L41.30 28.00 L41.37 26.08 L41.60 24.29 L41.96 22.64 L42.46 21.17 L43.09 19.90 L43.84 18.86 L44.69 18.06 L45.63 17.51 L46.65 17.23 L47.72 17.22 L48.83 17.48 L49.96 18.00 L51.09 18.78 L52.20 19.81 L53.27 21.06 L54.29 22.51 L55.23 24.14 L56.08 25.93 L56.83 27.84 L57.46 29.83 L57.96 31.88 L58.32 33.95 L58.55 36.00 L58.62 38.00 L58.62 41" fill="none" stroke="#3D5A4A" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <polygon points="41.30,20.00 75.94,40.00 58.62,50.00 23.98,30.00" fill="#FFDD85"/>
+    <polygon points="23.98,62.00 58.62,82.00 58.62,50.00 23.98,30.00" fill="#F2B941"/>
+    <polygon points="75.94,72.00 58.62,82.00 58.62,50.00 75.94,40.00" fill="#C98A20"/>
+    <text x="0" y="0" transform="matrix(.866 .5 0 1 41.30 65.00)" text-anchor="middle" font-family="'JetBrains Mono', Menlo, monospace" font-weight="800" font-size="26" fill="#3D2A08">$</text></svg>

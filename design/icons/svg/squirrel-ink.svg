@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="1024" height="1024">
+  <defs><linearGradient id="squirrel-ink-a" gradientUnits="userSpaceOnUse" x1="5" y1="5" x2="95" y2="105"><stop offset="0" stop-color="#EA8752"/><stop offset="1" stop-color="#D46A36"/></linearGradient><linearGradient id="squirrel-ink-b" gradientUnits="userSpaceOnUse" x1="22" y1="72" x2="46" y2="100"><stop offset="0" stop-color="#5A4A3C"/><stop offset="1" stop-color="#3F3329"/></linearGradient></defs>
+  <rect width="100" height="100" fill="#231F1A"/>
+  <path d="M70 108 C64 78 62 50 72 32 C78 21 90 21 89 34" fill="none" stroke="url(#squirrel-ink-a)" stroke-width="27" stroke-linecap="round"/>
+  <g fill="url(#squirrel-ink-a)">
+    <ellipse cx="36" cy="102" rx="32" ry="30"/>
+    <ellipse cx="19" cy="33" rx="7.5" ry="11" transform="rotate(-14 19 33)"/>
+    <ellipse cx="47" cy="33" rx="7.5" ry="11" transform="rotate(14 47 33)"/>
+    <ellipse cx="33" cy="56" rx="25" ry="21"/>
+  </g>
+  <g fill="url(#squirrel-ink-b)">
+    <rect x="31.8" y="71" width="4.4" height="7" rx="2.2"/>
+    <ellipse cx="34" cy="89" rx="9.5" ry="10"/>
+    <ellipse cx="34" cy="80" rx="12" ry="5.6"/>
+  </g>
+  <circle cx="24" cy="54" r="3.8" fill="#27221C"/>
+  <circle cx="42" cy="54" r="3.8" fill="#27221C"/>
+  <path d="M29.5 61 Q33 64.5 36.5 61" fill="none" stroke="#27221C" stroke-width="2.6" stroke-linecap="round"/></svg>

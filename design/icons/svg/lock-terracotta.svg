@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="1024" height="1024">
+  <defs><linearGradient id="lock-terracotta-a" gradientUnits="userSpaceOnUse" x1="30" y1="5" x2="85" y2="60"><stop offset="0" stop-color="#F7D478"/><stop offset="1" stop-color="#E8BB48"/></linearGradient><linearGradient id="lock-terracotta-b" gradientUnits="userSpaceOnUse" x1="10" y1="30" x2="95" y2="110"><stop offset="0" stop-color="#3B342C"/><stop offset="1" stop-color="#221D18"/></linearGradient></defs>
+  <rect width="100" height="100" fill="#D0603C"/>
+  <path d="M40 54 V36 A18 18 0 0 1 76 36 V54" fill="none" stroke="url(#lock-terracotta-a)" stroke-width="12" stroke-linecap="round"/>
+  <rect x="21" y="46" width="74" height="70" rx="19" fill="url(#lock-terracotta-b)"/>
+  <circle cx="46" cy="71" r="5.6" fill="#F0C75A"/>
+  <circle cx="70" cy="71" r="5.6" fill="#F0C75A"/>
+  <circle cx="58" cy="82" r="4.4" fill="#F0C75A"/>
+  <rect x="55.9" y="82" width="4.2" height="9" rx="2.1" fill="#F0C75A"/></svg>

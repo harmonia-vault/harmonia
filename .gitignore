@@ -1,0 +1,33 @@
+# 旧项目与本地工具链（不纳入仓库）
+/legacy/
+/toolchains/
+
+.DS_Store
+*.log
+.env
+.env.*
+!.env.example
+
+# Go
+/cli/dist/
+/cli/bin/
+
+# Node / Workers
+node_modules/
+.wrangler/
+/server/dist/
+
+# Flutter
+/app/build/
+/app/.dart_tool/
+/app/.flutter-plugins-dependencies
+/app/android/local.properties
+/app/android/key.properties
+*.jks
+*.keystore
+
+# 端到端测试临时数据
+/e2e/.tmp/
+
+# 被否决的生图候选（图标改用 design/icons 的手写 SVG）
+/design/mascot/

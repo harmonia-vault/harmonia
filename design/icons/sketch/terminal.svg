@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="1024" height="1024">
+    <defs>
+      <filter id="terminalr" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency=".06" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+      <filter id="terminalr2" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency=".09" numOctaves="2" seed="11"/><feDisplacementMap in="SourceGraphic" scale="2.2"/></filter>
+      <filter id="terminalgrain" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" seed="2"/><feColorMatrix values="0 0 0 0 .42  0 0 0 0 .36  0 0 0 0 .28  0 0 0 .09 0"/></filter>
+      <pattern id="terminalh-yellow" width="3.2" height="3.2" patternUnits="userSpaceOnUse" patternTransform="rotate(-35)"><line x1="0" y1="0" x2="0" y2="3.2" stroke="#F4B93A" stroke-width="2"/></pattern><pattern id="terminalh-orange" width="3.2" height="3.2" patternUnits="userSpaceOnUse" patternTransform="rotate(-35)"><line x1="0" y1="0" x2="0" y2="3.2" stroke="#E8693A" stroke-width="2"/></pattern><pattern id="terminalh-sage" width="3.2" height="3.2" patternUnits="userSpaceOnUse" patternTransform="rotate(-35)"><line x1="0" y1="0" x2="0" y2="3.2" stroke="#7FAF84" stroke-width="2"/></pattern>
+    </defs>
+    <rect width="100" height="100" fill="#FBF7EE"/>
+    <rect width="100" height="100" filter="url(#terminalgrain)"/><g fill="url(#terminalh-yellow)" stroke="none" transform="translate(1.2 1.4)" filter="url(#terminalr2)"><rect x="16" y="22" width="68" height="11" rx="5"/></g><rect x="47" y="61" width="15" height="6.5" rx="1.5" fill="#E8693A" filter="url(#terminalr2)"/>
+    <g fill="none" stroke="#2A2620" stroke-linecap="round" stroke-linejoin="round" filter="url(#terminalr)">
+      <g stroke-width="3.2"><rect x="16" y="22" width="68" height="58" rx="8"/><path d="M16 33 H84"/></g>
+      <g stroke-width="1.28" opacity=".5" transform="translate(-.9 .8)"><rect x="16" y="22" width="68" height="58" rx="8"/><path d="M16 33 H84"/></g>
+    </g>
+    <g fill="none" stroke="#2A2620" stroke-linecap="round" stroke-linejoin="round" filter="url(#terminalr)">
+      <g stroke-width="3.4"><g transform="translate(33 57) scale(.9) translate(-50 -65.5)"><path d="M57 59.5 C57 56.5 54 55 50 55 C46 55 43 56.8 43 60 C43 63.5 46.5 64.5 50 65.5 C53.5 66.5 57 67.5 57 71 C57 74.2 54 76 50 76 C46 76 43 74.5 43 71.5"/><path d="M50 51 V80"/></g></g>
+      <g stroke-width="1.36" opacity=".5" transform="translate(-.9 .8)"><g transform="translate(33 57) scale(.9) translate(-50 -65.5)"><path d="M57 59.5 C57 56.5 54 55 50 55 C46 55 43 56.8 43 60 C43 63.5 46.5 64.5 50 65.5 C53.5 66.5 57 67.5 57 71 C57 74.2 54 76 50 76 C46 76 43 74.5 43 71.5"/><path d="M50 51 V80"/></g></g>
+    </g><g fill="#2A2620" filter="url(#terminalr2)"><circle cx="23" cy="27.5" r="1.7"/><circle cx="29.5" cy="27.5" r="1.7"/><circle cx="36" cy="27.5" r="1.7"/></g></svg>

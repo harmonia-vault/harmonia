@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="1024" height="1024">
+    <defs>
+      <filter id="sketchr" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency=".06" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.6"/></filter>
+      <filter id="sketchr2" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency=".09" numOctaves="2" seed="9"/><feDisplacementMap in="SourceGraphic" scale="2"/></filter>
+      <pattern id="sketchh" width="3.2" height="3.2" patternUnits="userSpaceOnUse" patternTransform="rotate(-35)"><rect width="3.2" height="3.2" fill="none"/><line x1="0" y1="0" x2="0" y2="3.2" stroke="#F4B93A" stroke-width="1.9"/></pattern>
+    </defs>
+    <rect width="100" height="100" fill="#FBF7EE"/>
+    <rect x="26" y="47" width="50" height="40" rx="9" fill="url(#sketchh)" filter="url(#sketchr2)"/>
+    <g fill="none" stroke="#2A2620" stroke-linecap="round" stroke-linejoin="round" filter="url(#sketchr)">
+      <path d="M35 45 V35 A15 15 0 0 1 65 35 V45" stroke-width="3.4"/>
+      <path d="M36 44 V35.5 A14 14 0 0 1 64.5 35 V44" stroke-width="1.4" opacity=".6"/>
+      <rect x="25" y="45" width="50" height="40" rx="9" stroke-width="3.2"/>
+      <rect x="24" y="46.5" width="51.5" height="39" rx="9" stroke-width="1.3" opacity=".55"/>
+      <path d="M57 59.5 C57 56.5 54 55 50 55 C46 55 43 56.8 43 60 C43 63.5 46.5 64.5 50 65.5 C53.5 66.5 57 67.5 57 71 C57 74.2 54 76 50 76 C46 76 43 74.5 43 71.5" stroke-width="3.6"/><path d="M50 51 V80" stroke-width="3.2"/>
+    </g></svg>

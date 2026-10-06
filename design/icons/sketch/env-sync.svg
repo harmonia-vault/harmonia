@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="1024" height="1024">
+    <defs>
+      <filter id="env-syncr" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency=".06" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+      <filter id="env-syncr2" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency=".09" numOctaves="2" seed="11"/><feDisplacementMap in="SourceGraphic" scale="2.2"/></filter>
+      <filter id="env-syncgrain" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" seed="2"/><feColorMatrix values="0 0 0 0 .42  0 0 0 0 .36  0 0 0 0 .28  0 0 0 .09 0"/></filter>
+      <pattern id="env-synch-yellow" width="3.2" height="3.2" patternUnits="userSpaceOnUse" patternTransform="rotate(-35)"><line x1="0" y1="0" x2="0" y2="3.2" stroke="#F4B93A" stroke-width="2"/></pattern><pattern id="env-synch-orange" width="3.2" height="3.2" patternUnits="userSpaceOnUse" patternTransform="rotate(-35)"><line x1="0" y1="0" x2="0" y2="3.2" stroke="#E8693A" stroke-width="2"/></pattern><pattern id="env-synch-sage" width="3.2" height="3.2" patternUnits="userSpaceOnUse" patternTransform="rotate(-35)"><line x1="0" y1="0" x2="0" y2="3.2" stroke="#7FAF84" stroke-width="2"/></pattern>
+    </defs>
+    <rect width="100" height="100" fill="#FBF7EE"/>
+    <rect width="100" height="100" filter="url(#env-syncgrain)"/><g fill="url(#env-synch-sage)" stroke="none" transform="translate(1.2 1.4)" filter="url(#env-syncr2)"><path d="M30 14 H56 L70 28 V86 H30 Z"/></g>
+    <g fill="none" stroke="#2A2620" stroke-linecap="round" stroke-linejoin="round" filter="url(#env-syncr)">
+      <g stroke-width="3.2"><path d="M30 14 H56 L70 28 V86 H30 Z"/><path d="M56 14 V28 H70"/><path d="M37 38 H45 M49 38 H58 M37 48 H45 M49 48 H55 M37 58 H45 M49 58 H54" stroke-width="2.6"/></g>
+      <g stroke-width="1.28" opacity=".5" transform="translate(-.9 .8)"><path d="M30 14 H56 L70 28 V86 H30 Z"/><path d="M56 14 V28 H70"/><path d="M37 38 H45 M49 38 H58 M37 48 H45 M49 48 H55 M37 58 H45 M49 58 H54" stroke-width="2.6"/></g>
+    </g><circle cx="70" cy="76" r="14.5" fill="#FBF7EE"/><g fill="url(#env-synch-orange)" stroke="none" transform="translate(1.2 1.4)" filter="url(#env-syncr2)"><circle cx="70" cy="76" r="13"/></g>
+    <g fill="none" stroke="#2A2620" stroke-linecap="round" stroke-linejoin="round" filter="url(#env-syncr)">
+      <g stroke-width="2.8"><circle cx="70" cy="76" r="13"/><path d="M63 73 A7.5 7.5 0 0 1 77 72"/><path d="M77.5 67.5 V72.5 H72.5"/><path d="M77 79 A7.5 7.5 0 0 1 63 80"/><path d="M62.5 84.5 V79.5 H67.5"/></g>
+      <g stroke-width="1.12" opacity=".5" transform="translate(-.9 .8)"><circle cx="70" cy="76" r="13"/><path d="M63 73 A7.5 7.5 0 0 1 77 72"/><path d="M77.5 67.5 V72.5 H72.5"/><path d="M77 79 A7.5 7.5 0 0 1 63 80"/><path d="M62.5 84.5 V79.5 H67.5"/></g>
+    </g></svg>
