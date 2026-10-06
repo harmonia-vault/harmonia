@@ -2,7 +2,7 @@
   "box": {
     "plain": "environment-key-0123456789abcdef",
     "pub": "2AKgsNn2QueLyPryEL9zjXrpGjE7A__CwRyEudgB0Hg",
-    "sealed": "ErGMWrsYw48MC5r5uqgP56sUUnOUpk5Gqql_yru1-hehJctZFfaYCUDGNd839JW4eJ5VI94tgKTF8RBQ-QQPFoLre7qEwBda9NlCFpkLEck",
+    "sealed": "J7QNVIELomUyu-oWpPTPIhYTZFY8IY_3441u-k__S1JEMkDY3kLkvVbnjU9CwEPiFl1A4nQYHw8su-E2R6Yo389siQ9uwJvtz6NuDfy98NQ",
     "seed": "AgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4fICE"
   },
   "canonical": {
@@ -20,6 +20,11 @@
     "envelope": "5b226861726d6f6e69612e656e76656c6f7065222c2242424242424242424242424242424242424242424242222c2231222c227265636f76657279222c2279644144612d316e524c7a6661535f4a674e687866583566576b394f676d613071456d4359432d787a516b225d",
     "recoveryAuth": "5b226861726d6f6e69612e7265636f766572792d61757468222c226e6f6e63652d32225d",
     "rootRecovery": "5b226861726d6f6e69612e726f6f742d7265636f76657279222c2232222c2279644144612d316e524c7a6661535f4a674e687866583566576b394f676d613071456d4359432d787a516b225d"
+  },
+  "minisign": {
+    "message": "{\"version\":\"9.9.9\"}",
+    "publicKey": "untrusted comment: minisign public key: FD02A64DE336630F\nRWQPYzbjTaYC/eg35z0Ub+Ukc0lKNLpRmUw7/0R1KiAYiPG0rNXdbd94",
+    "signature": "untrusted comment: test\nRWQPYzbjTaYC/e23A22hPqiLb4vKQCkQFVTE5SvpJITGuhLx7/Lc5GQ1REy4nOueUJgwI/faQKNr0fQFZL758HsB6+f8LzKRBAg=\ntrusted comment: timestamp:0\nZvjKRxcJCmgPnvbem7uhgs6vo7k4GE5hyXCKgoUXNNXo8j0VLBBn9RZi6b10fgi1jD0RH4jVaRkYlZ7a+kHXAw==\n"
   },
   "pairing": {
     "boxPub": "2AKgsNn2QueLyPryEL9zjXrpGjE7A__CwRyEudgB0Hg",
@@ -48,7 +53,7 @@
     "sig": "4JfiYKNw1eVh5bBUu-mw6wT7TamLzE4M2BoTwZ4-cNPuFiTyAlkCnN-gMCRsprIjc3lA6Y8i1l0YybTqPLKKAA"
   },
   "value": {
-    "ciphertext": "oqUkJspZ7sX66BYFxwJCEweh_V3NHOo92jfTeyU-RYjsP1csliT3oE95WKYynoMU1OFZ4y1wJ6UMbBL_8Xhx9-nB2xI",
+    "ciphertext": "7F1UmTKSF6QsCq-ynTGfcg1TwbyA7HlTATtg9OfmR7QUvsiwF7ReAzIsh_UYO9oCH3aEPGTtbUQvkILEPDBXsU4grlE",
     "envId": "BBBBBBBBBBBBBBBBBBBBBB",
     "key": "AwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISI",
     "keyVersion": 1,

@@ -13,7 +13,7 @@ import '../ui/widgets.dart';
 const appVersion = String.fromEnvironment('APP_VERSION', defaultValue: '0.1.0');
 
 /// 发布签名公钥（minisign 格式），与 CLI 内置的相同。
-const releasePublicKey = String.fromEnvironment('RELEASE_PUBKEY', defaultValue: '');
+const releasePublicKey = 'RWSG3mCrOrJkGKAhsnHOVBP4a+qs9VJi/47Vv3BQobIJ/ZamvbuQjabm';
 
 const _manifestUrl = 'https://github.com/harmonia-vault/harmonia/releases/latest/download/manifest.json';
 const _channel = MethodChannel('harmonia/platform');
@@ -46,14 +46,16 @@ bool verifyMinisign(HCrypto c, String publicKey, Uint8List data, String signatur
     final trusted = lines[2].replaceFirst('trusted comment: ', '');
     final global = base64.decode(lines[3].trim());
     if (pk.length != 42 || sig.length != 74) return false;
-    if (String.fromCharCodes(sig.sublist(0, 2)) != 'ED') return false;
+    // Ed：直接签名原文；ED：签名原文的 BLAKE2b-512（minisign 预哈希模式）。
+    final alg = String.fromCharCodes(sig.sublist(0, 2));
+    if (alg != 'Ed' && alg != 'ED') return false;
     for (var i = 0; i < 8; i++) {
       if (pk[2 + i] != sig[2 + i]) return false;
     }
     final pub = Uint8List.fromList(pk.sublist(10));
-    final digest = c.sodium.crypto.genericHash(message: data, outLen: 64);
+    final signed = alg == 'ED' ? c.sodium.crypto.genericHash(message: data, outLen: 64) : data;
     final s = Uint8List.fromList(sig.sublist(10));
-    if (!c.verify(pub, digest, s)) return false;
+    if (!c.verify(pub, signed, s)) return false;
     return c.verify(pub, Uint8List.fromList([...s, ...utf8.encode(trusted)]), Uint8List.fromList(global));
   } catch (_) {
     return false;

@@ -475,3 +475,19 @@ harmonia uninstall
 | --- | --- |
 | 恢复是否需要密码 | 只要恢复码；恢复过程中设置新密码。服务端不提供任何管理接口 |
 | 版本号 | 本次发布 v0.1.0 |
+
+---
+
+## 13. 实现中的设计调整（2026-10-07）
+
+以下调整在实现时做出，已同步到 [protocol.md](protocol.md)，待用户确认：
+
+| 项 | 方案原文 | 实际实现 | 原因 |
+| --- | --- | --- | --- |
+| 信任锚 | 管理设备维护“受信签发者集合”，证书逐级追溯 | 一把**账号根签名钥**：生成于首次初始化，封装给每台管理手机和恢复码；设备证书与每个环境钥封装都由它签名。设备首次接触账号时钉住 `rootPub`，配对指纹包含 `rootPub` | 更简单，没有证书链；还堵住了“服务器偷换封装”的漏洞（匿名 sealed box 本身不认证发送方） |
+| 服务端密码存储 | 客户端 Argon2id 后，服务端再做 PBKDF2 | 服务端存 `SHA-256(随机盐 ‖ authKey)` | authKey 已经过 Argon2id，暴力破解成本在客户端；避免 Workers 免费套餐 10ms CPU 限制 |
+| CLI 配对命令 | `login` 与 `pair` 两步 | `harmonia login` 一步完成登录和配对 | 密码会话只有 15 分钟，拆成两步容易过期 |
+| 封装构件 | sealed box | libsodium `crypto_box_seal`；加密密钥对按 `crypto_box_seed_keypair` 由 32 字节种子派生 | 三端一致（Go 与 Dart 已用测试向量验证） |
+| App 原生代码 | 不写原生代码 | `MainActivity` 中约 40 行 Kotlin：设备名、安装更新 APK | `local_auth` 要求 `FlutterFragmentActivity`；现成的安装插件会申请媒体读取权限，不适合存放密钥的 App |
+| 服务端发布仓库 | Release 时由 CI 推送 | 本地运行 `mise run publish-server` | 组织禁用了部署密钥，CI 无法写入另一个仓库 |
+| 本地开发 | — | 服务端对 `localhost`、`127.0.0.1`、`10.0.2.2`（Android 模拟器）放行 HTTP | 便于本地与模拟器调试；线上只走 HTTPS |

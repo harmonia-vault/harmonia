@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"aead.dev/minisign"
+
 	hc "github.com/harmonia-vault/harmonia/cli/internal/crypto"
 )
 
@@ -78,6 +80,14 @@ func main() {
 			"auth":         hex.EncodeToString(hc.AuthMsg("AAAAAAAAAAAAAAAAAAAAAA", "nonce-1")),
 			"recoveryAuth": hex.EncodeToString(hc.RecoveryAuthMsg("nonce-2")),
 		},
+	}
+	// minisign：使用临时测试密钥，验证 App 端的发布签名校验实现。
+	mpub, mpriv, _ := minisign.GenerateKey(nil)
+	mpubText, _ := mpub.MarshalText()
+	mmsg := []byte(`{"version":"9.9.9"}`)
+	v["minisign"] = map[string]any{
+		"publicKey": string(mpubText), "message": string(mmsg),
+		"signature": string(minisign.SignWithComments(mpriv, mmsg, "timestamp:0", "test")),
 	}
 	data := must(json.MarshalIndent(v, "", "  "))
 	path := filepath.Join(out, "crypto.json")

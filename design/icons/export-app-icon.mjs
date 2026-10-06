@@ -1,4 +1,4 @@
-// 用法：mise run app-icon —— 把手绘「.env 同步」图标导出到 workspace/mobile 的 iOS 与 Android 工程。
+// 用法：mise run app-icon —— 把手绘「.env 同步」图标导出到 app/ 的 Android 工程。
 // iOS：单张 1024 图标 + 浅色 / 深色 / 着色三种外观（iOS 18 起系统按外观切换）。
 // Android：自适应图标（纸底背景层 + 图形前景层 + 单色主题层），以及旧式 ic_launcher。
 import "./envsync.js";
@@ -7,8 +7,7 @@ import { deflateSync } from "node:zlib";
 import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-const MOBILE = new URL("../../workspace/mobile/", import.meta.url).pathname;
-const IOS_SET = join(MOBILE, "ios/Runner/Assets.xcassets/AppIcon.appiconset");
+const MOBILE = new URL("../../app/", import.meta.url).pathname;
 const ANDROID_RES = join(MOBILE, "android/app/src/main/res");
 const E = globalThis.HarmoniaEnvSync;
 
@@ -48,22 +47,6 @@ const opaquePng = (image) => {
   return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk("IHDR", ihdr), chunk("IDAT", deflateSync(raw, { level: 9 })), chunk("IEND", Buffer.alloc(0))]);
 };
 
-// —— iOS ——
-const ios = [
-  { file: "AppIcon-1024.png", svg: E.svg("sketch-light", null, "l") },
-  { file: "AppIcon-1024-dark.png", svg: E.svg("sketch-dark", null, "d"), appearance: "dark" },
-  { file: "AppIcon-1024-tinted.png", svg: E.svg("sketch-dark", null, "t", { gray: true }), appearance: "tinted" },
-];
-for (const f of readdirSync(IOS_SET)) if (f.endsWith(".png")) rmSync(join(IOS_SET, f));
-for (const i of ios) writeFileSync(join(IOS_SET, i.file), opaquePng(render(i.svg, 1024)));
-writeFileSync(join(IOS_SET, "Contents.json"), JSON.stringify({
-  images: ios.map(i => ({
-    ...(i.appearance ? { appearances: [{ appearance: "luminosity", value: i.appearance }] } : {}),
-    filename: i.file, idiom: "universal", platform: "ios", size: "1024x1024",
-  })),
-  info: { author: "xcode", version: 1 },
-}, null, 2) + "\n");
-
 // —— Android ——
 // 自适应图标画布 108dp，可见区约 72dp：让 100 单位的设计正好落在 72dp 可见区，四周各留 25 单位。
 const ADAPTIVE = "-25 -25 150 150";
@@ -87,5 +70,4 @@ writeFileSync(join(ANDROID_RES, "mipmap-anydpi-v26/ic_launcher.xml"), `<?xml ver
 </adaptive-icon>
 `);
 
-console.log("iOS:", ios.map(i => i.file).join(", "));
 console.log("Android:", Object.keys(densities).join(", "), "+ mipmap-anydpi-v26/ic_launcher.xml");

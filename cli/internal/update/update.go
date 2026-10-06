@@ -20,7 +20,7 @@ import (
 )
 
 // ReleasePublicKey 是发布签名公钥（minisign 格式），由发布流程使用的私钥对应。
-const ReleasePublicKey = ""
+const ReleasePublicKey = "RWSG3mCrOrJkGKAhsnHOVBP4a+qs9VJi/47Vv3BQobIJ/ZamvbuQjabm"
 
 const defaultManifestURL = "https://github.com/harmonia-vault/harmonia/releases/latest/download/manifest.json"
 

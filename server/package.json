@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Harmonia（和弦）服务端：Cloudflare Workers + Durable Object",
   "scripts": {
-    "dev": "wrangler dev --local --port 8787",
+    "dev": "wrangler dev --local --ip 0.0.0.0 --port 8787 --var DEV_MAIL_LOG:true --var ALLOW_REGISTRATION:true",
     "deploy": "wrangler deploy",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
