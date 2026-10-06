@@ -1,5 +1,6 @@
 // docs/protocol.md 第 2 节的 Dart 实现，与 cli/internal/crypto 保持一致。
 import 'dart:convert';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart' as hash;
@@ -248,3 +249,10 @@ String pairingQr(String pairingId, List<int> fp) =>
 /// 规范化用户手输的核对码。
 String normalizePairingCode(String input) =>
     input.toUpperCase().replaceAll(RegExp(r'[\s-]'), '');
+
+/// 在后台 isolate 中计算密码派生密钥，避免界面卡顿。
+Future<Uint8List> passwordKeyInIsolate(String password, Uint8List salt) =>
+    Isolate.run(() async {
+      final c = await HCrypto.init();
+      return c.passwordKey(password, salt);
+    });
