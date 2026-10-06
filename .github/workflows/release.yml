@@ -72,7 +72,8 @@ jobs:
           esac
           CODE=$(( (MAJOR * 10000 + MINOR * 100 + PATCH) * 100 + SUFFIX ))
           flutter pub get
-          flutter build apk --release --build-name "$BASE" --build-number "$CODE" \
+          flutter build apk --release --target-platform android-arm,android-arm64 \
+            --build-name "$BASE" --build-number "$CODE" \
             --dart-define=APP_VERSION="$VERSION"
           mkdir -p ../dist
           cp build/app/outputs/flutter-apk/app-release.apk "../dist/harmonia-$VERSION.apk"
