@@ -148,7 +148,7 @@ harmonia/                     # 唯一开发仓库
 ├── mise.toml                 # [tools] + [tasks]
 ├── docs/                     # design.md / protocol.md / threat-model.md / acceptance.md
 ├── vectors/                  # 三端共用测试向量
-├── server/                   # TypeScript，完全自包含（发布时推送到 harmonia-server 发布仓库）
+├── server/                   # TypeScript，完全自包含（发布时推送到 harmonia-worker 发布仓库）
 │   ├── src/core/             # Hono 路由、权限、同步、推送；依赖 Storage 接口
 │   └── src/workers/          # Durable Object 适配 + 入口
 ├── cli/                      # Go：cmd/harmonia + internal/{crypto,api,store,sync,merge,shell,service,update}

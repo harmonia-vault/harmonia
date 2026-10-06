@@ -15,7 +15,7 @@ Harmonia 是一个自托管的环境变量同步工具：在手机上集中管�
 
 | 组件 | 说明 |
 | --- | --- |
-| 服务端（`server/`） | Cloudflare Workers + Durable Objects，发布在 [harmonia-server](https://github.com/harmonia-vault/harmonia-server) 供 Fork 部署 |
+| 服务端（`server/`） | Cloudflare Workers + Durable Objects，发布在 [harmonia-worker](https://github.com/harmonia-vault/harmonia-worker) 供 Fork 部署 |
 | Android App（`app/`） | 管理环境与变量、批准和移除设备、恢复账号 |
 | 命令行（`cli/`） | macOS 与 Linux，在电脑、服务器上同步并注入变量 |
 
@@ -23,7 +23,7 @@ Harmonia 是一个自托管的环境变量同步工具：在手机上集中管�
 
 ### 1. 部署服务端
 
-按 [harmonia-server 的说明](https://github.com/harmonia-vault/harmonia-server) Fork 并部署到 Cloudflare，记下 HTTPS 地址。部署后请立即注册第一个账号。
+按 [harmonia-worker 的说明](https://github.com/harmonia-vault/harmonia-worker) Fork 并部署到 Cloudflare，记下 HTTPS 地址。部署后请立即注册第一个账号。
 
 ### 2. 安装 App 并创建账号
 

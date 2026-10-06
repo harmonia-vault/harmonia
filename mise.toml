@@ -61,9 +61,9 @@ dir = "design/icons"
 run = ["bun install --frozen-lockfile", "bun export-app-icon.mjs"]
 
 [tasks.publish-server]
-description = "把 server/ 发布到 harmonia-vault/harmonia-server（供用户 Fork 部署）"
+description = "把 server/ 发布到 harmonia-vault/harmonia-worker（供用户 Fork 部署）"
 run = [
   "git subtree split --prefix server -b server-release",
-  "git push https://github.com/harmonia-vault/harmonia-server.git server-release:main",
+  "git push https://github.com/harmonia-vault/harmonia-worker.git server-release:main",
   "git branch -D server-release",
 ]

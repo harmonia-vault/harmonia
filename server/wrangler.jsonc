@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "harmonia-server",
+  "name": "harmonia",
   "main": "src/workers/index.ts",
   "compatibility_date": "2026-10-01",
   "durable_objects": {

@@ -1,6 +1,6 @@
 name: Release
 
-# 推送 v* 标签时发布：CLI 四个平台二进制、签名 APK、签名清单。服务端用 mise run publish-server 发布到 harmonia-server。
+# 推送 v* 标签时发布：CLI 四个平台二进制、签名 APK、签名清单。服务端用 mise run publish-server 发布到 harmonia-worker。
 # 带“-”的版本（例如 v0.1.0-rc.1）发布为预发布，不会被 App 和 CLI 的自动更新选中。
 on:
   push:
