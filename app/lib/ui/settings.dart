@@ -76,6 +76,32 @@ class _SettingsTabState extends State<SettingsTab> {
     await runBusy(context, () => c.guard(() => c.vault.changePassword(a.text)), done: '登录密码已修改');
   }
 
+  Future<void> _pickChannel() async {
+    final picked = await showDialog<UpdateChannel>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('更新渠道'),
+        children: [
+          for (final ch in UpdateChannel.values)
+            ListTile(
+              leading: Icon(ch == c.updateChannel ? Icons.radio_button_checked : Icons.radio_button_unchecked),
+              title: Text(ch.label),
+              subtitle: Text(ch.description),
+              onTap: () => Navigator.pop(ctx, ch),
+            ),
+        ],
+      ),
+    );
+    if (picked == null || picked == c.updateChannel) return;
+    await c.setUpdateChannel(picked);
+    if (!mounted) return;
+    toast(
+        context,
+        picked == UpdateChannel.stable && isPrerelease(appVersion)
+            ? '已切换到正式版渠道。正式版发布更高的版本后会提示升级'
+            : '已切换到${picked.label}渠道');
+  }
+
   Future<void> _logout() async {
     final last = c.vault.isLastManager;
     final ok = await confirmDialog(context,
@@ -161,7 +187,15 @@ class _SettingsTabState extends State<SettingsTab> {
               leading: const Icon(Icons.system_update_outlined),
               title: const Text('检查更新'),
               subtitle: Text('当前版本 $appVersion'),
-              onTap: () => checkForUpdate(context, manual: true),
+              onTap: () => checkForUpdate(context, manual: true, channel: c.updateChannel),
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.alt_route_outlined),
+              title: const Text('更新渠道'),
+              subtitle: Text(c.updateChannel.label),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: _pickChannel,
             ),
           ]),
         ),

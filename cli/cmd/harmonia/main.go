@@ -44,6 +44,7 @@ const usage = `Harmonia（和弦）：在手机上管理环境变量，同步到
   harmonia service install|uninstall|status  管理后台同步服务
 
   harmonia update [--check]               检查并升级 harmonia
+  harmonia update channel [stable|beta]   查看或切换更新渠道（正式版 / 测试版）
   harmonia logout                         退出账号并清除本机数据
   harmonia uninstall                      退出账号、移除服务与 shell 集成并删除 harmonia
   harmonia version

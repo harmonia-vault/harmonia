@@ -9,6 +9,7 @@ import '../core/api.dart';
 import '../core/crypto.dart';
 import '../core/store.dart';
 import '../core/vault.dart';
+import 'updater.dart' show UpdateChannel;
 
 
 enum Stage {
@@ -25,16 +26,19 @@ enum Stage {
 }
 
 class Prefs {
-  Prefs({this.server, this.email, this.lockEnabled = true});
+  Prefs({this.server, this.email, this.lockEnabled = true, this.updateChannel});
   String? server;
   String? email;
   bool lockEnabled;
+  String? updateChannel;
 
-  Map<String, dynamic> toJson() => {'server': server, 'email': email, 'lockEnabled': lockEnabled};
+  Map<String, dynamic> toJson() =>
+      {'server': server, 'email': email, 'lockEnabled': lockEnabled, 'updateChannel': updateChannel};
   factory Prefs.fromJson(Map<String, dynamic> j) => Prefs(
       server: j['server'] as String?,
       email: j['email'] as String?,
-      lockEnabled: j['lockEnabled'] as bool? ?? true);
+      lockEnabled: j['lockEnabled'] as bool? ?? true,
+      updateChannel: j['updateChannel'] as String?);
 }
 
 class AppController extends ChangeNotifier {
@@ -289,6 +293,14 @@ class AppController extends ChangeNotifier {
   void unlocked() {
     _go(_afterUnlock());
     _onUnlocked();
+  }
+
+  UpdateChannel get updateChannel => UpdateChannel.parse(prefs.updateChannel);
+
+  Future<void> setUpdateChannel(UpdateChannel c) async {
+    prefs.updateChannel = c.name;
+    await _savePrefs();
+    notifyListeners();
   }
 
   Future<void> setLockEnabled(bool v) async {

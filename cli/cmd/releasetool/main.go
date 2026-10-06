@@ -3,6 +3,8 @@
 //	releasetool keygen <输出目录>
 //	releasetool manifest --version 0.1.0 --dist dist --base-url URL [--notes 文本]
 //	（签名私钥从环境变量 HARMONIA_RELEASE_KEY 读取）
+//	releasetool feed --version 0.1.0 --dist dist --feed feed
+//	（把本次清单写入更新源：beta.json 取最新版本；正式版本同时更新 stable.json）
 package main
 
 import (
@@ -15,6 +17,8 @@ import (
 	"path/filepath"
 
 	"aead.dev/minisign"
+
+	"github.com/harmonia-vault/harmonia/cli/internal/update"
 )
 
 type asset struct {
@@ -34,6 +38,8 @@ func main() {
 		err = keygen(os.Args[2])
 	case "manifest":
 		err = manifest(os.Args[2:])
+	case "feed":
+		err = feed(os.Args[2:])
 	default:
 		err = fmt.Errorf("未知命令 %s", os.Args[1])
 	}
@@ -99,4 +105,43 @@ func manifest(args []string) error {
 		return err
 	}
 	return os.WriteFile(filepath.Join(*dist, "manifest.json.minisig"), minisign.Sign(key, data), 0o644)
+}
+
+// feed 只在本次版本比更新源中已有的版本新时才覆盖，避免补丁旧版本时把渠道回退。
+func feed(args []string) error {
+	fs := flag.NewFlagSet("feed", flag.ExitOnError)
+	version := fs.String("version", "", "版本号")
+	dist := fs.String("dist", "dist", "发布文件目录（含 manifest.json 与签名）")
+	dir := fs.String("feed", "feed", "更新源目录（含现有的 stable.json / beta.json）")
+	fs.Parse(args)
+	manifest, err := os.ReadFile(filepath.Join(*dist, "manifest.json"))
+	if err != nil {
+		return err
+	}
+	sig, err := os.ReadFile(filepath.Join(*dist, "manifest.json.minisig"))
+	if err != nil {
+		return err
+	}
+	channels := []update.Channel{update.Beta}
+	if !update.IsPrerelease(*version) {
+		channels = append(channels, update.Stable)
+	}
+	for _, ch := range channels {
+		path := filepath.Join(*dir, string(ch)+".json")
+		if data, err := os.ReadFile(path); err == nil {
+			var cur struct{ Version string }
+			if json.Unmarshal(data, &cur) == nil && !update.Newer(*version, cur.Version) {
+				fmt.Printf("%s 渠道已是 %s，不更新\n", ch, cur.Version)
+				continue
+			}
+		}
+		if err := os.WriteFile(path, manifest, 0o644); err != nil {
+			return err
+		}
+		if err := os.WriteFile(path+".minisig", sig, 0o644); err != nil {
+			return err
+		}
+		fmt.Printf("%s 渠道更新为 %s\n", ch, *version)
+	}
+	return nil
 }

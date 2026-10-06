@@ -35,7 +35,7 @@ Harmonia 是一个自托管的环境变量同步工具：在手机上集中管�
 ### 3. 在电脑上接入
 
 ```bash
-curl -fsSL https://github.com/harmonia-vault/harmonia/releases/latest/download/install.sh | sh
+curl -fsSL https://github.com/harmonia-vault/harmonia/releases/download/update-feed/install.sh | sh
 ```
 
 ```bash
@@ -115,6 +115,21 @@ ExecStart=/home/me/.local/bin/harmonia exec -- /usr/bin/node /srv/agent/index.js
 - **App**：在“设置 → 检查更新”中升级，也会每天自动检查一次。安装包经过签名校验，数据保留。
 - **命令行**：`harmonia update`。后台服务每天检查一次，有新版本时 `harmonia status` 会提示。
 - **服务端**：在你的 Fork 中点击 Sync fork。
+
+### 更新渠道
+
+| 渠道 | 收到的版本 |
+| --- | --- |
+| 正式版（默认） | 只有正式版本，例如 `v0.1.2` |
+| 测试版 | 全部版本中最新的一个，包括 `v0.1.3-rc.1`、`v0.1.3-beta.2` 这类测试版本 |
+
+版本顺序：`v0.1.2` > `v0.1.2-rc.1` > `v0.1.2-beta.1`。在 App 的“设置 → 更新渠道”中切换；命令行使用 `harmonia update channel beta`（或 `stable`）。安装测试版命令行：
+
+```bash
+curl -fsSL https://github.com/harmonia-vault/harmonia/releases/download/update-feed/install.sh | HARMONIA_CHANNEL=beta sh
+```
+
+从测试版切回正式版时不会降级，正式版发布更高的版本后再自动升级。
 
 ## 常见问题
 

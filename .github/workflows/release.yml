@@ -1,7 +1,7 @@
 name: Release
 
 # 推送 v* 标签时发布：CLI 四个平台二进制、签名 APK、签名清单。服务端由 publish-server.yml 发布到 harmonia-worker。
-# 带“-”的版本（例如 v0.1.0-rc.1）发布为预发布，不会被 App 和 CLI 的自动更新选中。
+# 带“-”的版本（例如 v0.1.2-rc.1、v0.1.2-beta.1）发布为预发布，只进入测试版渠道。
 on:
   push:
     tags: ['v*']
@@ -65,12 +65,18 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           BASE="${VERSION%%-*}"
           IFS=. read -r MAJOR MINOR PATCH <<< "$BASE"
-          # versionCode 单调递增：0.1.0-rc.1 → 10001，0.1.0 → 10099，0.1.1 → 10199。
-          case "$VERSION" in
-            *-*) SUFFIX=$(echo "$VERSION" | sed 's/.*[^0-9]\([0-9]*\)$/\1/'); SUFFIX=${SUFFIX:-1} ;;
-            *) SUFFIX=99 ;;
+          # versionCode 与版本顺序一致：基础版本 ×100 + 后缀分（alpha N → N，beta N → 20+N，rc N → 50+N，正式版 → 99）。
+          # 例如 0.1.2-beta.1 → 10221，0.1.2-rc.1 → 10251，0.1.2 → 10299。
+          PRE="${VERSION#"$BASE"}"; PRE="${PRE#-}"
+          KIND=$(echo "$PRE" | sed 's/[0-9.]*$//'); NUM=$(echo "$PRE" | sed 's/^[a-z]*\.\{0,1\}//'); NUM=${NUM:-0}
+          case "$KIND" in
+            "") SUB=99 ;;
+            rc) SUB=$((50 + NUM)) ;;
+            beta) SUB=$((20 + NUM)) ;;
+            *) SUB=$NUM ;;
           esac
-          CODE=$(( (MAJOR * 10000 + MINOR * 100 + PATCH) * 100 + SUFFIX ))
+          CODE=$(( (MAJOR * 10000 + MINOR * 100 + PATCH) * 100 + SUB ))
+          echo "versionCode=$CODE"
           flutter pub get
           flutter build apk --release --target-platform android-arm,android-arm64 \
             --build-name "$BASE" --build-number "$CODE" \
@@ -109,3 +115,17 @@ jobs:
           FLAGS=""
           case "$VERSION" in *-*) FLAGS="--prerelease" ;; esac
           gh release create "$GITHUB_REF_NAME" dist/* --title "Harmonia $VERSION" --notes "${NOTES:-Harmonia $VERSION}" $FLAGS
+      - name: 更新渠道清单
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # update-feed 是固定的预发布，存放 stable.json 与 beta.json；标为预发布，不会成为“最新版本”。
+          if ! gh release view update-feed >/dev/null 2>&1; then
+            gh release create update-feed --prerelease --target main --title "更新源" \
+              --notes "App 与命令行检查更新时读取这里的 stable.json（正式版）和 beta.json（测试版）。请勿删除。"
+          fi
+          mkdir -p feed
+          gh release download update-feed -D feed -p '*.json*' || true
+          (cd cli && go run ./cmd/releasetool feed --version "${GITHUB_REF_NAME#v}" --dist ../dist --feed ../feed)
+          cp dist/install.sh feed/install.sh
+          gh release upload update-feed feed/* --clobber

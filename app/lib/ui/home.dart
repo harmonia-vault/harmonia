@@ -21,7 +21,7 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => checkForUpdate(context, manual: false));
+    WidgetsBinding.instance.addPostFrameCallback((_) => checkForUpdate(context, manual: false, channel: widget.c.updateChannel));
   }
 
   @override

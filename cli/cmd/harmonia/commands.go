@@ -135,6 +135,7 @@ func cmdStatus(ctx context.Context, args []string) error {
 	fmt.Printf("上次同步：%s\n", ago(a.Config.LastSync))
 	fmt.Printf("后台服务：%s\n", serviceSummary())
 	fmt.Printf("Shell 集成：%s\n", shellSummary(a.Dir))
+	fmt.Printf("版本：%s（%s渠道）\n", version, updateChannel().Label())
 	if hint := updateHint(); hint != "" {
 		fmt.Println(hint)
 	}

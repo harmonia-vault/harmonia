@@ -301,14 +301,19 @@ harmonia uninstall
 
 ### 5.11 更新机制
 
-- **发布源**：主仓库的 GitHub Releases。每个 Release 附带 `manifest.json`，内容包括版本号、各平台包的下载地址、SHA-256、大小，以及支持的协议版本，并附带 minisign 签名。公钥内置在客户端中。先只做 stable 渠道。
+- **发布源**：主仓库的 GitHub Releases。每个 Release 附带 `manifest.json`，内容包括版本号、各平台包的下载地址、SHA-256、大小，以及支持的协议版本，并附带 minisign 签名。公钥内置在客户端中。
+- **更新渠道**（2026-10-07 增加）：
+  - 正式版：只接收不带后缀的版本；测试版：接收全部版本中最新的一个。标签带 `-rc.x`、`-beta.x` 等后缀的发布为预发布，只进入测试版渠道。
+  - 版本顺序：同一基础版本内，正式版 > rc > beta > alpha，同类后缀按数字比较。例如 `0.1.2 > 0.1.2-rc.2 > 0.1.2-rc.1 > 0.1.2-beta.3 > 0.1.1`。
+  - 渠道清单放在固定的预发布 `update-feed` 中：`stable.json`、`beta.json` 及其签名。发版时由 `releasetool feed` 判断，只有版本更新时才覆盖，补丁旧版本不会让渠道回退。正式版渠道收到带后缀的版本会拒绝。
+  - 渠道在 App“设置 → 更新渠道”和 `harmonia update channel stable|beta` 中切换，默认正式版；测试版程序默认测试版渠道。安装脚本用 `HARMONIA_CHANNEL=beta` 安装测试版。
 - **CLI**：
   - 后台服务每 24 小时（带随机抖动）检查一次，有更新时在 `status` 中和 stderr 上提示。
   - `harmonia update` 的步骤：下载 → 验证签名和哈希 → 运行新二进制的 `version` 自检 → 原子替换 `~/.local/bin/harmonia` → 重启用户级服务。旧版本保留为 `.old` 以便手动回退，全程不需要 sudo。
 - **Android**：
   - App 在前台时检查，24 小时内最多检查一次。有更新时显示更新说明，用户确认后在 App 内下载 APK，验证哈希，然后交给系统安装器（需要 `REQUEST_INSTALL_PACKAGES` 权限）。
   - 系统会校验 APK 签名必须与已安装版本一致。
-  - `versionCode` 由版本号计算（例如 `0.3.2` → 302），不使用 CI 的 run_number。
+  - `versionCode` 由版本号计算，顺序与版本顺序一致：基础版本 ×100 + 后缀分（alpha N → N，beta N → 20+N，rc N → 50+N，正式版 → 99），例如 `0.1.2-beta.1` → 10221、`0.1.2-rc.1` → 10251、`0.1.2` → 10299。不使用 CI 的 run_number。
 - **服务端**：`/instance` 返回服务端版本和协议版本。客户端发现协议不兼容时，提示用户更新服务端（Sync fork 或 Actions 更新），或者更新客户端。
 - **发布签名私钥**：只存放在 GitHub Actions secrets 中，测试使用临时生成的密钥。
 
