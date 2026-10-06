@@ -151,6 +151,8 @@ class AppController extends ChangeNotifier {
   Future<void> register(String email, String password) async {
     final needVerify = await account.register(server, email, password);
     pendingEmail = email.trim();
+    prefs.email = pendingEmail;
+    await _savePrefs();
     _pendingPassword = password;
     if (needVerify) {
       _go(Stage.verifyEmail);

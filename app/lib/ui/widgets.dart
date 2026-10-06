@@ -77,6 +77,17 @@ class AuthScaffold extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
+    // 系统返回键与左上角返回按钮一致；没有返回按钮的页面交给系统处理（退到桌面）。
+    return PopScope(
+      canPop: onBack == null || Navigator.of(context).canPop(),
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) onBack?.call();
+      },
+      child: _scaffold(context, p),
+    );
+  }
+
+  Widget _scaffold(BuildContext context, Palette p) {
     return Scaffold(
       appBar: onBack == null
           ? null
@@ -168,13 +179,17 @@ class CodeBox extends StatelessWidget {
       ),
       child: Row(children: [
         Expanded(
-          child: SelectableText(code,
-              style: TextStyle(
-                  fontFamily: 'monospace',
-                  fontSize: big ? 26 : 19,
-                  letterSpacing: 1.5,
-                  fontWeight: FontWeight.w600,
-                  height: 1.5)),
+          // 按组换行，不在一组中间断开。
+          child: Wrap(spacing: 10, runSpacing: 4, children: [
+            for (final g in code.split('-'))
+              Text(g,
+                  style: TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: big ? 26 : 20,
+                      letterSpacing: 2,
+                      fontWeight: FontWeight.w600,
+                      height: 1.4)),
+          ]),
         ),
         if (copyable)
           IconButton(
