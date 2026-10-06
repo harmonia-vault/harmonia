@@ -110,7 +110,9 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}"
-          NOTES=$(git tag -l --format='%(contents)' "$GITHUB_REF_NAME" | head -20)
+          # checkout 会把附注标签替换成轻量标签，重新拉取以读取标签说明。
+          git fetch --force origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
+          NOTES=$(git tag -l --format='%(contents:subject)%0a%0a%(contents:body)' "$GITHUB_REF_NAME" | sed '/^-----BEGIN/,$d' | head -20)
           (cd cli && go run ./cmd/releasetool manifest --version "$VERSION" --dist ../dist --base-url "$URL" --notes "$NOTES")
           FLAGS=""
           case "$VERSION" in *-*) FLAGS="--prerelease" ;; esac

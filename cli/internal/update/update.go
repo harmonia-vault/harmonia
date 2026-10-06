@@ -73,6 +73,8 @@ func manifestURL(ch Channel) string {
 
 var client = &http.Client{Timeout: 60 * time.Second}
 
+var errNotFound = errors.New("not found")
+
 func get(ctx context.Context, url string, max int64) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -83,6 +85,9 @@ func get(ctx context.Context, url string, max int64) ([]byte, error) {
 		return nil, fmt.Errorf("无法连接更新服务器：%w", err)
 	}
 	defer res.Body.Close()
+	if res.StatusCode == http.StatusNotFound {
+		return nil, errNotFound
+	}
 	if res.StatusCode != 200 {
 		return nil, fmt.Errorf("更新服务器返回 HTTP %d", res.StatusCode)
 	}
@@ -111,6 +116,9 @@ func Fetch(ctx context.Context, ch Channel) (*Manifest, error) {
 	}
 	url := manifestURL(ch)
 	data, err := get(ctx, url, 1<<20)
+	if errors.Is(err, errNotFound) {
+		return nil, fmt.Errorf("%s渠道还没有发布过版本", ch.Label())
+	}
 	if err != nil {
 		return nil, err
 	}
