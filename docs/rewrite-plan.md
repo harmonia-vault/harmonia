@@ -489,5 +489,5 @@ harmonia uninstall
 | CLI 配对命令 | `login` 与 `pair` 两步 | `harmonia login` 一步完成登录和配对 | 密码会话只有 15 分钟，拆成两步容易过期 |
 | 封装构件 | sealed box | libsodium `crypto_box_seal`；加密密钥对按 `crypto_box_seed_keypair` 由 32 字节种子派生 | 三端一致（Go 与 Dart 已用测试向量验证） |
 | App 原生代码 | 不写原生代码 | `MainActivity` 中约 40 行 Kotlin：设备名、安装更新 APK | `local_auth` 要求 `FlutterFragmentActivity`；现成的安装插件会申请媒体读取权限，不适合存放密钥的 App |
-| 服务端发布仓库 | Release 时由 CI 推送 | 本地运行 `mise run publish-server` | 组织禁用了部署密钥，CI 无法写入另一个仓库 |
+| 服务端发布仓库 | 发布到 `harmonia-server` | 发布到 `harmonia-worker`；打正式标签时由 CI（`publish-server.yml`，部署密钥只授权该仓库）推送，也可手动运行 | `harmonia-server` 是旧版部署的 Fork，保持不动 |
 | 本地开发 | — | 服务端对 `localhost`、`127.0.0.1`、`10.0.2.2`（Android 模拟器）放行 HTTP | 便于本地与模拟器调试；线上只走 HTTPS |

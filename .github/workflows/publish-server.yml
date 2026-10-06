@@ -1,0 +1,31 @@
+name: Publish server
+
+# 把 server/ 发布到 harmonia-worker（用户 Fork 部署用的仓库）。
+# 正式版本标签（不含“-”）自动发布；也可以在 Actions 页面手动运行。
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  publish:
+    if: github.event_name == 'workflow_dispatch' || !contains(github.ref_name, '-')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: 推送到 harmonia-worker
+        env:
+          DEPLOY_KEY: ${{ secrets.SERVER_DEPLOY_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$DEPLOY_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
+          git subtree split --prefix server -b server-release
+          REMOTE="git@github.com:${GITHUB_REPOSITORY_OWNER}/harmonia-worker.git"
+          git push "$REMOTE" server-release:main
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            git push "$REMOTE" "server-release:refs/tags/${GITHUB_REF_NAME}"
+          fi
