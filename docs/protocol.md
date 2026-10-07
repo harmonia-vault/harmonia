@@ -107,7 +107,7 @@ PIN 槽（必有）：
 ## 3. HTTP API
 
 - 基础路径为 `/api/v1`。请求和响应都是 JSON，只允许 HTTPS（本地开发时允许 `http://localhost`、`http://127.0.0.1`）。
-- 错误响应：`{"error": "<code>", "message": "<中文说明>"}`。
+- 错误响应：`{"error": "<code>", "message": "<中文说明>"}`。被限流时另带 `retryAfter`（秒），并设置 `Retry-After` 响应头；`code_required` 另带 `flow`。
 
 ### 3.0 账号与寻址
 
@@ -123,7 +123,10 @@ PIN 槽（必有）：
   - 会话令牌的格式为 `<accountId>.<随机串>`，服务端据此定位账号。
   - 不带令牌的账号内请求（设备登录、配对状态查询、恢复登录），在请求头 `X-Harmonia-Account` 中给出账号 ID。
   - 以邮箱为入口的请求（注册、登录、找回密码、重置账号、开始恢复），由目录解析邮箱。
-- 邮件验证码：8 位，字符取自 Crockford Base32 字母表（见 2.1），不区分大小写；15 分钟内有效；每个验证码最多尝试 5 次；重发间隔不少于 60 秒。用途包括注册验证、找回密码、重置账号。
+- 邮件验证码：8 位，字符取自 Crockford Base32 字母表（见 2.1），不区分大小写；15 分钟内有效。用途包括注册验证、登录加验、找回密码、重置账号。
+  - 每次发送验证码，服务端同时返回流程凭证 `flow`（32 字节随机数，b64），验证码与它绑定，校验时必须带上 `flow`。
+  - 每个 `flow` 最多尝试 5 次，失败只作废这个 `flow`，不影响别人申请的验证码。
+  - 发信频率和数量见 3.8。
 
 ### 3.1 会话
 
@@ -142,15 +145,15 @@ PIN 槽（必有）：
 | 方法与路径 | 说明 |
 | --- | --- |
 | `GET /instance` | `{product:"harmonia", version, protocol:1, registration:{open, emailVerification}}` |
-| `POST /register` | `{email, kdfSalt, authKey}` → `{accountId, verificationRequired}`。邮箱已被注册时返回 `conflict`，注册未开放时返回 `forbidden` |
-| `POST /register/verify` | `{email, code}` → `{ok}` |
-| `POST /register/resend` | `{email}` → `{ok}` |
+| `POST /register` | `{email, kdfSalt, authKey}` → `{accountId, verificationRequired, flow?}`（需要验证邮箱时带 `flow`）。邮箱已被注册时返回 `conflict`，注册未开放时返回 `forbidden` |
+| `POST /register/verify` | `{email, flow, code}` → `{ok}` |
+| `POST /register/resend` | `{email}` → `{flow}` |
 | `GET /auth/prelogin?email=` | `{kdfSalt, opsLimit, memLimit}` |
-| `POST /auth/login` | `{email, authKey}` → `{token, expiresAt, accountId}`；邮箱未验证时返回 `email_unverified` |
-| `POST /password-reset/request` | `{email}` → `{ok}`，发送找回密码验证码 |
-| `POST /password-reset/complete` | `{email, code, kdfSalt, authKey}` → `{ok}`，只修改密码，数据保留 |
-| `POST /account-reset/request` | `{email}` → `{ok}`，发送重置账号验证码 |
-| `POST /account-reset/complete` | `{email, code}` → `{ok}`，**永久删除**该账号的全部数据和设备，邮箱可以重新注册 |
+| `POST /auth/login` | `{email, authKey, flow?, code?}` → `{token, expiresAt, accountId}`；邮箱未验证时返回 `email_unverified`；需要邮件加验时返回 `code_required` 和 `flow`，见 3.8 |
+| `POST /password-reset/request` | `{email}` → `{flow}`，发送找回密码验证码 |
+| `POST /password-reset/complete` | `{email, flow, code, kdfSalt, authKey}` → `{ok}`，只修改密码，数据保留 |
+| `POST /account-reset/request` | `{email}` → `{flow}`，发送重置账号验证码 |
+| `POST /account-reset/complete` | `{email, flow, code}` → `{ok}`，**永久删除**该账号的全部数据和设备，邮箱可以重新注册 |
 | `POST /recovery/challenge` | `{email}` → `{accountId, nonce, expiresAt}` |
 
 **账号内：**
@@ -247,9 +250,6 @@ PIN 槽（必有）：
 
 客户端每 30 秒发送一次文本 `ping`，服务端自动回复 `pong`。
 
-### 3.6 轮换恢复码
-
-```json
 #### 3.5.1 配对等待连接
 
 发起方创建配对请求后立即连接 `GET /pairings/{id}/events`，连接存在即表示“仍在等待”：
@@ -260,6 +260,9 @@ PIN 槽（必有）：
 - 等待连接意外断开时，发起方查询一次 `GET /pairings/{id}/status`：`approved` 则继续完成接入，否则提示用户重新发起。
 - 请求被批准、拒绝、取消或过期，或账号修改了密码时，服务端都会向管理设备推送 `{"type":"pairing"}`。修改密码会把所有 `pending` 的请求标记为 `rejected`。
 
+### 3.6 轮换恢复码
+
+```json
 {
   "idempotencyKey": "...",
   "generation": "2",
@@ -287,10 +290,52 @@ PIN 槽（必有）：
 | `not_found` | 404 | 不存在 |
 | `conflict` | 409 | 状态冲突，例如已初始化、配对已处理、幂等键对应的内容不同、代际不对 |
 | `rate_limited` | 429 | 请求过于频繁 |
+| `pairing_blocked` | 429 | 这个 IP 发起的配对请求刚被拒绝并阻止，30 分钟内不能再发起 |
+| `code_required` | 401 | 密码正确，但这次登录还需要邮件验证码，响应带 `flow`，见 3.8 |
 | `email_unverified` | 403 | 邮箱还没有验证 |
 | `email_unavailable` | 503 | 服务器没有配置发信，无法发送验证码 |
 | `internal` | 500 | 服务器内部错误 |
-| `pairing_blocked` | 429 | 这个 IP 发起的配对请求刚被拒绝并阻止，30 分钟内不能再发起 |
+
+### 3.8 限流与风控
+
+原则：按网络分开计数，攻击者的失败只算在他自己的网络上；不因失败次数锁定账号；靠签名验证的操作不受匿名请求影响。无论服务器是否配置了发信，以下规则都成立，差别只在登录加验的方式。
+
+**网络**
+
+- 计数单位“网络”：IPv4 按单个地址；IPv6 按 /64，受攻击状态下改按 /48。
+- 服务端只保存网络标识的 HMAC，密钥由每个账号和目录各自随机生成。原始 IP 只出现在配对请求和配对阻止记录中，随它们过期删除。
+
+**入口**
+
+- 每个网络每分钟最多 300 个请求（全部接口合计），在进入 Durable Object 之前拦截。
+- 以邮箱为入口的接口、设备登录挑战、恢复、发起配对，另按网络限制每分钟次数（注册、登录、恢复挑战 10 次，其他 20 至 30 次）。
+
+**密码登录**
+
+- 失败次数按“账号 + 网络”计数，窗口 15 分钟；登录成功后清零该网络的计数。
+- 每个网络前 5 次失败不受限制；之后每失败一次，该网络下次可以尝试的等待时间翻倍，从 5 秒起，最长 5 分钟。等待期间不校验密码，直接返回 `rate_limited`。只影响这一个网络。
+- 受攻击状态：15 分钟内全部网络的失败合计达到 20 次时进入，连续 1 小时没有失败后退出。期间所有网络的登录：
+  - 服务器配置了发信：密码正确后不发会话，而是向账号邮箱发送登录验证码，返回 `code_required` 和 `flow`；带上 `flow` 和 `code` 再次登录才发会话。密码不对时不发邮件。
+  - 未配置发信：每个网络的免限制次数从 5 降为 1。
+- 这些限制只作用于密码登录。被挡住的合法用户可以：等待提示的时间后重试；在管理手机上修改密码（所有密码会话和待处理的配对请求随之作废，账号随即退出受攻击状态）；用恢复码恢复（不需要密码）。
+
+**邮件**
+
+- 额度按账号计算，按 1 小时滚动，分两份互不占用：
+  - 登录验证码：只在密码正确后发送，每小时 10 封。
+  - 其他（注册验证、找回密码、重置账号）：每个网络 2 封，合计 6 封；每天合计 20 封。
+- 同一网络的重发间隔不少于 60 秒；同一网络、同一用途只保留最新一个 `flow`，不同网络的 `flow` 互不影响。
+- 超出额度后不再发送新邮件，返回 `rate_limited`；已经发出的验证码在 15 分钟内照常有效。
+- 注册验证邮件发往尚未注册的邮箱，另由目录限制：每个网络每小时 3 封，整个实例每天 100 封。
+
+**配对**
+
+- 每个网络同时最多 2 个等待中的请求（只计保持等待连接的请求）；整个账号最多 20 个。
+- 拒绝并阻止、修改密码作废待处理请求，见 3.2 和 3.5.1。
+
+**签名验证的操作**
+
+- 设备登录挑战、设备会话、恢复会话只按网络限制每分钟次数，不设账号级计数。已接入设备的操作不受密码登录和邮件限制的影响。
 
 ## 4. 规则摘要
 
@@ -298,4 +343,4 @@ PIN 槽（必有）：
 - **写入**：同一变量按服务器接受顺序，后写覆盖先写。客户端不做乐观更新，以同步结果为准。
 - **到期**：服务器拒绝已到期的授权；客户端离线时同样停用到期的环境。
 - **撤销**：服务器删除该设备的授权、封装和会话，推送 `revoked`；客户端收到 `revoked` 推送或 `device_revoked` 错误后，清除本地全部数据。
-- **限流**：注册、登录、找回密码、重置账号、恢复、配对、设备登录挑战按 IP 限制每分钟的请求次数；发送邮件另按账号限制重发间隔。
+- **限流与风控**：按网络和来源分开计数，不锁定账号，见 3.8。
