@@ -23,7 +23,7 @@ Harmonia 是一个自托管的环境变量同步工具：在手机上集中管�
 
 ### 1. 部署服务端
 
-按 [harmonia-worker 的说明](https://github.com/harmonia-vault/harmonia-worker) Fork 并部署到 Cloudflare，记下 HTTPS 地址。部署后请立即注册第一个账号。
+按 [harmonia-worker 的说明](https://github.com/harmonia-vault/harmonia-worker) 部署到 Cloudflare（Fork 后在 Cloudflare 控制台导入，配置在控制台填写，无需改文件），记下 HTTPS 地址。部署后请立即注册第一个账号。
 
 ### 2. 安装 App 并创建账号
 

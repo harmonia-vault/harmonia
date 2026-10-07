@@ -15,33 +15,36 @@ Harmonia（和弦）是一个自托管的环境变量同步工具：在手机上
 
 1. 一个 Cloudflare 账号（免费套餐即可）。
 2. 用于发送验证码的发信域名：在 Cloudflare 中启用 [Email Service](https://developers.cloudflare.com/email-service/) 并验证该域名。验证码用于注册验证、找回密码和重置账号。
-   - 暂时不想配置发信：把 `REQUIRE_EMAIL_VERIFICATION` 设为 `"false"`。此时注册无需验证邮箱，但“找回密码”和“重置账号”不可用。
+   - 暂时不想配置发信：把 `REQUIRE_EMAIL_VERIFICATION` 设为 `false`。此时注册无需验证邮箱，但“找回密码”和“重置账号”不可用。
 
-## 部署（推荐：Fork）
+## 部署
 
-1. [Fork 本仓库](https://github.com/harmonia-vault/harmonia-worker/fork)。
-2. 在你的 Fork 中编辑 `wrangler.jsonc` 的 `vars`（见下表），提交。
-3. 在 Cloudflare 控制台 **Workers & Pages → Create → Import a repository**，选择你的 Fork，保持默认的构建设置，部署。
-4. 部署完成后记下 Worker 的 HTTPS 地址（例如 `https://harmonia.<你的子域>.workers.dev`），也可以在 Worker 设置中绑定自己的域名。
-5. **立即**在手机 App 中填写这个地址并注册账号。`ALLOW_REGISTRATION` 为 `false` 时，只有第一个注册的账号能成功，之后注册自动关闭。
+仓库里不需要改任何文件，所有配置都在 Cloudflare 控制台填写。
 
-也可以使用一键部署：[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/harmonia-vault/harmonia-worker)。一键部署会复制出一个新仓库（不是 Fork），以后需要手动同步更新，因此更推荐 Fork。
+1. 准备一个自己的仓库副本：[Fork 本仓库](https://github.com/harmonia-vault/harmonia-worker/fork)（推荐，之后可以一键同步更新）。
+   也可以使用一键部署 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/harmonia-vault/harmonia-worker)，它会复制出一个新仓库并直接部署，可跳过第 2 步；但以后需要手动同步更新。
+2. 在 Cloudflare 控制台 **Workers & Pages → Create → Import a repository**，选择这个仓库。Worker 名称保持 `harmonia`（必须与仓库中的名称一致，否则构建失败），其余保持默认，部署。
+3. 打开这个 Worker 的 **Settings → Variables and Secrets**，按下表添加变量（类型选 Text），保存后立即生效。
+4. 记下 Worker 的 HTTPS 地址（例如 `https://harmonia.<你的子域>.workers.dev`），也可以在 Worker 设置中绑定自己的域名。
+5. **立即**在手机 App 中填写这个地址并注册账号。`ALLOW_REGISTRATION` 未开启时，只有第一个注册的账号能成功，之后注册自动关闭。
 
 > 部署过旧版 Harmonia（Worker 名为 `harmonia-server`）的用户：新版使用 Worker 名 `harmonia`，两者互不影响。旧版数据格式不兼容，不会自动迁移；确认不再需要后可以删除旧 Worker。
 
 ## 配置
 
+在 Worker 的 **Settings → Variables and Secrets** 中设置；不设置时使用默认值。重新部署不会覆盖这里的值。
+
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
-| `EMAIL_FROM` | 空 | 发件地址，例如 `noreply@example.com`，域名需已在 Email Service 验证 |
-| `ALLOW_REGISTRATION` | `"false"` | 是否开放注册。`false` 时只允许注册第一个账号；之后重置过的账号可以用同一邮箱重新注册 |
-| `REQUIRE_EMAIL_VERIFICATION` | `"true"` | 注册时是否需要验证邮箱 |
+| `EMAIL_FROM` | 空 | 发件地址，例如 `noreply@example.com`，域名需已在 Email Service 验证。为空时无法发送验证码 |
+| `ALLOW_REGISTRATION` | `false` | 设为 `true` 开放注册。`false` 时只允许注册第一个账号；之后重置过的账号可以用同一邮箱重新注册 |
+| `REQUIRE_EMAIL_VERIFICATION` | `true` | 设为 `false` 时注册不需要验证邮箱 |
 
 每个账号的数据相互隔离，存放在各自的 Durable Object 中。
 
 ## 更新
 
-在你的 Fork 页面点击 **Sync fork → Update branch**，Cloudflare 会自动重新部署。数据会保留：服务端带有表结构迁移。
+在你的 Fork 页面点击 **Sync fork → Update branch**，Cloudflare 会自动重新部署。配置和数据都会保留：配置在控制台中，服务端带有表结构迁移。
 
 App 或命令行提示“服务器版本过旧”时，按此方法更新即可。
 

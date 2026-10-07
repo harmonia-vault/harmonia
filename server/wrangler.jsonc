@@ -10,14 +10,9 @@
     ]
   },
   "migrations": [{ "tag": "init", "new_sqlite_classes": ["Account", "Directory"] }],
-  "vars": {
-    // 是否开放注册；为 false 时只允许注册第一个账号。
-    "ALLOW_REGISTRATION": "false",
-    // 注册时是否需要验证邮箱。
-    "REQUIRE_EMAIL_VERIFICATION": "true",
-    // 发件地址，需要先在 Cloudflare Email Service 中验证发信域名。
-    "EMAIL_FROM": ""
-  },
+  // 配置（ALLOW_REGISTRATION、REQUIRE_EMAIL_VERIFICATION、EMAIL_FROM）在 Cloudflare 控制台的
+  // Worker 设置中填写，不写在这里：部署时保留控制台中的值，仓库本身不含任何个人配置。见 README。
+  "keep_vars": true,
   "send_email": [{ "name": "EMAIL" }],
   "observability": { "enabled": false }
 }
