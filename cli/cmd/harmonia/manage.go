@@ -5,8 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"golang.org/x/term"
 
 	"github.com/harmonia-vault/harmonia/cli/internal/app"
 	"github.com/harmonia-vault/harmonia/cli/internal/service"
@@ -128,6 +131,23 @@ func cmdShell(ctx context.Context, args []string) error {
 	return nil
 }
 
+// enableLinger 在没能开启开机自启时询问是否用 sudo 开启：systemd 用户服务默认只在用户登录期间运行，
+// 开启 linger 后不登录也会运行，但普通用户（例如通过 SSH 登录时）通常没有权限自己开启。
+func enableLinger(user string) {
+	fmt.Println("\n开机自启还没有开启：当前用户没有权限开启，退出登录或重启后服务不会运行，直到下次登录。")
+	cmd := "sudo loginctl enable-linger " + user
+	if term.IsTerminal(int(os.Stdin.Fd())) && confirmYes("是否用 sudo 开启？需要输入 sudo 密码。") {
+		c := exec.Command("sudo", "loginctl", "enable-linger", user)
+		c.Stdin, c.Stdout, c.Stderr = os.Stdin, os.Stdout, os.Stderr
+		if c.Run() == nil {
+			fmt.Println("已开启开机自启，不登录也会运行。")
+			return
+		}
+		fmt.Println("没有开启成功。")
+	}
+	fmt.Printf("之后可以运行：%s\n", cmd)
+}
+
 func executable() (string, error) {
 	p, err := os.Executable()
 	if err != nil {
@@ -157,6 +177,9 @@ func cmdService(ctx context.Context, args []string) error {
 		fmt.Printf("后台服务已安装并启动（%s）。它会保持与服务器的连接，变化会实时写入本机。\n", res.Path)
 		for _, n := range res.Notes {
 			fmt.Println("注意：" + n)
+		}
+		if res.LingerUser != "" {
+			enableLinger(res.LingerUser)
 		}
 	case "uninstall":
 		if err := service.Uninstall(); err != nil {

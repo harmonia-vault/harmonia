@@ -17,40 +17,6 @@ import (
 // version 在构建时通过 -ldflags "-X main.version=..." 写入。
 var version = "dev"
 
-const usage = `Harmonia（和弦）：在手机上管理环境变量，同步到这台电脑。
-
-用法：
-  harmonia login [服务器地址]              登录账号并发起配对，在管理设备上批准后完成接入
-  harmonia status                         查看接入状态、环境和后台服务
-  harmonia sync                           立即同步
-
-  harmonia env list                       列出可访问的环境、顺序和同名变量
-  harmonia env activate <环境>            启用环境（新授权的环境默认已启用）
-  harmonia env deactivate <环境>          停用环境
-  harmonia env order <环境>...            把这些环境按给定顺序移到最前面（同名变量由靠前的提供）
-
-  harmonia var list [--env 环境] [--show]  列出变量（默认隐藏值）
-  harmonia var set <环境> <变量名> [值]     写入变量（不给值时交互输入）
-  harmonia var rm <环境> <变量名>          删除变量
-  harmonia import --env <环境>             从当前终端的环境变量中勾选导入
-
-  harmonia override set <环境> <变量名> [值]  设置仅本机生效的值
-  harmonia override rm <环境> <变量名>
-  harmonia override list
-
-  harmonia exec [--env a,b] -- <命令...>   带上变量运行命令（--env 按列出顺序，靠前的优先）
-  harmonia export [--format sh|dotenv|json]  输出当前生效的变量
-
-  harmonia shell install|uninstall [--shell zsh|bash]  在 shell 启动文件中加载变量
-  harmonia service install|uninstall|status  管理后台同步服务
-
-  harmonia update [--check]               检查并升级 harmonia
-  harmonia update channel [stable|beta]   查看或切换更新渠道（正式版 / 测试版）
-  harmonia logout                         退出账号并清除本机数据
-  harmonia uninstall                      退出账号、移除服务与 shell 集成并删除 harmonia
-  harmonia version
-`
-
 type flags struct {
 	values map[string]string
 	bools  map[string]bool
@@ -129,7 +95,7 @@ func main() {
 	defer stop()
 	args := os.Args[1:]
 	if len(args) == 0 || args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
-		fmt.Print(usage)
+		printHelp(os.Stdout)
 		return
 	}
 	commands := map[string]func(context.Context, []string) error{
@@ -152,11 +118,11 @@ func main() {
 	}
 	fn, ok := commands[args[0]]
 	if !ok {
-		fmt.Fprintf(os.Stderr, "未知命令：%s\n\n%s", args[0], usage)
+		fmt.Fprintf(os.Stderr, "未知命令：%s。运行 harmonia help 查看全部命令。\n", args[0])
 		os.Exit(2)
 	}
 	if err := fn(ctx, args[1:]); err != nil {
-		fmt.Fprintln(os.Stderr, "错误：", err)
+		fmt.Fprintln(os.Stderr, "错误："+sentence(err.Error()))
 		os.Exit(1)
 	}
 }

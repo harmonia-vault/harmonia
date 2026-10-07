@@ -141,7 +141,7 @@ cli env activate Other >/dev/null
 wait_env "from-other" "电脑重新启用 Other"
 cli env order OpenAI >/dev/null
 wait_env "sk-second" "电脑把 OpenAI 移到最前"
-cli env list | grep -q "OPENAI_API_KEY：使用“OpenAI”中的值（同时出现在“Other”）" || fail "env list 没有显示同名变量来源"
+cli env list | grep -q "OPENAI_API_KEY  使用“OpenAI”中的值，同时出现在“Other”" || fail "env list 没有显示同名变量来源"
 expect_eq "$(manager phone devices | grep e2e-laptop | cut -f3)" "OpenAI:rw,Other:ro" "手机看到电脑上的顺序"
 cli env deactivate Other >/dev/null
 expect_eq "$(manager phone devices | grep e2e-laptop | cut -f3)" "OpenAI:rw,Other:ro:off" "手机看到电脑停用的环境"

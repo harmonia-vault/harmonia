@@ -15,7 +15,7 @@ import (
 // PairingPrompt 负责向用户展示配对信息，以及在需要时询问邮件验证码。
 type PairingPrompt interface {
 	AskCode(message string) (string, error)
-	ShowPairing(qr, code string, expiresAt time.Time)
+	ShowPairing(qr, code, deviceName string, expiresAt time.Time)
 	Waiting()
 }
 
@@ -103,7 +103,7 @@ func Login(ctx context.Context, in LoginInput, prompt PairingPrompt) (*App, int,
 	}
 	fp := hc.PairingFingerprint(req.ID, signPub, boxPub, acct.RootPub)
 	status, err := c.WaitPairing(ctx, req.ID, req.Secret, func() {
-		prompt.ShowPairing(hc.PairingQR(req.ID, fp), hc.PairingCode(fp), time.UnixMilli(req.ExpiresAt))
+		prompt.ShowPairing(hc.PairingQR(req.ID, fp), hc.PairingCode(fp), name, time.UnixMilli(req.ExpiresAt))
 		prompt.Waiting()
 	})
 	if ctx.Err() != nil {

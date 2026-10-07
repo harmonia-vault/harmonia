@@ -254,7 +254,7 @@ harmonia uninstall
 - 合并规则：激活的环境按顺序叠加，同名变量由排在前面的环境提供；本地覆盖先替换所在环境中的值，再参与合并；授权已过期的环境在本地停用。
 - 激活与顺序存在服务端（随授权同步），`activate`、`deactivate`、`order` 直接提交，需要联网；`order` 把列出的环境按给定顺序移到最前面，其余环境保持原有顺序。`harmonia env list` 显示顺序、是否激活，以及同名变量由哪个环境提供。
 - 后台服务：
-  - Linux 使用 `systemd --user` + `loginctl enable-linger`，开机后无需登录即运行。
+  - Linux 使用 `systemd --user` + `loginctl enable-linger`，开机后无需登录即运行。普通用户（例如通过 SSH 登录）通常没有权限自己开启 linger：开启失败时，在终端里询问是否用 sudo 开启（默认 Y），不同意或没有终端时给出要执行的命令。
   - macOS 使用 LaunchAgent，登录后运行。
   - 后台服务负责维持推送连接、同步、重写 `env.sh`，并每 24 小时检查一次更新。
 

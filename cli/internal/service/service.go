@@ -29,6 +29,8 @@ type Status struct {
 type Result struct {
 	Path  string
 	Notes []string
+	// LingerUser 非空表示没能为该用户开启 linger（不登录时服务不会运行），需要管理员权限开启。
+	LingerUser string
 }
 
 func home() string {
@@ -93,9 +95,8 @@ WantedBy=default.target
 		res := &Result{Path: p}
 		u, _ := user.Current()
 		if u != nil {
-			if out, err := run("loginctl", "enable-linger", u.Username); err != nil {
-				res.Notes = append(res.Notes,
-					fmt.Sprintf("未能开启开机自启（loginctl enable-linger 失败：%s）。不登录时服务不会运行；可以让管理员执行：sudo loginctl enable-linger %s", out, u.Username))
+			if _, err := run("loginctl", "enable-linger", u.Username); err != nil {
+				res.LingerUser = u.Username
 			}
 		}
 		return res, nil

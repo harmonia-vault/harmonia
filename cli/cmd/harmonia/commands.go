@@ -29,22 +29,20 @@ func (terminalPrompt) AskCode(message string) (string, error) {
 	return prompt("邮件中的验证码：")
 }
 
-func (terminalPrompt) ShowPairing(qr, code string, expiresAt time.Time) {
+func (terminalPrompt) ShowPairing(qr, code, name string, expiresAt time.Time) {
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "请在管理设备上打开 Harmonia，进入“设备 → 添加设备”，扫描下面的二维码：")
-	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "在管理设备上打开 Harmonia，进入“设备 → 添加设备”，扫描下面的二维码：")
 	qrterminal.GenerateWithConfig(qr, qrterminal.Config{
 		Level: qrterminal.L, Writer: os.Stderr, HalfBlocks: true,
 		BlackChar: qrterminal.BLACK_BLACK, WhiteChar: qrterminal.WHITE_WHITE,
 		BlackWhiteChar: qrterminal.BLACK_WHITE, WhiteBlackChar: qrterminal.WHITE_BLACK, QuietZone: 2,
 	})
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintf(os.Stderr, "无法扫码时，可以在管理设备上手动输入核对码：%s\n", code)
-	fmt.Fprintf(os.Stderr, "请确认管理设备上显示的设备名称与本机一致。配对请求 %s 前有效。\n", expiresAt.Format("15:04"))
+	fmt.Fprintf(os.Stderr, "无法扫码时，选择“输入核对码”。核对码：%s\n", code)
+	fmt.Fprintf(os.Stderr, "批准前请确认显示的设备名是“%s”。请求在 %s 前有效。\n", name, expiresAt.Format("15:04"))
 }
 
 func (terminalPrompt) Waiting() {
-	fmt.Fprintln(os.Stderr, "\n正在等待管理设备批准……（按 Ctrl+C 取消）")
+	fmt.Fprintln(os.Stderr, "\n正在等待批准……（按 Ctrl+C 取消）")
 }
 
 func cmdLogin(ctx context.Context, args []string) error {
@@ -90,93 +88,16 @@ func cmdLogin(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("\n已接入账号，这台设备可以访问 %d 个环境。\n", n)
-	fmt.Println("接下来：")
-	fmt.Println("  harmonia env list                     查看环境（授权的环境默认已启用）")
+	fmt.Printf("\n已接入账号，这台设备可以访问 %d 个环境，授权的环境默认已启用。\n", n)
+	next := [][]string{{"harmonia env list", "查看环境和变量来源"}}
 	if !shellInstalledAny(a.Dir) {
-		fmt.Println("  harmonia shell install                新开的终端自动带上变量")
+		next = append(next, []string{"harmonia shell install", "新开的终端自动带上变量"})
 	}
 	if s := service.Check(); s.Supported && !s.Installed {
-		fmt.Println("  harmonia service install              安装后台服务，实时同步")
+		next = append(next, []string{"harmonia service install", "安装后台服务，实时同步"})
 	}
-	return nil
-}
-
-func ago(ms int64) string {
-	if ms == 0 {
-		return "从未"
-	}
-	d := time.Since(time.UnixMilli(ms))
-	switch {
-	case d < time.Minute:
-		return "刚刚"
-	case d < time.Hour:
-		return fmt.Sprintf("%d 分钟前", int(d.Minutes()))
-	case d < 48*time.Hour:
-		return fmt.Sprintf("%d 小时前", int(d.Hours()))
-	}
-	return fmt.Sprintf("%d 天前", int(d.Hours()/24))
-}
-
-var roleNames = map[string]string{"ro": "只读", "rw": "读写", "admin": "管理"}
-
-func expiry(ms int64) string {
-	if ms == 0 {
-		return "长期"
-	}
-	t := time.UnixMilli(ms)
-	if time.Now().After(t) {
-		return "已到期"
-	}
-	return t.Format("2006-01-02 15:04") + " 到期"
-}
-
-func cmdStatus(ctx context.Context, args []string) error {
-	a, err := app.Load(false)
-	if err != nil {
-		return err
-	}
-	if !a.Config.Paired() {
-		fmt.Println("本机还没有接入账号。运行 harmonia login 开始。")
-		return nil
-	}
-	fmt.Printf("账号：%s（%s）\n", a.Config.Email, a.Config.Server)
-	fmt.Printf("本机：%s\n", a.Config.DeviceName)
-	fmt.Printf("上次同步：%s\n", ago(a.Config.LastSync))
-	fmt.Printf("后台服务：%s\n", serviceSummary())
-	fmt.Printf("Shell 集成：%s\n", shellSummary(a.Dir))
-	fmt.Printf("版本：%s（%s渠道）\n", version, updateChannel().Label())
-	if hint := updateHint(); hint != "" {
-		fmt.Println(hint)
-	}
-	fmt.Println()
-	return printEnvs(a)
-}
-
-func printEnvs(a *app.App) error {
-	cache, err := a.Dir.Cache()
-	if err != nil {
-		return err
-	}
-	if len(cache.Environments) == 0 {
-		fmt.Println("这台设备还没有任何环境的访问权限。可以在管理设备上为它授权。")
-		return nil
-	}
-	envs := vault.Ordered(cache)
-	fmt.Println("环境（按顺序排列，同名变量由排在前面的环境提供）：")
-	for i, e := range envs {
-		state := "未启用"
-		if e.Active {
-			state = "已启用"
-		}
-		fmt.Printf("  %d. %-20s %-4s %-6s %-22s %s\n", i+1, e.Name, roleNames[e.Role], fmt.Sprintf("%d 个变量", len(cache.Variables[e.ID])), expiry(e.ExpiresAt), state)
-	}
-	if cs := vault.Conflicts(cache, a.Keys, vault.ActiveIDs(cache), time.Now().UnixMilli()); len(cs) > 0 {
-		fmt.Println("\n同名变量：")
-		for _, c := range cs {
-			fmt.Printf("  %s：使用“%s”中的值（同时出现在“%s”）\n", c.Name, c.Envs[0], strings.Join(c.Envs[1:], "”“"))
-		}
-	}
+	fmt.Println("\n接下来")
+	printTable(os.Stdout, "  ", next)
 	return nil
 }
 
@@ -275,58 +196,6 @@ func cmdVar(ctx context.Context, args []string) error {
 	return nil
 }
 
-func mask(v string) string {
-	if len(v) <= 4 {
-		return "****"
-	}
-	return v[:2] + strings.Repeat("*", 6) + v[len(v)-2:]
-}
-
-func listVars(a *app.App, envName string, show bool) error {
-	cache, err := a.Dir.Cache()
-	if err != nil {
-		return err
-	}
-	envs := cache.Environments
-	if envName != "" {
-		e, err := vault.Find(cache, envName)
-		if err != nil {
-			return err
-		}
-		envs = envs[:0:0]
-		envs = append(envs, *e)
-	}
-	ov, _ := a.Dir.Overrides()
-	for _, e := range envs {
-		vals, err := vault.Values(cache, a.Keys, e.ID)
-		fmt.Printf("%s（%s）\n", e.Name, roleNames[e.Role])
-		if err != nil {
-			fmt.Printf("  %v\n", err)
-			continue
-		}
-		names := make([]string, 0, len(vals))
-		for n := range vals {
-			names = append(names, n)
-		}
-		sort.Strings(names)
-		if len(names) == 0 {
-			fmt.Println("  （没有变量）")
-		}
-		for _, n := range names {
-			v := vals[n]
-			if !show {
-				v = mask(v)
-			}
-			note := ""
-			if _, ok := ov[e.ID][n]; ok {
-				note = "  [本机覆盖]"
-			}
-			fmt.Printf("  %s=%s%s\n", n, v, note)
-		}
-	}
-	return nil
-}
-
 func cmdImport(ctx context.Context, args []string) error {
 	f, err := parseFlags(args, "env")
 	if err != nil {
@@ -387,20 +256,7 @@ func cmdOverride(ctx context.Context, args []string) error {
 		if err != nil {
 			return err
 		}
-		if len(ov) == 0 {
-			fmt.Println("没有本机覆盖值。")
-		}
-		cache, _ := a.Dir.Cache()
-		for envID, m := range ov {
-			name := envID
-			if e, err := vault.Find(cache, envID); err == nil {
-				name = e.Name
-			}
-			for n, v := range m {
-				fmt.Printf("%s  %s=%s\n", name, n, mask(v))
-			}
-		}
-		return nil
+		return printOverrides(a, ov)
 	}
 	if len(f.args) < 3 {
 		return errors.New("用法：harmonia override set|rm <环境> <变量名> [值]")

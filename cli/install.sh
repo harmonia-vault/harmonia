@@ -68,16 +68,18 @@ esac
 # 有终端可以交互时，询问是否安装 shell 集成和后台服务，直接回车即安装；没有终端时只提示命令。
 if (exec </dev/tty) 2>/dev/null; then
   echo
-  echo "【shell 集成】新开的终端会自动带上已启用环境中的变量。"
+  echo "[1/2] Shell 集成：新开的终端会自动带上已启用环境中的变量。"
+  echo
   "$DEST/harmonia" shell install </dev/tty || true
   echo
-  echo "【后台服务】开机自动运行，保持与服务器的连接，变量有变化时实时写入本机。"
+  echo "[2/2] 后台服务：开机自动运行，保持与服务器的连接，变量有变化时实时写入本机。"
+  echo
   printf "是否安装后台服务？（Y/n）"
   ans=""
   read -r ans </dev/tty || true
   case "$ans" in
     n|N|no|NO|No) echo "已跳过。之后可以运行 harmonia service install。" ;;
-    *) "$DEST/harmonia" service install || echo "后台服务没有安装成功，可以稍后运行 harmonia service install 重试。" ;;
+    *) "$DEST/harmonia" service install </dev/tty || echo "后台服务没有安装成功，可以稍后运行 harmonia service install 重试。" ;;
   esac
   echo
 else
