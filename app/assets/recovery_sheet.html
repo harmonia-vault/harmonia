@@ -1,0 +1,72 @@
+<!doctype html>
+<!-- 恢复码 PDF 模板：各端客户端填入双花括号占位符后由系统网页引擎转为 A4 PDF。版式沿用验证码邮件。 -->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Harmonia 恢复码</title>
+<style>
+  @page { size: A4; margin: 0; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #FFFFFF; }
+  body { font-family: -apple-system, "PingFang SC", "Noto Sans CJK SC", "Noto Sans SC", sans-serif; color: #1C1917; font-size: 10pt; line-height: 1.75; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .mono { font-family: Menlo, "SF Mono", "Roboto Mono", "Droid Sans Mono", monospace; }
+  .body { padding: 16mm 22mm 12mm; }
+  .kicker { font-size: 8pt; letter-spacing: .6mm; color: #78716C; }
+  h1 { font-family: "Songti SC", "Noto Serif CJK SC", "Noto Serif SC", serif; font-size: 22pt; font-weight: 500; line-height: 1.3; margin: 5mm 0 0; padding-bottom: 4mm; border-bottom: .6mm solid #1C1917; }
+  .lead { font-size: 10.5pt; color: #44403C; margin: 5mm 0; }
+  table { width: 100%; border-collapse: collapse; }
+  .info td { padding: 2.2mm 0; border-bottom: .3mm solid #E7E5E4; font-size: 9.5pt; vertical-align: top; word-break: break-all; }
+  .info td:first-child { width: 24mm; color: #78716C; }
+  .code { margin-top: 6mm; border: .45mm solid #1C1917; }
+  .code th { padding: 2mm 4mm; border-bottom: .3mm solid #1C1917; font-size: 8.5pt; font-weight: 700; color: #1C1917; text-align: left; }
+  .code th + th { font-weight: 400; color: #78716C; text-align: right; }
+  .code .value { text-align: center; padding: 7mm 0 6mm; font-size: 24pt; font-weight: 500; letter-spacing: 1.6mm; line-height: 1.6; white-space: nowrap; }
+  .code .g + .g::before { content: ""; display: inline-block; width: 3.2mm; height: .9mm; background: #1C1917; vertical-align: .32em; margin: 0 3mm 0 1.6mm; }
+  .code .note { margin: 0 4mm; border-top: .3mm dashed #D6D3D1; padding: 2.4mm 0 3mm; text-align: center; font-size: 8pt; color: #78716C; }
+  .alert { margin-top: 6mm; border: .3mm solid #B3261E; border-left-width: 1.2mm; padding: 3.4mm 4mm; color: #5C140E; }
+  .alert b { display: block; font-size: 9.5pt; font-weight: 700; margin-bottom: .8mm; }
+  .alert div { font-size: 9pt; line-height: 1.7; }
+  h2 { font-size: 10.5pt; font-weight: 700; margin: 8mm 0 2mm; padding-bottom: 1.6mm; border-bottom: .3mm solid #E7E5E4; }
+  ol, ul { margin: 0; padding-left: 5mm; color: #44403C; }
+  li { margin: .6mm 0; }
+  .foot { margin-top: 10mm; border-top: .3mm solid #E7E5E4; padding-top: 2.6mm; font-size: 8pt; line-height: 1.7; color: #A8A29E; }
+  .foot p { margin: 0 0 1.4mm; }
+  .foot p:first-child { color: #78716C; }
+</style>
+</head>
+<body>
+<div class="body">
+  <div class="kicker mono">Harmonia · 恢复码</div>
+  <h1>账号恢复码</h1>
+  <div class="lead">所有设备都丢失或无法使用时，用这个恢复码找回账号和数据。<br>恢复码只在生成时显示，丢失后无任何方式找回，请打印后妥善保管。</div>
+  <table class="info">
+    <tr><td>账号</td><td>{{EMAIL}}</td></tr>
+    <tr><td>服务器</td><td class="mono">{{SERVER}}</td></tr>
+  </table>
+  <table class="code">
+    <tr><th>恢复码</th><th>生成于 {{DATE}} · 此前的恢复码均已失效</th></tr>
+    <tr><td colspan="2" class="value mono">{{CODE}}</td></tr>
+    <tr><td colspan="2"><div class="note">字母不区分大小写 · 输入时可省略分隔</div></td></tr>
+  </table>
+  <div class="alert">
+    <b>这张纸等同于账号的全部权限</b>
+    <div>任何人拿到它并知道你的邮箱，就能接管账号、读取所有环境变量。不要拍照，不要上传网盘或发到聊天软件。</div>
+  </div>
+  <h2>如何使用</h2>
+  <ol>
+    <li>在新手机上安装 Harmonia，填写上面的服务器地址。</li>
+    <li>在登录页选择“用恢复码恢复”，输入账号邮箱和恢复码。可以同时设置新的登录密码。</li>
+    <li>按提示保存新的恢复码。完成后，这张恢复码立即作废。</li>
+  </ol>
+  <h2>如何保管</h2>
+  <ul>
+    <li>打印后删除 PDF 文件。</li>
+    <li>文件应当放在安全位置妥善保存。</li>
+  </ul>
+  <div class="foot">
+    <p>恢复码由 Harmonia 生成，服务器不会留存任何副本。</p>
+    <p>服务器只保存由恢复码派生的公钥，恢复时用签名验证身份。</p>
+  </div>
+</div>
+</body>
+</html>

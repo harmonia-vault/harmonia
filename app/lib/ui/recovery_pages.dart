@@ -7,12 +7,14 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../app/controller.dart';
 import '../core/crypto.dart';
 import 'lock.dart';
+import 'recovery_actions.dart';
 import 'theme.dart';
 import 'widgets.dart';
 
 /// 两步确认恢复码：先展示让用户抄写，再要求完整重新输入。
 class RecoveryCodeConfirm extends StatefulWidget {
-  const RecoveryCodeConfirm({super.key, required this.code, required this.onConfirmed, this.extra});
+  const RecoveryCodeConfirm({super.key, required this.c, required this.code, required this.onConfirmed, this.extra});
+  final AppController c;
   final Uint8List code;
   final Future<void> Function() onConfirmed;
   final Widget? extra;
@@ -32,9 +34,11 @@ class _RecoveryCodeConfirmState extends State<RecoveryCodeConfirm> {
     if (!_reenter) {
       return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         CodeBox(formatted, copyable: false),
+        const SizedBox(height: Space.md),
+        RecoveryCodeActions(c: widget.c, code: widget.code),
         const SizedBox(height: Space.lg),
         const Banner2(
-          '请把恢复码抄在纸上或存进密码管理器，妥善保管。丢失所有手机时，只能用它找回数据；它不会再次显示，服务器也没有副本。',
+          '请把恢复码抄在纸上、存进密码管理器，或下载 PDF 打印后妥善保管。丢失所有手机时，只能用它找回数据；它不会再次显示，服务器也没有副本。',
           warn: true,
         ),
         const SizedBox(height: Space.md),
@@ -94,6 +98,7 @@ class SetupPage extends StatelessWidget {
         onBack: c.cancelToSignIn,
         children: [
           RecoveryCodeConfirm(
+            c: c,
             code: c.setupDraft!.code,
             onConfirmed: () => runBusy(context, c.completeSetup),
           ),
@@ -290,6 +295,7 @@ class _RotationPageState extends State<RotationPage> {
         onBack: widget.forced ? null : () => Navigator.pop(context),
         children: [
           RecoveryCodeConfirm(
+            c: widget.c,
             code: _code,
             onConfirmed: _submit,
             extra: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
