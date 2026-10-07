@@ -31,6 +31,7 @@ class _ConnectPageState extends State<ConnectPage> {
         subtitle: '输入你部署的 Harmonia 服务地址。环境变量在手机上加密后才会上传，服务器只保存密文。',
         children: [
           TextField(
+            autofillHints: null,
             controller: _url,
             keyboardType: TextInputType.url,
             autocorrect: false,
@@ -108,47 +109,50 @@ class _SignInPageState extends State<SignInPage> {
           TextButton(onPressed: c.changeServer, child: const Text('更换')),
         ]),
         const SizedBox(height: Space.md),
-        Form(
-          key: _form,
-          child: Column(children: [
-            TextFormField(
-              controller: _email,
-              keyboardType: TextInputType.emailAddress,
-              autocorrect: false,
-              autofillHints: const [AutofillHints.email],
-              decoration: const InputDecoration(labelText: '邮箱'),
-              validator: validateEmail,
-            ),
-            const SizedBox(height: Space.md),
-            TextFormField(
-              controller: _password,
-              obscureText: !_show,
-              autofillHints: [_register ? AutofillHints.newPassword : AutofillHints.password],
-              decoration: InputDecoration(
-                labelText: '密码',
-                suffixIcon: IconButton(
-                  icon: Icon(_show ? Icons.visibility_off_outlined : Icons.visibility_outlined),
-                  onPressed: () => setState(() => _show = !_show),
-                ),
+        AutofillGroup(
+          child: Form(
+            key: _form,
+            child: Column(children: [
+              TextFormField(
+                controller: _email,
+                keyboardType: TextInputType.emailAddress,
+                autocorrect: false,
+                autofillHints: const [AutofillHints.email],
+                decoration: const InputDecoration(labelText: '邮箱'),
+                validator: validateEmail,
               ),
-              validator: _register ? validatePassword : (v) => (v ?? '').isEmpty ? '请输入密码' : null,
-            ),
-            if (_register) ...[
               const SizedBox(height: Space.md),
               TextFormField(
-                controller: _confirm,
+                controller: _password,
                 obscureText: !_show,
-                decoration: const InputDecoration(labelText: '再次输入密码'),
-                validator: (v) => v != _password.text ? '两次输入的密码不一致' : null,
+                autofillHints: [_register ? AutofillHints.newPassword : AutofillHints.password],
+                decoration: InputDecoration(
+                  labelText: '密码',
+                  suffixIcon: IconButton(
+                    icon: Icon(_show ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+                    onPressed: () => setState(() => _show = !_show),
+                  ),
+                ),
+                validator: _register ? validatePassword : (v) => (v ?? '').isEmpty ? '请输入密码' : null,
               ),
-              const SizedBox(height: Space.md),
-              Banner2(
-                inst?.emailVerification ?? true
-                    ? '注册后需要输入邮件中的验证码。密码只用于登录，不能用来解密数据；数据由手机上的密钥和恢复码保护。'
-                    : '密码只用于登录，不能用来解密数据；数据由手机上的密钥和恢复码保护。',
-              ),
-            ],
-          ]),
+              if (_register) ...[
+                const SizedBox(height: Space.md),
+                TextFormField(
+                  autofillHints: null,
+                  controller: _confirm,
+                  obscureText: !_show,
+                  decoration: const InputDecoration(labelText: '再次输入密码'),
+                  validator: (v) => v != _password.text ? '两次输入的密码不一致' : null,
+                ),
+                const SizedBox(height: Space.md),
+                Banner2(
+                  inst?.emailVerification ?? true
+                      ? '注册后需要输入邮件中的验证码。密码只用于登录，不能用来解密数据；数据由手机上的密钥和恢复码保护。'
+                      : '密码只用于登录，不能用来解密数据；数据由手机上的密钥和恢复码保护。',
+                ),
+              ],
+            ]),
+          ),
         ),
         const SizedBox(height: Space.xl),
         FilledButton(onPressed: _submit, child: Text(_register ? '注册' : '登录')),
@@ -202,7 +206,7 @@ class _VerifyEmailPageState extends State<VerifyEmailPage> {
             controller: _code,
             textCapitalization: TextCapitalization.characters,
             autocorrect: false,
-            autofillHints: const [AutofillHints.oneTimeCode],
+            autofillHints: null,
             maxLength: 9,
             style: const TextStyle(fontFamily: 'monospace', fontSize: 22, letterSpacing: 3),
             decoration: const InputDecoration(labelText: '8 位验证码', counterText: ''),
@@ -244,33 +248,38 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
       subtitle: '通过邮件验证码设置新密码。保险库中的数据和已授权的设备不受影响。',
       onBack: () => Navigator.pop(context),
       children: [
-        Form(
-          key: _form,
-          child: Column(children: [
-            TextFormField(
-              controller: _email,
-              keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(labelText: '邮箱'),
-              validator: validateEmail,
-              enabled: !_sent,
-            ),
-            if (_sent) ...[
-              const SizedBox(height: Space.md),
+        AutofillGroup(
+          child: Form(
+            key: _form,
+            child: Column(children: [
               TextFormField(
-                controller: _code,
-                textCapitalization: TextCapitalization.characters,
-                decoration: const InputDecoration(labelText: '邮件中的 8 位验证码'),
-                validator: (v) => (v ?? '').trim().length < 8 ? '请输入 8 位验证码' : null,
+                autofillHints: const [AutofillHints.email],
+                controller: _email,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(labelText: '邮箱'),
+                validator: validateEmail,
+                enabled: !_sent,
               ),
-              const SizedBox(height: Space.md),
-              TextFormField(
-                controller: _password,
-                obscureText: true,
-                decoration: const InputDecoration(labelText: '新密码'),
-                validator: validatePassword,
-              ),
-            ],
-          ]),
+              if (_sent) ...[
+                const SizedBox(height: Space.md),
+                TextFormField(
+                  autofillHints: null,
+                  controller: _code,
+                  textCapitalization: TextCapitalization.characters,
+                  decoration: const InputDecoration(labelText: '邮件中的 8 位验证码'),
+                  validator: (v) => (v ?? '').trim().length < 8 ? '请输入 8 位验证码' : null,
+                ),
+                const SizedBox(height: Space.md),
+                TextFormField(
+                  autofillHints: const [AutofillHints.newPassword],
+                  controller: _password,
+                  obscureText: true,
+                  decoration: const InputDecoration(labelText: '新密码'),
+                  validator: validatePassword,
+                ),
+              ],
+            ]),
+          ),
         ),
         const SizedBox(height: Space.xl),
         if (!_sent)
@@ -325,6 +334,7 @@ class _AccountResetPageState extends State<AccountResetPage> {
             warn: true),
         const SizedBox(height: Space.lg),
         TextField(
+          autofillHints: const [AutofillHints.email],
           controller: _email,
           enabled: !_sent,
           keyboardType: TextInputType.emailAddress,
@@ -333,12 +343,14 @@ class _AccountResetPageState extends State<AccountResetPage> {
         if (_sent) ...[
           const SizedBox(height: Space.md),
           TextField(
+            autofillHints: null,
             controller: _code,
             textCapitalization: TextCapitalization.characters,
             decoration: const InputDecoration(labelText: '邮件中的 8 位验证码'),
           ),
           const SizedBox(height: Space.md),
           TextField(
+            autofillHints: null,
             controller: _confirm,
             decoration: const InputDecoration(labelText: '输入“删除全部数据”以确认'),
             onChanged: (_) => setState(() {}),

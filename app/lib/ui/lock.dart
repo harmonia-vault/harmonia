@@ -69,6 +69,7 @@ class _PinDialogState extends State<_PinDialog> {
           Text(widget.reason),
           const SizedBox(height: Space.md),
           TextField(
+            autofillHints: null,
             controller: _pin,
             autofocus: true,
             obscureText: true,
@@ -98,6 +99,7 @@ Future<bool> setupPin(BuildContext context) async {
           const Text('这台手机没有设置锁屏密码。设置一个至少 6 位的数字 PIN，用来打开 Harmonia。忘记 PIN 后只能清除本机数据并重新接入。'),
           const SizedBox(height: Space.md),
           TextField(
+              autofillHints: null,
               controller: a,
               obscureText: true,
               keyboardType: TextInputType.number,
@@ -105,6 +107,7 @@ Future<bool> setupPin(BuildContext context) async {
               decoration: const InputDecoration(labelText: 'PIN')),
           const SizedBox(height: Space.sm),
           TextField(
+              autofillHints: null,
               controller: b,
               obscureText: true,
               keyboardType: TextInputType.number,

@@ -56,6 +56,7 @@ class _RecoveryCodeConfirmState extends State<RecoveryCodeConfirm> {
       const Text('为确认已经保存，请完整输入一遍恢复码：'),
       const SizedBox(height: Space.md),
       TextField(
+        autofillHints: null,
         controller: _input,
         textCapitalization: TextCapitalization.characters,
         autocorrect: false,
@@ -221,12 +222,14 @@ class _RecoverPageState extends State<RecoverPage> {
         onBack: () => Navigator.pop(context),
         children: [
           TextField(
+            autofillHints: const [AutofillHints.email],
             controller: _email,
             keyboardType: TextInputType.emailAddress,
             decoration: const InputDecoration(labelText: '邮箱'),
           ),
           const SizedBox(height: Space.md),
           TextField(
+            autofillHints: null,
             controller: _code,
             textCapitalization: TextCapitalization.characters,
             autocorrect: false,
@@ -299,6 +302,7 @@ class _RotationPageState extends State<RotationPage> {
               ),
               if (_changePassword)
                 TextField(
+                  autofillHints: const [AutofillHints.newPassword],
                   controller: _password,
                   obscureText: true,
                   decoration: const InputDecoration(labelText: '新密码（至少 8 位）'),

@@ -58,9 +58,13 @@ class _SettingsTabState extends State<SettingsTab> {
         content: Column(mainAxisSize: MainAxisSize.min, children: [
           const Text('登录密码只用于在新设备上登录，修改后已授权的设备不受影响。'),
           const SizedBox(height: Space.md),
-          TextField(controller: a, obscureText: true, decoration: const InputDecoration(labelText: '新密码（至少 8 位）')),
+          TextField(
+              controller: a,
+              obscureText: true,
+              autofillHints: const [AutofillHints.newPassword],
+              decoration: const InputDecoration(labelText: '新密码（至少 8 位）')),
           const SizedBox(height: Space.sm),
-          TextField(controller: b, obscureText: true, decoration: const InputDecoration(labelText: '再次输入')),
+          TextField(controller: b, obscureText: true, autofillHints: null, decoration: const InputDecoration(labelText: '再次输入')),
         ]),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),

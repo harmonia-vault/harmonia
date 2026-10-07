@@ -24,6 +24,7 @@ Future<String?> askName(BuildContext context, {required String title, String ini
       title: Text(title),
       content: TextField(
         controller: ctl,
+        autofillHints: null,
         autofocus: true,
         maxLength: 64,
         decoration: InputDecoration(labelText: label),
@@ -315,6 +316,7 @@ class _VariableEditPageState extends State<VariableEditPage> {
           key: _form,
           child: ListView(padding: const EdgeInsets.all(Space.lg), children: [
             TextFormField(
+              autofillHints: null,
               controller: _name,
               enabled: !_editing,
               autocorrect: false,
@@ -325,6 +327,7 @@ class _VariableEditPageState extends State<VariableEditPage> {
             ),
             const SizedBox(height: Space.md),
             TextFormField(
+              autofillHints: null,
               controller: _value,
               obscureText: !_show,
               autocorrect: false,

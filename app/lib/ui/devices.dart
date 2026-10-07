@@ -161,6 +161,7 @@ class _AddDevicePageState extends State<AddDevicePage> {
         title: const Text('输入核对码'),
         content: TextField(
           controller: ctl,
+          autofillHints: null,
           autofocus: true,
           textCapitalization: TextCapitalization.characters,
           style: const TextStyle(fontFamily: 'monospace', fontSize: 18),
