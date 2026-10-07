@@ -13,6 +13,8 @@ import android.print.HtmlPdf
 import android.provider.Settings
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.FileProvider
+import io.flutter.embedding.android.EditorFlutterFragment
+import io.flutter.embedding.android.FlutterFragment
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -41,6 +43,12 @@ class MainActivity : FlutterFragmentActivity() {
         } catch (e: Exception) {
             result.error("write_failed", e.message, null)
         }
+    }
+
+    // 换成会向系统报告输入状态的 FlutterView，避免填充弹窗关闭后输入法被收起，见 EditorFlutterFragment。
+    override fun createFlutterFragment(): FlutterFragment {
+        val args = super.createFlutterFragment().arguments
+        return EditorFlutterFragment().apply { arguments = args }
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
