@@ -87,7 +87,7 @@
 - 服务端：Cloudflare Workers + Durable Object（SQLite），实时推送。
 - Android App（Flutter）：首次设置、App 锁（系统验证 / PIN）、环境与变量管理、扫码批准设备、权限管理、撤销、多管理手机、恢复与轮换恢复码、修改密码、应用内更新。
 - CLI（Go，macOS arm64/amd64、Linux amd64/arm64）：登录、配对、实时同步、多环境激活与优先级、rc 注入、`exec`、本地覆盖、选择性导入、写入、用户级后台服务、自更新、卸载。
-- 发布：GitHub Releases（签名 APK、CLI 二进制、签名清单）、安装脚本、服务端发布仓库与一键部署。
+- 发布：GitHub Releases（签名 APK、CLI 二进制、签名清单）、安装脚本、服务端发布仓库（用户 Fork 后在 Cloudflare 导入部署）。
 
 **不做（已冻结）：** iOS、Windows、Docker 自托管、fish shell、macOS 图形界面 App 的环境注入、环境钥轮换、App 后台推送、实例重置功能（确有需要时删库重建）、团队与共享、Passkey、浏览器扩展。
 
@@ -350,7 +350,7 @@ harmonia uninstall
 
 ### A. 交付物
 
-- 服务端：发布仓库 + 一键部署按钮 + Fork 部署说明 + 升级方法。
+- 服务端：发布仓库 + Fork 部署说明 + 升级方法。
 - Android：签名 APK（GitHub Releases），支持应用内更新。
 - CLI：四个平台的二进制 + 安装脚本 + 签名清单，支持自更新。
 - README：部署、安装、快速开始、Agent 接入示例（systemd / launchd / `exec`）、安全边界、升级、删库重建、常见问题。

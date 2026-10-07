@@ -22,14 +22,11 @@ Harmonia（和弦）是一个自托管的环境变量同步工具：在手机上
 
 仓库里不需要改任何文件，所有配置都在 Cloudflare 控制台填写。
 
-1. 准备一个自己的仓库副本：[Fork 本仓库](https://github.com/harmonia-vault/harmonia-worker/fork)（推荐，之后可以一键同步更新）。
-   也可以使用一键部署 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/harmonia-vault/harmonia-worker)，它会复制出一个新仓库并直接部署，可跳过第 2 步；但以后需要手动同步更新。
-2. 在 Cloudflare 控制台 **Workers & Pages → Create → Import a repository**，选择这个仓库。Worker 名称保持 `harmonia`（必须与仓库中的名称一致，否则构建失败），其余保持默认，部署。
-3. 打开这个 Worker 的 **Settings → Variables and Secrets**，按下表添加变量（类型选 Text），保存后立即生效。
+1. [Fork 本仓库](https://github.com/harmonia-vault/harmonia-worker/fork)。
+2. 在 Cloudflare 控制台 **Workers & Pages → Create → Import a repository**，选择你的 Fork。Worker 名称保持 `harmonia`（必须与仓库中的名称一致，否则构建失败），其余保持默认，部署。
+3. （可选）需要修改默认配置时，打开这个 Worker 的 **Settings → Variables and Secrets**，按下表添加变量（类型选 Text），保存后立即生效。
 4. 记下 Worker 的 HTTPS 地址（例如 `https://harmonia.<你的子域>.workers.dev`），也可以在 Worker 设置中绑定自己的域名。
 5. **立即**在手机 App 中填写这个地址并注册账号。`ALLOW_REGISTRATION` 未开启时，只有第一个注册的账号能成功，之后注册自动关闭。
-
-> 部署过旧版 Harmonia（Worker 名为 `harmonia-server`）的用户：新版使用 Worker 名 `harmonia`，两者互不影响。旧版数据格式不兼容，不会自动迁移；确认不再需要后可以删除旧 Worker。
 
 ## 配置
 
