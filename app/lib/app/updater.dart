@@ -94,8 +94,17 @@ bool verifyMinisign(HCrypto c, String publicKey, Uint8List data, String signatur
 Future<UpdateInfo?> fetchUpdate(HCrypto c, UpdateChannel channel) async {
   if (releasePublicKey.isEmpty) throw Exception('这个版本没有配置更新源（开发版本）。');
   final url = '$_feedBase/${channel.name}.json';
-  final res = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 20));
-  final sig = await http.get(Uri.parse('$url.minisig')).timeout(const Duration(seconds: 20));
+  // 清单与签名同时请求。
+  final List<http.Response> responses;
+  try {
+    responses = await Future.wait([
+      http.get(Uri.parse(url)),
+      http.get(Uri.parse('$url.minisig')),
+    ]).timeout(const Duration(seconds: 20));
+  } catch (_) {
+    throw Exception('无法连接更新服务器，请检查网络后重试。');
+  }
+  final [res, sig] = responses;
   if (res.statusCode == 404) throw Exception('${channel.label}渠道还没有发布过版本。');
   if (res.statusCode != 200 || sig.statusCode != 200) throw Exception('暂时无法获取更新信息，请稍后重试。');
   if (!verifyMinisign(c, releasePublicKey, res.bodyBytes, sig.body)) {
@@ -122,13 +131,18 @@ Future<void> checkForUpdate(BuildContext context, {required bool manual, require
     if (_lastAutoCheck != null && DateTime.now().difference(_lastAutoCheck!) < const Duration(hours: 24)) return;
     _lastAutoCheck = DateTime.now();
   }
-  UpdateInfo? info;
-  try {
-    info = await fetchUpdate(updaterCrypto, channel);
-  } catch (e) {
-    if (manual && context.mounted) toast(context, e.toString().replaceFirst('Exception: ', ''));
-    return;
+  UpdateInfo? fetched;
+  if (manual) {
+    // 手动检查时显示进度，失败时提示原因。
+    if (!await runBusy(context, () async => fetched = await fetchUpdate(updaterCrypto, channel))) return;
+  } else {
+    try {
+      fetched = await fetchUpdate(updaterCrypto, channel);
+    } catch (_) {
+      return;
+    }
   }
+  final info = fetched;
   if (!context.mounted) return;
   if (info == null) {
     if (manual) {
