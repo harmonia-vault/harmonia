@@ -23,9 +23,9 @@ Harmonia（和弦）是一个自托管的环境变量同步工具：在手机上
 仓库里不需要改任何文件，所有配置都在 Cloudflare 控制台填写。
 
 1. [Fork 本仓库](https://github.com/harmonia-vault/harmonia-worker/fork)。
-2. 在 Cloudflare 控制台 **Workers & Pages → Create → Import a repository**，选择你的 Fork。Worker 名称保持 `harmonia`（必须与仓库中的名称一致，否则构建失败），其余保持默认，部署。
+2. 在 Cloudflare 控制台 **Workers & Pages → Create → Import a repository**，选择你的 Fork。Worker 名称保持默认的 `harmonia-worker`（必须与仓库中的名称一致，否则构建失败；Fork 时也请保留仓库名），其余保持默认，部署。
 3. （可选）需要修改默认配置时，打开这个 Worker 的 **Settings → Variables and Secrets**，按下表添加变量（类型选 Text），保存后立即生效。
-4. 记下 Worker 的 HTTPS 地址（例如 `https://harmonia.<你的子域>.workers.dev`），也可以在 Worker 设置中绑定自己的域名。
+4. 记下 Worker 的 HTTPS 地址（例如 `https://harmonia-worker.<你的子域>.workers.dev`），也可以在 Worker 设置中绑定自己的域名。
 5. **立即**在手机 App 中填写这个地址并注册账号。`ALLOW_REGISTRATION` 未开启时，只有第一个注册的账号能成功，之后注册自动关闭。
 
 ## 配置
