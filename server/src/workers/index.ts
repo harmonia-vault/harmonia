@@ -16,6 +16,8 @@ export interface Env {
   EMAIL_FROM?: string;
   ALLOW_REGISTRATION?: string;
   REQUIRE_EMAIL_VERIFICATION?: string;
+  /** 入口总量限制（每个网络每分钟 300 次，见 wrangler.jsonc）；没有配置时跳过。 */
+  LIMITER?: RateLimit;
   /** 仅本地开发：把验证码打印到日志而不是发送邮件。 */
   DEV_MAIL_LOG?: string;
 }
@@ -182,8 +184,8 @@ export class Directory extends DurableObject<Env> {
   async remove(email: string, accountId: string, reset?: boolean) {
     this.core.remove(email, accountId, reset);
   }
-  async allow(key: string, max: number) {
-    return this.core.allow(key, max);
+  async limit(bucket: string, ip: string | null, max: number, windowMs: number) {
+    return this.core.limit(bucket, ip, max, windowMs);
   }
 }
 
@@ -196,8 +198,9 @@ function backend(env: Env): Backend {
       activate: (email, id, allow) => dir.activate(email, id, allow),
       lookup: (email) => dir.lookup(email),
       remove: (email, id, reset) => dir.remove(email, id, reset),
-      allow: (key, max) => dir.allow(key, max),
+      limit: (bucket, ip, max, windowMs) => dir.limit(bucket, ip, max, windowMs),
     },
+    entryLimit: env.LIMITER ? async (key) => (await env.LIMITER!.limit({ key })).success : undefined,
     account: (id) => {
       const stub = env.ACCOUNT.getByName(id);
       return { fetch: (req) => stub.fetch(req), wipe: () => stub.wipe() };

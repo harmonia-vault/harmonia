@@ -70,24 +70,36 @@ class AccountService {
   }
 
   /// 注册；返回是否需要验证邮箱。
-  Future<bool> register(String server, String email, String password) async {
+  /// 注册。需要验证邮箱时返回绑定验证码的流程凭证 flow，否则返回 null。
+  Future<String?> register(String server, String email, String password) async {
     final res = await _client(server)
         .public('POST', '/api/v1/register', {'email': email.trim(), ...await _password(password)});
-    return res['verificationRequired'] as bool;
+    return res['verificationRequired'] == true ? res['flow'] as String : null;
   }
 
-  Future<void> verifyEmail(String server, String email, String code) =>
-      _client(server).public('POST', '/api/v1/register/verify', {'email': email.trim(), 'code': code});
+  Future<void> verifyEmail(String server, String email, String flow, String code) => _client(server)
+      .public('POST', '/api/v1/register/verify', {'email': email.trim(), 'flow': flow, 'code': code});
 
-  Future<void> resendVerification(String server, String email) =>
-      _client(server).public('POST', '/api/v1/register/resend', {'email': email.trim()});
+  /// 重新发送验证码，返回新的流程凭证。
+  Future<String> resendVerification(String server, String email) async =>
+      (await _client(server).public('POST', '/api/v1/register/resend', {'email': email.trim()}))['flow'] as String;
 
-  Future<PasswordSession> login(String server, String email, String password) async {
+  /// 密码登录。账号正受到异常登录尝试时，服务端会在密码正确后要求邮件验证码：
+  /// 这时调用 [askCode] 向用户索要（返回 null 表示取消），验证码不对时带着提示再问。
+  Future<PasswordSession> login(String server, String email, String password,
+      {Future<String?> Function(String message)? askCode}) async {
     final c = _client(server);
     final pre = await c.public(
         'GET', '/api/v1/auth/prelogin?email=${Uri.encodeQueryComponent(email.trim())}');
     final key = await passwordKeyInIsolate(password, unb64(pre['kdfSalt'] as String));
-    final s = await c.public('POST', '/api/v1/auth/login', {'email': email.trim(), 'authKey': b64(key)});
+    final body = {'email': email.trim(), 'authKey': b64(key)};
+    Map<String, dynamic> s;
+    try {
+      s = await c.public('POST', '/api/v1/auth/login', body);
+    } on ApiException catch (e) {
+      if (e.code != 'code_required' || askCode == null) rethrow;
+      s = await _loginWithCode(c, body, e, askCode);
+    }
     final token = s['token'] as String;
     c.accountId = s['accountId'] as String;
     final acct = await c.withToken(token, 'GET', '/api/v1/account');
@@ -95,20 +107,37 @@ class AccountService {
         acct['initialized'] as bool, acct['rootPub'] as String?);
   }
 
-  Future<void> requestPasswordReset(String server, String email) =>
-      _client(server).public('POST', '/api/v1/password-reset/request', {'email': email.trim()});
+  Future<Map<String, dynamic>> _loginWithCode(ApiClient c, Map<String, String> body, ApiException first,
+      Future<String?> Function(String message) askCode) async {
+    var message = first.message;
+    for (var attempt = 1;; attempt++) {
+      final code = await askCode(message);
+      if (code == null) throw ApiException(0, 'cancelled', '已取消登录。');
+      try {
+        return await c.public('POST', '/api/v1/auth/login', {...body, 'flow': first.flow!, 'code': code});
+      } on ApiException catch (e) {
+        if (e.code != 'invalid_request' || attempt >= 5) rethrow;
+        message = e.message;
+      }
+    }
+  }
 
-  Future<void> completePasswordReset(
-          String server, String email, String code, String newPassword) async =>
+  /// 发送找回密码验证码，返回绑定它的流程凭证。
+  Future<String> requestPasswordReset(String server, String email) async =>
+      (await _client(server).public('POST', '/api/v1/password-reset/request', {'email': email.trim()}))['flow']
+          as String;
+
+  Future<void> completePasswordReset(String server, String email, String flow, String code, String newPassword) async =>
       _client(server).public('POST', '/api/v1/password-reset/complete',
-          {'email': email.trim(), 'code': code, ...await _password(newPassword)});
+          {'email': email.trim(), 'flow': flow, 'code': code, ...await _password(newPassword)});
 
-  Future<void> requestAccountReset(String server, String email) =>
-      _client(server).public('POST', '/api/v1/account-reset/request', {'email': email.trim()});
+  /// 发送重置账号验证码，返回绑定它的流程凭证。
+  Future<String> requestAccountReset(String server, String email) async =>
+      (await _client(server).public('POST', '/api/v1/account-reset/request', {'email': email.trim()}))['flow']
+          as String;
 
-  Future<void> completeAccountReset(String server, String email, String code) =>
-      _client(server)
-          .public('POST', '/api/v1/account-reset/complete', {'email': email.trim(), 'code': code});
+  Future<void> completeAccountReset(String server, String email, String flow, String code) => _client(server)
+      .public('POST', '/api/v1/account-reset/complete', {'email': email.trim(), 'flow': flow, 'code': code});
 
   // ---- 首次初始化 ----
 

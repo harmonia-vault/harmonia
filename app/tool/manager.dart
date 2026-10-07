@@ -46,10 +46,11 @@ Future<void> main(List<String> argv) async {
 
   switch (cmd) {
     case 'register':
-      final v = await account.register(opt('server'), opt('email'), opt('password'));
-      print(v ? 'verification-required' : 'registered');
+      // 需要验证邮箱时同时输出验证码绑定的流程凭证，供 verify 使用。
+      final flow = await account.register(opt('server'), opt('email'), opt('password'));
+      print(flow != null ? 'verification-required\t$flow' : 'registered');
     case 'verify':
-      await account.verifyEmail(opt('server'), opt('email'), opt('code'));
+      await account.verifyEmail(opt('server'), opt('email'), opt('flow'), opt('code'));
       print('verified');
     case 'setup':
       final s = await account.login(opt('server'), opt('email'), opt('password'));

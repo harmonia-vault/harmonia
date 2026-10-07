@@ -104,9 +104,14 @@ func (c *Client) Prelogin(ctx context.Context, email string) (*Prelogin, error) 
 	return &out, c.Public(ctx, "GET", "/api/v1/auth/prelogin?email="+url.QueryEscape(email), nil, &out)
 }
 
-func (c *Client) Login(ctx context.Context, email, authKey string) (*Session, error) {
+// Login 用密码登录；服务端要求邮件验证码时返回 code_required 错误（带 Flow），再带上 flow 和 code 调用一次。
+func (c *Client) Login(ctx context.Context, email, authKey, flow, code string) (*Session, error) {
+	body := map[string]string{"email": email, "authKey": authKey}
+	if flow != "" {
+		body["flow"], body["code"] = flow, code
+	}
 	var out Session
-	return &out, c.Public(ctx, "POST", "/api/v1/auth/login", map[string]string{"email": email, "authKey": authKey}, &out)
+	return &out, c.Public(ctx, "POST", "/api/v1/auth/login", body, &out)
 }
 
 func (c *Client) Account(ctx context.Context, token string) (*Account, error) {

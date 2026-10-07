@@ -14,8 +14,9 @@ import {
   type PairingResult,
 } from "./context";
 import { insertEnvelopes, parseEnvelopes, requireAllEnvironments, checkKeyVersions, verifyCert } from "./keys";
+import { network } from "./net";
 import { parseGrants, writeGrants } from "./grants";
-import { ApiError, bad, bin, conflict, id, label, notFound, randomB64, unauthorized } from "./util";
+import { ApiError, bad, bin, conflict, id, label, notFound, randomB64, rateLimited, unauthorized } from "./util";
 
 type Pairing = {
   id: string;
@@ -35,6 +36,8 @@ type Pairing = {
 
 const PAIRING_TTL = 10 * 60_000;
 const BLOCK_TTL = 30 * 60_000;
+/** 每个网络同时等待批准的请求上限。 */
+const PER_NETWORK = 2;
 /** 超过这么久没有收到发起方的心跳，就当作对方已经离开。 */
 export const WAITER_TIMEOUT = 25_000;
 
@@ -116,14 +119,20 @@ export function pairingRoutes(app: Hono, deps: Deps) {
   };
 
   app.post("/api/v1/pairings", async (c) => {
-    rateLimit(c, deps, "pairing", 10);
+    await rateLimit(c, deps, "pairing", 10);
     const s = await session(c, deps);
     if (s.kind !== "password") throw unauthorized();
     const a = requireInitialized(sql);
     const ip = clientIp(c);
+    const net = network(ip);
     sweep(deps);
-    if (one(sql, `SELECT 1 FROM pairing_blocks WHERE ip = ?`, ip)) {
-      throw new ApiError(429, "pairing_blocked", "这个网络暂时不能发起配对，请稍后再试。");
+    const block = one<{ until: number }>(sql, `SELECT until FROM pairing_blocks WHERE ip = ?`, net);
+    if (block) throw rateLimited("这个网络暂时不能发起配对，请稍后再试。", block.until - deps.now(), "pairing_blocked");
+    const waiting = sql
+      .all<{ id: string; ip: string }>(`SELECT id, ip FROM pairings WHERE status = 'pending'`)
+      .filter((p) => network(p.ip) === net && deps.waiters.waiting(p.id)).length;
+    if (waiting >= PER_NETWORK) {
+      throw rateLimited("这个网络已经有两个配对请求在等待批准，请先在管理设备上处理，或在发起的设备上取消。", 60_000);
     }
     const body = await readJson(c);
     const rootPub = bin(body.rootPub, "账号公钥", 32);
@@ -257,7 +266,7 @@ export function pairingRoutes(app: Hono, deps: Deps) {
     if (p.status !== "pending") throw conflict("这个配对请求已经处理过或已过期。");
     sql.run(`UPDATE pairings SET status = 'rejected' WHERE id = ?`, p.id);
     if (body.block === true && p.ip) {
-      sql.run(`INSERT OR REPLACE INTO pairing_blocks (ip, until) VALUES (?, ?)`, p.ip, deps.now() + BLOCK_TTL);
+      sql.run(`INSERT OR REPLACE INTO pairing_blocks (ip, until) VALUES (?, ?)`, network(p.ip), deps.now() + BLOCK_TTL);
     }
     deps.waiters.close(p.id, "rejected");
     deps.notifier.send("managers", { type: "pairing" });

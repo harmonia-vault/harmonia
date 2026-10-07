@@ -12,8 +12,9 @@ import (
 	"github.com/harmonia-vault/harmonia/cli/internal/state"
 )
 
-// PairingPrompt 负责向用户展示配对信息。
+// PairingPrompt 负责向用户展示配对信息，以及在需要时询问邮件验证码。
 type PairingPrompt interface {
+	AskCode(message string) (string, error)
 	ShowPairing(qr, code string, expiresAt time.Time)
 	Waiting()
 }
@@ -54,7 +55,24 @@ func Login(ctx context.Context, in LoginInput, prompt PairingPrompt) (*App, int,
 	if err != nil {
 		return nil, 0, errors.New("服务器返回的登录参数不对")
 	}
-	sess, err := c.Login(ctx, in.Email, hc.B64(hc.PasswordKey(in.Password, salt)))
+	authKey := hc.B64(hc.PasswordKey(in.Password, salt))
+	sess, err := c.Login(ctx, in.Email, authKey, "", "")
+	// 账号正受到异常登录尝试时，密码正确后还需要邮件验证码（docs/protocol.md 3.8）。
+	var need *api.Error
+	if errors.As(err, &need) && need.Code == "code_required" {
+		message := need.Message
+		for attempt := 0; attempt < 5; attempt++ {
+			code, perr := prompt.AskCode(message)
+			if perr != nil {
+				return nil, 0, perr
+			}
+			sess, err = c.Login(ctx, in.Email, authKey, need.Flow, code)
+			if !api.IsCode(err, "invalid_request") {
+				break
+			}
+			message = err.Error()
+		}
+	}
 	if err != nil {
 		return nil, 0, err
 	}

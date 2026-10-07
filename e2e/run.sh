@@ -37,9 +37,10 @@ mail_code() { grep -a "to=$EMAIL purpose=$1" "$TMP/server.log" | tail -1 | sed '
 cli() { HARMONIA_HOME="$TMP/cli" "$TMP/harmonia" "$@"; }
 
 step "J1 注册、验证邮箱、首次初始化"
-expect_eq "$(manager phone register --server "$SERVER" --email "$EMAIL" --password "$PASSWORD")" "verification-required" "注册"
+REG=$(manager phone register --server "$SERVER" --email "$EMAIL" --password "$PASSWORD")
+expect_eq "$(printf %s "$REG" | cut -f1)" "verification-required" "注册"
 sleep 1
-manager phone verify --server "$SERVER" --email "$EMAIL" --code "$(mail_code verification)" >/dev/null
+manager phone verify --server "$SERVER" --email "$EMAIL" --flow "$(printf %s "$REG" | cut -f2)" --code "$(mail_code verification)" >/dev/null
 RECOVERY=$(manager phone setup --server "$SERVER" --email "$EMAIL" --password "$PASSWORD" --name "主手机")
 [[ "$RECOVERY" =~ ^[0-9A-HJKMNP-TV-Z]{4}(-[0-9A-HJKMNP-TV-Z]{1,4}){6}$ ]] || fail "恢复码格式：$RECOVERY"
 manager phone env-create OpenAI >/dev/null

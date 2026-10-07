@@ -2,7 +2,9 @@
 import type { Context } from "hono";
 import { one, type Sql } from "./db";
 import type { Mailer } from "./email";
-import { ApiError, b64, forbidden, obj, sha256, unauthorized, type Role } from "./util";
+import { sweepGuard } from "./guard";
+import { networkId } from "./net";
+import { ApiError, b64, forbidden, obj, randomB64, rateLimited, sha256, unauthorized, type Role } from "./util";
 
 export type PushMessage = { type: "changed"; seq: number } | { type: "pairing" } | { type: "revoked" };
 export type PushTarget = "all" | "managers" | { device: string };
@@ -179,19 +181,31 @@ export function activeManagers(sql: Sql): Device[] {
   return sql.all<Device>(`SELECT * FROM devices WHERE kind = 'manager' AND status = 'active'`);
 }
 
-/** 简单的按 IP 固定窗口限流。 */
 /** 请求方 IP；本地开发时没有该请求头。 */
 export const clientIp = (c: Context) => c.req.header("cf-connecting-ip") ?? "local";
 
-export function rateLimit(c: Context, deps: Deps, bucket: string, max: number) {
-  const key = `${bucket}:${clientIp(c)}`;
+/** 账号内计算网络标识用的密钥，首次使用时随机生成（docs/protocol.md 3.8）。 */
+function networkSecret(sql: Sql): string {
+  const row = one<{ value: string }>(sql, `SELECT value FROM kv WHERE key = 'network_secret'`);
+  if (row) return row.value;
+  const secret = randomB64(32);
+  sql.run(`INSERT INTO kv (key, value) VALUES ('network_secret', ?)`, secret);
+  return secret;
+}
+
+/** 请求方所在网络的标识（只保存 HMAC）。wide 时 IPv6 按 /48 计。 */
+export const requesterNet = (c: Context, deps: Deps, wide = false) => networkId(networkSecret(deps.sql), clientIp(c), wide);
+
+/** 按网络的固定窗口限流（每分钟）。 */
+export async function rateLimit(c: Context, deps: Deps, bucket: string, max: number) {
+  const key = `${bucket}:${await requesterNet(c, deps)}`;
   const now = deps.now();
   const row = one<{ count: number; window_start: number }>(deps.sql, `SELECT * FROM rate_limits WHERE key = ?`, key);
   if (!row || now - row.window_start > 60_000) {
     deps.sql.run(`INSERT OR REPLACE INTO rate_limits (key, count, window_start) VALUES (?, 1, ?)`, key, now);
     return;
   }
-  if (row.count >= max) throw new ApiError(429, "rate_limited", "操作太频繁，请一分钟后再试。");
+  if (row.count >= max) throw rateLimited("操作太频繁，请稍后再试。", row.window_start + 60_000 - now);
   deps.sql.run(`UPDATE rate_limits SET count = count + 1 WHERE key = ?`, key);
 }
 
@@ -205,4 +219,5 @@ export function sweep(deps: Deps) {
   deps.sql.run(`DELETE FROM pairing_blocks WHERE until <= ?`, now);
   deps.sql.run(`DELETE FROM rate_limits WHERE window_start <= ?`, now - 60_000);
   deps.sql.run(`DELETE FROM idempotency WHERE created_at <= ?`, now - 7 * 24 * 60 * 60_000);
+  sweepGuard(deps);
 }

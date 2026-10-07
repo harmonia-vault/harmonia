@@ -24,9 +24,14 @@ import (
 
 type terminalPrompt struct{}
 
+func (terminalPrompt) AskCode(message string) (string, error) {
+	fmt.Fprintln(os.Stderr, message)
+	return prompt("邮件中的验证码：")
+}
+
 func (terminalPrompt) ShowPairing(qr, code string, expiresAt time.Time) {
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "请在手机 Harmonia App 中打开“设备 → 添加设备”，扫描下面的二维码：")
+	fmt.Fprintln(os.Stderr, "请在管理设备上打开 Harmonia，进入“设备 → 添加设备”，扫描下面的二维码：")
 	fmt.Fprintln(os.Stderr)
 	qrterminal.GenerateWithConfig(qr, qrterminal.Config{
 		Level: qrterminal.L, Writer: os.Stderr, HalfBlocks: true,
@@ -35,7 +40,7 @@ func (terminalPrompt) ShowPairing(qr, code string, expiresAt time.Time) {
 	})
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintf(os.Stderr, "无法扫码时，可以在管理设备上手动输入核对码：%s\n", code)
-	fmt.Fprintf(os.Stderr, "请确认手机上显示的设备名称与本机一致。配对请求 %s 前有效。\n", expiresAt.Format("15:04"))
+	fmt.Fprintf(os.Stderr, "请确认管理设备上显示的设备名称与本机一致。配对请求 %s 前有效。\n", expiresAt.Format("15:04"))
 }
 
 func (terminalPrompt) Waiting() {

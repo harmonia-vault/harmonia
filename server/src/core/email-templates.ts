@@ -1,6 +1,6 @@
 // 验证码邮件模板（沿用旧项目版式）。
 
-export type CodeEmailPurpose = "verification" | "password" | "reset";
+export type CodeEmailPurpose = "verification" | "login" | "password" | "reset";
 export interface Email { to: string; subject: string; text: string; html?: string }
 export interface CodeEmailInput { purpose: CodeEmailPurpose; email: string; code: string; minutes: number }
 
@@ -15,6 +15,13 @@ const copy = {
     lead: "感谢注册 Harmonia。请在 App 中输入以下验证码，完成邮箱验证。",
     preheader: "请在 App 中输入验证码，完成邮箱验证。",
     ignore: "如果您没有注册 Harmonia，请忽略此邮件。",
+    accent: "#1C1917", bar: "#FAFAF9", barMuted: "#D6D3D1", dash: "#D6D3D1",
+  },
+  login: {
+    subject: "Harmonia 登录验证码", title: "确认这次登录", label: "登录验证",
+    lead: "有人正在登录您的 Harmonia 账号，并且输入了正确的密码。如确认是您本人操作，请输入以下验证码完成登录。",
+    preheader: "请输入验证码完成登录。",
+    ignore: "如果这不是您本人的操作，说明您的密码可能已经泄露，请尽快在管理设备上修改密码。",
     accent: "#1C1917", bar: "#FAFAF9", barMuted: "#D6D3D1", dash: "#D6D3D1",
   },
   password: {

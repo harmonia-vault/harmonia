@@ -1,6 +1,7 @@
 // 邮箱目录：邮箱 → 账号 ID 映射与注册策略（运行在目录 Durable Object 内）。
 import { one, type Sql } from "./db";
-import { ApiError, conflict, newId } from "./util";
+import { networkId } from "./net";
+import { ApiError, conflict, newId, randomB64 } from "./util";
 
 export type Entry = { accountId: string; status: "pending" | "active" };
 
@@ -16,6 +17,7 @@ export class Directory {
     sql.run(`CREATE TABLE IF NOT EXISTS dir_meta (key TEXT PRIMARY KEY, value INTEGER NOT NULL)`);
     sql.run(`CREATE TABLE IF NOT EXISTS dir_reset (email TEXT PRIMARY KEY)`);
     sql.run(`CREATE TABLE IF NOT EXISTS dir_limits (key TEXT PRIMARY KEY, count INTEGER NOT NULL, window_start INTEGER NOT NULL)`);
+    sql.run(`CREATE TABLE IF NOT EXISTS dir_secret (id INTEGER PRIMARY KEY CHECK (id = 1), value TEXT NOT NULL)`);
   }
 
   firstCompleted(): boolean {
@@ -81,17 +83,29 @@ export class Directory {
     return this.sql.all(`SELECT 1 FROM dir_reset WHERE email = ?`, email).length > 0;
   }
 
-  /** 按 IP 的固定窗口限流；超出时返回 false。 */
-  allow(key: string, max: number): boolean {
+  /**
+   * 按网络的固定窗口限流（docs/protocol.md 3.8）。ip 为空时只按 bucket 计数（整个实例共用）。
+   * 只保存网络标识的 HMAC。允许时返回 0，否则返回到窗口结束还要等多少毫秒。
+   */
+  async limit(bucket: string, ip: string | null, max: number, windowMs: number): Promise<number> {
+    const key = ip === null ? bucket : `${bucket}:${await networkId(this.secret(), ip)}`;
     const now = this.now();
     const row = one<{ count: number; window_start: number }>(this.sql, `SELECT * FROM dir_limits WHERE key = ?`, key);
-    if (!row || now - row.window_start > 60_000) {
+    if (!row || now - row.window_start > windowMs) {
       this.sql.run(`INSERT OR REPLACE INTO dir_limits (key, count, window_start) VALUES (?, 1, ?)`, key, now);
-      this.sql.run(`DELETE FROM dir_limits WHERE window_start <= ?`, now - 60_000);
-      return true;
+      this.sql.run(`DELETE FROM dir_limits WHERE window_start <= ?`, now - 24 * 60 * 60_000);
+      return 0;
     }
-    if (row.count >= max) return false;
+    if (row.count >= max) return row.window_start + windowMs - now;
     this.sql.run(`UPDATE dir_limits SET count = count + 1 WHERE key = ?`, key);
-    return true;
+    return 0;
+  }
+
+  private secret(): string {
+    const row = one<{ value: string }>(this.sql, `SELECT value FROM dir_secret WHERE id = 1`);
+    if (row) return row.value;
+    const value = randomB64(32);
+    this.sql.run(`INSERT INTO dir_secret (id, value) VALUES (1, ?)`, value);
+    return value;
   }
 }

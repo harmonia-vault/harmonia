@@ -5,10 +5,16 @@ export class ApiError extends Error {
     readonly status: number,
     readonly code: string,
     message: string,
+    /** 附加在错误响应中的字段，例如 retryAfter（秒）或 flow。 */
+    readonly extra: Record<string, string | number> = {},
   ) {
     super(message);
   }
 }
+
+/** 被限流：retryAfter 为建议等待的秒数，同时写入 Retry-After 响应头。 */
+export const rateLimited = (message: string, retryAfterMs: number, code = "rate_limited") =>
+  new ApiError(429, code, message, { retryAfter: Math.max(1, Math.ceil(retryAfterMs / 1000)) });
 
 export const bad = (message: string) => new ApiError(400, "invalid_request", message);
 export const unauthorized = (message = "登录已失效，请重新登录。") => new ApiError(401, "unauthorized", message);

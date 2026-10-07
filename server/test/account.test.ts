@@ -12,9 +12,13 @@ describe("注册与登录", () => {
     expect(s.mails).toHaveLength(1);
     const early = await s.call("POST", "/api/v1/auth/login", { body });
     expect(early.json.error).toBe("email_unverified");
-    const wrong = await s.call("POST", "/api/v1/register/verify", { body: { email, code: "AAAAAAAA" } });
+    const wrong = await s.call("POST", "/api/v1/register/verify", { body: { email, flow: reg.flow, code: "AAAAAAAA" } });
     expect(wrong.status).toBe(400);
-    await s.ok("POST", "/api/v1/register/verify", { body: { email, code: s.lastCode("verification").toLowerCase() } });
+    const noFlow = await s.call("POST", "/api/v1/register/verify", { body: { email, code: s.lastCode("verification") } });
+    expect(noFlow.status).toBe(400);
+    await s.ok("POST", "/api/v1/register/verify", {
+      body: { email, flow: reg.flow, code: s.lastCode("verification").toLowerCase() },
+    });
     const login = await s.ok("POST", "/api/v1/auth/login", { body });
     expect(login.accountId).toBe(reg.accountId);
     const info = await s.ok("GET", "/api/v1/account", { token: login.token });
@@ -65,12 +69,13 @@ describe("注册与登录", () => {
   it("找回密码只改密码，旧密码失效", async () => {
     const s = new TestServer();
     const a = await TestAccount.create(s);
-    await s.ok("POST", "/api/v1/password-reset/request", { body: { email: a.email } });
-    const again = await s.call("POST", "/api/v1/password-reset/request", { body: { email: a.email } });
-    expect(again.status).toBe(429);
+    const ip = "203.0.113.5";
+    const { flow } = await s.ok("POST", "/api/v1/password-reset/request", { body: { email: a.email }, ip });
+    const again = await s.call("POST", "/api/v1/password-reset/request", { body: { email: a.email }, ip });
+    expect([again.status, again.json.retryAfter > 0]).toEqual([429, true]);
     const newKey = b64(rand(32));
     await s.ok("POST", "/api/v1/password-reset/complete", {
-      body: { email: a.email, code: s.lastCode("password"), kdfSalt: b64(rand(16)), authKey: newKey },
+      body: { email: a.email, flow, code: s.lastCode("password"), kdfSalt: b64(rand(16)), authKey: newKey },
     });
     expect((await s.call("POST", "/api/v1/auth/login", { body: { email: a.email, authKey: a.authKey } })).status).toBe(401);
     await s.ok("POST", "/api/v1/auth/login", { body: { email: a.email, authKey: newKey } });
@@ -82,8 +87,8 @@ describe("注册与登录", () => {
     const s = new TestServer();
     const a = await TestAccount.create(s);
     await a.createEnv(s, [a.phone.id]);
-    await s.ok("POST", "/api/v1/account-reset/request", { body: { email: a.email } });
-    await s.ok("POST", "/api/v1/account-reset/complete", { body: { email: a.email, code: s.lastCode("reset") } });
+    const { flow } = await s.ok("POST", "/api/v1/account-reset/request", { body: { email: a.email } });
+    await s.ok("POST", "/api/v1/account-reset/complete", { body: { email: a.email, flow, code: s.lastCode("reset") } });
     expect(s.pushes.some((p) => p.msg.type === "revoked")).toBe(true);
     expect((await s.call("GET", "/api/v1/sync?since=0", { token: a.phone.token })).status).toBe(401);
     expect((await s.call("POST", "/api/v1/auth/login", { body: { email: a.email, authKey: a.authKey } })).status).toBe(404);
@@ -94,11 +99,13 @@ describe("注册与登录", () => {
   it("验证码输错 5 次后失效", async () => {
     const s = new TestServer();
     const body = { email: "y@example.com", kdfSalt: b64(rand(16)), authKey: b64(rand(32)) };
-    await s.ok("POST", "/api/v1/register", { body });
+    const { flow } = await s.ok("POST", "/api/v1/register", { body });
     for (let i = 0; i < 5; i++) {
-      await s.call("POST", "/api/v1/register/verify", { body: { email: body.email, code: "BBBBBBBB" } });
+      await s.call("POST", "/api/v1/register/verify", { body: { email: body.email, flow, code: "BBBBBBBB" } });
     }
-    const r = await s.call("POST", "/api/v1/register/verify", { body: { email: body.email, code: s.lastCode("verification") } });
+    const r = await s.call("POST", "/api/v1/register/verify", {
+      body: { email: body.email, flow, code: s.lastCode("verification") },
+    });
     expect(r.json.message).toContain("失效");
   });
 });

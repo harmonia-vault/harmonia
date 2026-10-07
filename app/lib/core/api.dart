@@ -6,10 +6,13 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 
 class ApiException implements Exception {
-  ApiException(this.status, this.code, this.message);
+  ApiException(this.status, this.code, this.message, {this.flow});
   final int status;
   final String code;
   final String message;
+
+  /// 随 code_required 返回：带上它和邮件验证码再登录一次（协议 3.8）。
+  final String? flow;
 
   bool get isNetwork => code == 'network';
 
@@ -91,8 +94,8 @@ class ApiClient {
     if (res.statusCode != 200) {
       final code = json['error'] as String? ?? 'http';
       if (code == 'device_revoked') throw RevokedException();
-      throw ApiException(res.statusCode, code,
-          json['message'] as String? ?? '服务器返回错误（HTTP ${res.statusCode}）');
+      throw ApiException(res.statusCode, code, json['message'] as String? ?? '服务器返回错误（HTTP ${res.statusCode}）',
+          flow: json['flow'] as String?);
     }
     return json;
   }

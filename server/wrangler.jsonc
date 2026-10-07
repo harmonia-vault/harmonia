@@ -14,5 +14,8 @@
   // Worker 设置中填写，不写在这里：部署时保留控制台中的值，仓库本身不含任何个人配置。见 README。
   "keep_vars": true,
   "send_email": [{ "name": "EMAIL" }],
+  // 入口总量限制：每个网络每分钟最多 300 个请求（docs/protocol.md 3.8）。namespace_id 只需在
+  // 你的 Cloudflare 账号内唯一；与其他 Worker 撞号会共用计数，必要时改成别的整数。
+  "ratelimits": [{ "name": "LIMITER", "namespace_id": "190701", "simple": { "limit": 300, "period": 60 } }],
   "observability": { "enabled": false }
 }

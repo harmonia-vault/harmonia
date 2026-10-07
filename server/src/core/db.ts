@@ -134,6 +134,21 @@ const MIGRATIONS: string[][] = [
     `ALTER TABLE grants ADD COLUMN position INTEGER NOT NULL DEFAULT 0`,
     `UPDATE grants SET position = (SELECT COUNT(*) FROM grants g WHERE g.device_id = grants.device_id AND g.rowid < grants.rowid)`,
   ],
+  [
+    `CREATE TABLE kv (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
+    `DROP TABLE email_codes`,
+    `CREATE TABLE email_flows (
+      flow_hash TEXT PRIMARY KEY,
+      purpose TEXT NOT NULL,
+      net TEXT NOT NULL,
+      code_hash TEXT NOT NULL,
+      expires_at INTEGER NOT NULL,
+      attempts INTEGER NOT NULL
+    )`,
+    `CREATE TABLE mail_log (at INTEGER NOT NULL, net TEXT NOT NULL, kind TEXT NOT NULL)`,
+    `CREATE TABLE login_failures (net TEXT PRIMARY KEY, count INTEGER NOT NULL, window_start INTEGER NOT NULL, next_at INTEGER NOT NULL)`,
+    `CREATE TABLE login_events (at INTEGER NOT NULL)`,
+  ],
 ];
 
 export function migrate(sql: Sql): void {

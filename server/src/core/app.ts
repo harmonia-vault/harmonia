@@ -10,7 +10,8 @@ import { ApiError } from "./util";
 
 export function errorResponse(e: unknown): Response {
   if (e instanceof ApiError) {
-    return Response.json({ error: e.code, message: e.message }, { status: e.status });
+    const headers: Record<string, string> = e.extra.retryAfter ? { "retry-after": String(e.extra.retryAfter) } : {};
+    return Response.json({ error: e.code, message: e.message, ...e.extra }, { status: e.status, headers });
   }
   console.error(e);
   return Response.json({ error: "internal", message: "服务器内部错误，请稍后再试。" }, { status: 500 });

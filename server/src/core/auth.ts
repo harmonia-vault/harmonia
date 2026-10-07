@@ -7,6 +7,7 @@ import {
   deviceById,
   readJson,
   rateLimit,
+  requesterNet,
   requireAccount,
   requireDevice,
   session,
@@ -14,6 +15,7 @@ import {
   type Deps,
 } from "./context";
 import { checkCode, sendCode } from "./email";
+import { checkWait, clearFailures, recordFailure, resetGuard, underAttack } from "./guard";
 import { rejectPendingPairings } from "./pairing";
 import { verifyCert } from "./keys";
 import {
@@ -65,7 +67,11 @@ function updatePassword(deps: Deps, p: Awaited<ReturnType<typeof parsePassword>>
   deps.sql.run(`UPDATE account SET kdf_salt = ?, auth_salt = ?, auth_hash = ? WHERE id = 1`, p.kdfSalt, p.authSalt, p.authHash);
   deps.sql.run(`DELETE FROM sessions WHERE kind = 'password'`);
   rejectPendingPairings(deps);
+  resetGuard(deps);
 }
+
+/** 邮件中显示的邮箱：只保留首字母和域名。 */
+const maskEmail = (email: string) => email.replace(/^(.)[^@]*@/, "$1***@");
 
 function activeAccount(deps: Deps) {
   const a = requireAccount(deps.sql);
@@ -91,7 +97,7 @@ export function authRoutes(app: Hono, deps: Deps) {
     if (existing?.status === "active") throw conflict("这个邮箱已经注册，请直接登录。");
     sql.transaction(() => {
       sql.run(`DELETE FROM account`);
-      sql.run(`DELETE FROM email_codes`);
+      sql.run(`DELETE FROM email_flows`);
       sql.run(
         `INSERT INTO account (id, account_id, email, status, kdf_salt, auth_salt, auth_hash, created_at)
          VALUES (1, ?, ?, ?, ?, ?, ?, ?)`,
@@ -104,15 +110,15 @@ export function authRoutes(app: Hono, deps: Deps) {
         deps.now(),
       );
     });
-    if (verify) await sendCode(deps, email, "verification");
-    return c.json({ accountId, verificationRequired: verify });
+    const flow = verify ? await sendCode(deps, email, "verification", await requesterNet(c, deps)) : undefined;
+    return c.json({ accountId, verificationRequired: verify, ...(flow ? { flow } : {}) });
   });
 
   app.post("/api/v1/register/verify", async (c) => {
     const body = await readJson(c);
     const a = requireAccount(sql);
     if (a.status === "active") return c.json({ ok: true });
-    await checkCode(deps, "verification", body.code);
+    await checkCode(deps, "verification", body.flow, body.code);
     sql.run(`UPDATE account SET status = 'active' WHERE id = 1`);
     return c.json({ ok: true });
   });
@@ -120,8 +126,7 @@ export function authRoutes(app: Hono, deps: Deps) {
   app.post("/api/v1/register/resend", async (c) => {
     const a = requireAccount(sql);
     if (a.status === "active") throw conflict("邮箱已经验证，请直接登录。");
-    await sendCode(deps, a.email, "verification");
-    return c.json({ ok: true });
+    return c.json({ flow: await sendCode(deps, a.email, "verification", await requesterNet(c, deps)) });
   });
 
   // ---- 登录 ----
@@ -131,15 +136,28 @@ export function authRoutes(app: Hono, deps: Deps) {
     return c.json({ kdfSalt: a.kdf_salt, opsLimit: 3, memLimit: 64 * 1024 * 1024 });
   });
 
+  // 风控见 guard.ts：等待期内不校验密码；受攻击且配置了发信时，密码正确后还要邮件验证码。
   app.post("/api/v1/auth/login", async (c) => {
     const body = await readJson(c);
     const authKey = bin(body.authKey, "登录密钥", 32);
     const a = requireAccount(sql);
+    sweep(deps);
+    const attack = underAttack(deps);
+    const net = await requesterNet(c, deps, attack);
+    checkWait(deps, net);
     if (!constantTimeEqual(await authHash(a.auth_salt, authKey), a.auth_hash)) {
+      recordFailure(deps, net, attack);
       throw unauthorized("邮箱或密码不对。");
     }
     activeAccount(deps);
-    sweep(deps);
+    if (attack && deps.mailer.available) {
+      if (body.flow === undefined) {
+        const flow = await sendCode(deps, a.email, "login", net);
+        throw new ApiError(401, "code_required", `这次登录需要邮箱验证码，已发送到 ${maskEmail(a.email)}。`, { flow });
+      }
+      await checkCode(deps, "login", body.flow, body.code);
+    }
+    clearFailures(deps, net);
     return c.json({ ...(await createSession(deps, "password", null)), accountId: a.account_id });
   });
 
@@ -147,15 +165,14 @@ export function authRoutes(app: Hono, deps: Deps) {
 
   app.post("/api/v1/password-reset/request", async (c) => {
     const a = activeAccount(deps);
-    await sendCode(deps, a.email, "password");
-    return c.json({ ok: true });
+    return c.json({ flow: await sendCode(deps, a.email, "password", await requesterNet(c, deps)) });
   });
 
   app.post("/api/v1/password-reset/complete", async (c) => {
     const body = await readJson(c);
     activeAccount(deps);
     const p = await parsePassword(body);
-    await checkCode(deps, "password", body.code);
+    await checkCode(deps, "password", body.flow, body.code);
     updatePassword(deps, p);
     return c.json({ ok: true });
   });
@@ -164,14 +181,13 @@ export function authRoutes(app: Hono, deps: Deps) {
 
   app.post("/api/v1/account-reset/request", async (c) => {
     const a = requireAccount(sql);
-    await sendCode(deps, a.email, "reset");
-    return c.json({ ok: true });
+    return c.json({ flow: await sendCode(deps, a.email, "reset", await requesterNet(c, deps)) });
   });
 
   app.post("/api/v1/account-reset/complete", async (c) => {
     const body = await readJson(c);
     requireAccount(sql);
-    await checkCode(deps, "reset", body.code);
+    await checkCode(deps, "reset", body.flow, body.code);
     for (const d of sql.all<{ id: string }>(`SELECT id FROM devices`)) {
       deps.notifier.send({ device: d.id }, { type: "revoked" });
       deps.notifier.disconnect(d.id);
@@ -257,7 +273,7 @@ export function authRoutes(app: Hono, deps: Deps) {
   // ---- 设备会话 ----
 
   app.post("/api/v1/auth/challenge", async (c) => {
-    rateLimit(c, deps, "challenge", 30);
+    await rateLimit(c, deps, "challenge", 30);
     const deviceId = id((await readJson(c)).deviceId, "设备 ID");
     requireAccount(sql);
     const d = deviceById(sql, deviceId);

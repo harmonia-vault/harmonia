@@ -40,7 +40,7 @@ export function recoveryRoutes(app: Hono, deps: Deps) {
   };
 
   app.post("/api/v1/recovery/challenge", async (c) => {
-    rateLimit(c, deps, "recovery", 10);
+    await rateLimit(c, deps, "recovery", 10);
     const a = requireInitialized(sql);
     const nonce = randomB64(32);
     const expiresAt = deps.now() + 2 * 60_000;
@@ -49,7 +49,7 @@ export function recoveryRoutes(app: Hono, deps: Deps) {
   });
 
   app.post("/api/v1/recovery/session", async (c) => {
-    rateLimit(c, deps, "recovery", 10);
+    await rateLimit(c, deps, "recovery", 10);
     const a = requireInitialized(sql);
     const body = await readJson(c);
     const nonce = str(body.nonce, "挑战", 64);

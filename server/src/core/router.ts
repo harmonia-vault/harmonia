@@ -2,8 +2,9 @@
 import { errorResponse } from "./app";
 import { ACCOUNT_HEADER, normalizeEmail, VERIFY_HEADER } from "./auth";
 import type { Entry } from "./directory";
+import { network } from "./net";
 import { PROTOCOL } from "./protocol";
-import { ApiError, bad, notFound, obj } from "./util";
+import { ApiError, bad, notFound, obj, rateLimited } from "./util";
 
 export interface DirectoryApi {
   firstCompleted(): Promise<boolean>;
@@ -11,7 +12,8 @@ export interface DirectoryApi {
   activate(email: string, accountId: string, allowRegistration: boolean): Promise<void>;
   lookup(email: string): Promise<Entry | null>;
   remove(email: string, accountId: string, reset?: boolean): Promise<void>;
-  allow(key: string, max: number): Promise<boolean>;
+  /** 按网络的限流；ip 为 null 时整个实例共用一个计数。允许时返回 0，否则返回还要等的毫秒数。 */
+  limit(bucket: string, ip: string | null, max: number, windowMs: number): Promise<number>;
 }
 
 export interface Backend {
@@ -19,6 +21,8 @@ export interface Backend {
   /** 把请求转交给账号；wipe=true 时清空该账号（注册竞争失败时使用）。 */
   account(accountId: string): { fetch(req: Request): Promise<Response>; wipe(): Promise<void> };
   config: { allowRegistration: boolean; requireVerification: boolean; version: string };
+  /** 入口总量限制（每个网络每分钟 300 次），在进入 Durable Object 之前执行；没有配置时跳过。 */
+  entryLimit?(key: string): Promise<boolean>;
 }
 
 const EMAIL_ROUTES = new Set([
@@ -39,6 +43,15 @@ const LIMITS: Record<string, number> = {
   "/api/v1/auth/login": 10,
   "/api/v1/recovery/challenge": 10,
 };
+
+const HOUR = 60 * 60_000;
+
+/** 注册验证邮件发往尚未注册的邮箱，由目录统一限制：每个网络每小时 3 封，整个实例每天 100 封。 */
+async function signupMailLimit(directory: DirectoryApi, clientIp: string) {
+  const wait =
+    (await directory.limit("signup-mail", clientIp, 3, HOUR)) || (await directory.limit("signup-mail", null, 100, 24 * HOUR));
+  if (wait) throw rateLimited("验证码发送次数过多，请稍后再试；已经收到的验证码 15 分钟内仍然有效。", wait);
+}
 
 function forward(req: Request, body: string | null, headers: Record<string, string>): Request {
   const h = new Headers(req.headers);
@@ -62,6 +75,9 @@ export async function route(req: Request, backend: Backend, clientIp: string): P
     if (url.protocol !== "https:" && !local) throw bad("只允许通过 HTTPS 访问。");
     const path = url.pathname;
     const { directory, config } = backend;
+    if (backend.entryLimit && !(await backend.entryLimit(network(clientIp)))) {
+      throw rateLimited("请求太频繁，请稍后再试。", 60_000);
+    }
 
     if (path === "/api/v1/instance") {
       const firstCompleted = await directory.firstCompleted();
@@ -74,10 +90,8 @@ export async function route(req: Request, backend: Backend, clientIp: string): P
     }
 
     if (EMAIL_ROUTES.has(path)) {
-      const limit = LIMITS[path] ?? 20;
-      if (!(await directory.allow(`${path}:${clientIp}`, limit))) {
-        throw new ApiError(429, "rate_limited", "操作太频繁，请一分钟后再试。");
-      }
+      const wait = await directory.limit(path, clientIp, LIMITS[path] ?? 20, 60_000);
+      if (wait) throw rateLimited("操作太频繁，请稍后再试。", wait);
       const body = req.method === "GET" ? null : await req.text();
       let parsed: Record<string, unknown> = {};
       if (body !== null) {
@@ -88,6 +102,10 @@ export async function route(req: Request, backend: Backend, clientIp: string): P
         }
       }
       const email = normalizeEmail(req.method === "GET" ? url.searchParams.get("email") : parsed.email);
+
+      if ((path === "/api/v1/register" && config.requireVerification) || path === "/api/v1/register/resend") {
+        await signupMailLimit(directory, clientIp);
+      }
 
       if (path === "/api/v1/register") {
         const accountId = await directory.reserve(email, config.allowRegistration);

@@ -81,7 +81,7 @@ class _SignInPageState extends State<SignInPage> {
         if (_register) {
           await c.register(email, password);
         } else {
-          await c.login(email, password);
+          await c.login(email, password, askCode: _askCode);
         }
       } on ApiException catch (e) {
         if (e.code == 'email_unverified') {
@@ -91,6 +91,33 @@ class _SignInPageState extends State<SignInPage> {
         rethrow;
       }
     });
+  }
+
+  /// 账号正受到异常登录尝试时，服务端在密码正确后要求邮件验证码。返回 null 表示取消。
+  Future<String?> _askCode(String message) {
+    final ctl = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('输入邮箱验证码'),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(message),
+          const SizedBox(height: Space.md),
+          TextField(
+            controller: ctl,
+            autofocus: true,
+            autofillHints: const [AutofillHints.oneTimeCode],
+            textCapitalization: TextCapitalization.characters,
+            decoration: const InputDecoration(labelText: '邮件中的 8 位验证码'),
+          ),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, ctl.text.trim()), child: const Text('登录')),
+        ],
+      ),
+    );
   }
 
   @override
@@ -240,6 +267,9 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   final _password = TextEditingController();
   bool _sent = false;
 
+  /// 验证码绑定的流程凭证，发送验证码时由服务端返回。
+  String? _flow;
+
   @override
   Widget build(BuildContext context) {
     final c = widget.c;
@@ -286,7 +316,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
           FilledButton(
             onPressed: () async {
               if (!_form.currentState!.validate()) return;
-              final ok = await runBusy(context, () => c.account.requestPasswordReset(c.server, _email.text),
+              final ok = await runBusy(context, () async => _flow = await c.account.requestPasswordReset(c.server, _email.text),
                   done: '验证码已发送');
               if (ok) setState(() => _sent = true);
             },
@@ -297,7 +327,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
             onPressed: () async {
               if (!_form.currentState!.validate()) return;
               final ok = await runBusy(context,
-                  () => c.account.completePasswordReset(c.server, _email.text, _code.text, _password.text),
+                  () => c.account.completePasswordReset(c.server, _email.text, _flow!, _code.text, _password.text),
                   done: '密码已更新，请用新密码登录');
               if (ok && context.mounted) Navigator.pop(context);
             },
@@ -322,12 +352,15 @@ class _AccountResetPageState extends State<AccountResetPage> {
   final _confirm = TextEditingController();
   bool _sent = false;
 
+  /// 验证码绑定的流程凭证，发送验证码时由服务端返回。
+  String? _flow;
+
   @override
   Widget build(BuildContext context) {
     final c = widget.c;
     return AuthScaffold(
       title: '重置账号',
-      subtitle: '只有在密码、恢复码和所有手机都丢失时才需要重置。',
+      subtitle: '只有在密码、恢复码和所有管理设备都丢失时才需要重置。',
       onBack: () => Navigator.pop(context),
       children: [
         const Banner2('重置会永久删除这个账号的全部环境、变量和已授权设备，无法撤销，也无法找回数据。之后可以用同一个邮箱重新注册。',
@@ -360,7 +393,7 @@ class _AccountResetPageState extends State<AccountResetPage> {
         if (!_sent)
           FilledButton(
             onPressed: () async {
-              final ok = await runBusy(context, () => c.account.requestAccountReset(c.server, _email.text),
+              final ok = await runBusy(context, () async => _flow = await c.account.requestAccountReset(c.server, _email.text),
                   done: '验证码已发送');
               if (ok) setState(() => _sent = true);
             },
@@ -373,7 +406,7 @@ class _AccountResetPageState extends State<AccountResetPage> {
                 ? null
                 : () async {
                     final ok = await runBusy(
-                        context, () => c.account.completeAccountReset(c.server, _email.text, _code.text),
+                        context, () => c.account.completeAccountReset(c.server, _email.text, _flow!, _code.text),
                         done: '账号已重置，可以重新注册');
                     if (ok && context.mounted) Navigator.pop(context);
                   },

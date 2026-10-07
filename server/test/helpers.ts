@@ -62,6 +62,8 @@ export class TestServer {
   mails: { to: string; purpose: string; code: string }[] = [];
   pushes: Sent[] = [];
   config = { allowRegistration: false, requireVerification: true, version: "0.1.0" };
+  /** 模拟入口总量限制；返回 false 表示超限。 */
+  entryLimit?: (key: string) => Promise<boolean>;
   mailAvailable = true;
   private dir = new Directory(nodeSql(), () => this.clock);
   private accounts = new Map<string, { deps: Deps; app: ReturnType<typeof createAccountApp> }>();
@@ -111,13 +113,14 @@ export class TestServer {
         activate: async (e, i, a) => d.activate(e, i, a),
         lookup: async (e) => d.lookup(e),
         remove: async (e, i, r) => d.remove(e, i, r),
-        allow: async (k, m) => d.allow(k, m),
+        limit: (b, ip, m, w) => d.limit(b, ip, m, w),
       },
       account: (id) => ({
         fetch: async (req) => this.account(id).app.fetch(req),
         wipe: async () => wipe(this.account(id).deps.sql),
       }),
       config: this.config,
+      entryLimit: this.entryLimit,
     };
   }
 
@@ -127,15 +130,21 @@ export class TestServer {
     return m.code;
   }
 
-  async call(method: string, path: string, opts: { body?: unknown; token?: string; headers?: Record<string, string> } = {}) {
-    const headers: Record<string, string> = { "content-type": "application/json", ...opts.headers };
+  /** ip 用来模拟请求来自哪个网络；不给时每次请求随机一个，避免入口限流互相影响。 */
+  async call(
+    method: string,
+    path: string,
+    opts: { body?: unknown; token?: string; headers?: Record<string, string>; ip?: string } = {},
+  ) {
+    const ip = opts.ip ?? `198.18.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}`;
+    const headers: Record<string, string> = { "content-type": "application/json", "cf-connecting-ip": ip, ...opts.headers };
     if (opts.token) headers.authorization = `Bearer ${opts.token}`;
     const req = new Request(`http://localhost${path}`, {
       method,
       headers,
       body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
     });
-    const res = await route(req, this.backend(), `ip-${Math.random()}`);
+    const res = await route(req, this.backend(), headers["cf-connecting-ip"]!);
     const json = (await res.json()) as Record<string, any>;
     return { status: res.status, json };
   }
@@ -205,7 +214,7 @@ export class TestAccount {
     const reg = await s.ok("POST", "/api/v1/register", { body: { email, kdfSalt: a.kdfSalt, authKey: a.authKey } });
     a.accountId = reg.accountId;
     if (reg.verificationRequired) {
-      await s.ok("POST", "/api/v1/register/verify", { body: { email, code: s.lastCode("verification") } });
+      await s.ok("POST", "/api/v1/register/verify", { body: { email, flow: reg.flow, code: s.lastCode("verification") } });
     }
     const login = await a.passwordLogin(s);
     a.root = await Ed.create();
