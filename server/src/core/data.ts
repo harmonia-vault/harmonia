@@ -195,7 +195,7 @@ export function dataRoutes(app: Hono, deps: Deps) {
       const want = new Set([...managers.map((m) => m.id), "recovery"]);
       const got = new Set(envelopes.map((e) => e.recipient));
       if (got.size !== envelopes.length || got.size !== want.size || [...want].some((r) => !got.has(r))) {
-        throw bad("需要为全部管理手机和恢复码提供封装，请同步后重试。");
+        throw bad("需要为全部管理设备和恢复码提供封装，请同步后重试。");
       }
       sql.run(`INSERT INTO environments (id, name, key_version, created_at) VALUES (?, ?, 1, ?)`, envId, name, deps.now());
       for (const e of envelopes) {

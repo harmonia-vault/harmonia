@@ -250,7 +250,7 @@ export class TestAccount {
     return this.root.sign(deviceCertMsg(d.id, kind, d.sign.pub, d.boxPub));
   }
 
-  /** 由管理手机创建环境，封装给全部管理设备和恢复钥。 */
+  /** 由管理设备创建环境，封装给全部管理设备和恢复钥。 */
   async createEnv(s: TestServer, managers: string[], name = "OpenAI") {
     const id = newId();
     const envelopes = [];

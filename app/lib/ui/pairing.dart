@@ -116,7 +116,7 @@ class ReviewPairingPage extends StatefulWidget {
 }
 
 class _ReviewPairingPageState extends State<ReviewPairingPage> {
-  late bool _manager = widget.request.platform == 'android';
+  late bool _manager = widget.request.canManage;
   late bool _matched = widget.scanned;
   final _roles = <String, String?>{};
   final _expiry = <String, String>{};
@@ -222,7 +222,7 @@ class _ReviewPairingPageState extends State<ReviewPairingPage> {
           ),
           if (_gone) ...[
             const SizedBox(height: Space.lg),
-            const Banner2('这次请求已失效：对方已取消或离开了等待页面，也可能已在另一台手机上处理。需要接入时，请在那台设备上重新发起。', warn: true),
+            const Banner2('这次请求已失效：对方已取消或离开了等待页面，也可能已在另一台管理设备上处理。需要接入时，请在那台设备上重新发起。', warn: true),
             const SizedBox(height: Space.xl),
             FilledButton(onPressed: () => Navigator.pop(context), child: const Text('关闭')),
           ] else
@@ -253,15 +253,18 @@ class _ReviewPairingPageState extends State<ReviewPairingPage> {
         const SizedBox(height: Space.sm),
         const Banner2('如果你此刻没有在电脑或其他手机上登录 Harmonia，请点“拒绝”，并尽快修改账号密码。', warn: true),
       ],
-      const SizedBox(height: Space.md),
-      Card(
-        child: SwitchListTile(
-          value: _manager,
-          onChanged: (v) => setState(() => _manager = v),
-          title: const Text('作为管理手机'),
-          subtitle: const Text('管理手机可以访问全部环境，并能批准其他设备。只给你自己的手机开启。'),
+      // 只有具备管理功能的客户端（目前只有 App）才能作为管理设备。
+      if (p.canManage) ...[
+        const SizedBox(height: Space.md),
+        Card(
+          child: SwitchListTile(
+            value: _manager,
+            onChanged: (v) => setState(() => _manager = v),
+            title: const Text('作为管理设备'),
+            subtitle: const Text('管理设备可以访问全部环境，并能批准其他设备。只给你自己的设备开启。'),
+          ),
         ),
-      ),
+      ],
       if (!_manager) ...[
         const SectionTitle('允许访问的环境'),
         if (envs.isEmpty)

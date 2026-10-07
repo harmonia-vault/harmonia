@@ -16,7 +16,7 @@ async function pairClient(s: TestServer, a: TestAccount, grants: { envId: string
   const pw = await a.passwordLogin(s);
   const req = await s.ok("POST", "/api/v1/pairings", {
     token: pw.token,
-    body: { name: "笔记本", platform: "darwin", signPub: cli.sign.pub, boxPub: cli.boxPub, rootPub: a.root.pub },
+    body: { name: "笔记本", platform: "darwin", signPub: cli.sign.pub, boxPub: cli.boxPub, rootPub: a.root.pub, canManage: false },
   });
   cli.id = req.id;
   await waitApproval(s, a, req);
@@ -165,7 +165,7 @@ describe("配对与权限", () => {
     const fake = await Ed.create();
     const r = await s.call("POST", "/api/v1/pairings", {
       token: pw.token,
-      body: { name: "x", platform: "linux", signPub: fake.pub, boxPub: b64(rand(32)), rootPub: fake.pub },
+      body: { name: "x", platform: "linux", signPub: fake.pub, boxPub: b64(rand(32)), rootPub: fake.pub, canManage: false },
     });
     expect(r.status).toBe(409);
     const cli = await pairClient(s, a, []);
@@ -173,7 +173,7 @@ describe("配对与权限", () => {
     expect(again.status).toBe(409);
   });
 
-  it("第二台管理手机需要全部环境的封装；不能撤销最后一台管理手机", async () => {
+  it("第二台管理设备需要全部环境的封装；不能撤销最后一台管理设备", async () => {
     const s = new TestServer();
     const a = await TestAccount.create(s);
     const env = await a.createEnv(s, [a.phone.id]);
@@ -184,7 +184,7 @@ describe("配对与权限", () => {
     const pw = await a.passwordLogin(s);
     const req = await s.ok("POST", "/api/v1/pairings", {
       token: pw.token,
-      body: { name: "新手机", platform: "android", signPub: phone2.sign.pub, boxPub: phone2.boxPub, rootPub: a.root.pub },
+      body: { name: "新手机", platform: "android", signPub: phone2.sign.pub, boxPub: phone2.boxPub, rootPub: a.root.pub, canManage: true },
     });
     phone2.id = req.id;
     await waitApproval(s, a, req);
@@ -205,7 +205,7 @@ describe("配对与权限", () => {
     await phone2.login(s, a.accountId);
     const sync = await s.ok("GET", "/api/v1/sync?since=0", { token: phone2.token });
     expect(sync.manager.devices).toHaveLength(2);
-    // 现在有两台管理手机，新环境必须同时封装给两台。
+    // 现在有两台管理设备，新环境必须同时封装给两台。
     expect(
       (
         await s.call("POST", "/api/v1/environments", {

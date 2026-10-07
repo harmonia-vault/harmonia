@@ -20,8 +20,8 @@ enum Stage {
   verifyEmail, // 注册后验证邮箱
   setPin, // 登录后设置 App PIN（可选开启指纹）
   setup, // 首次初始化：保存恢复码
-  unpaired, // 已登录，本机还不是管理手机
-  pairing, // 等待另一台手机批准
+  unpaired, // 已登录，本机还不是管理设备
+  pairing, // 等待管理设备批准
   locked, // App 锁
   rotation, // 恢复后必须更换恢复码
   home,
@@ -77,7 +77,7 @@ class AppController extends ChangeNotifier {
 
   /// 推送连接状态：false 时界面显示“离线”。
   bool online = false;
-  /// 待批准的配对请求（只有管理手机会有）。
+  /// 待批准的配对请求（只有管理设备会有）。
   List<PairingRequest> pairings = [];
   int get pendingPairingCount => pairings.length;
   DateTime? _backgroundAt;
@@ -357,7 +357,7 @@ class AppController extends ChangeNotifier {
     _stopPush();
     await identity.keyring.wipe();
     await vault.wipe();
-    notice = '已清除本机数据，请重新登录。这台手机原来的设备记录，请在其他手机上移除。';
+    notice = '已清除本机数据，请重新登录。这台手机原来的设备记录，请在管理设备上移除。';
     cancelToSignIn();
   }
 
@@ -493,7 +493,7 @@ class AppController extends ChangeNotifier {
     _stopPush();
     final online = await vault.logout(confirmLast: confirmLast);
     await identity.keyring.wipe();
-    notice = online ? null : '暂时无法连接服务器，本机数据已清除。请在其他手机上移除这台设备。';
+    notice = online ? null : '暂时无法连接服务器，本机数据已清除。请在管理设备上移除这台手机。';
     _go(Stage.signedOut);
     return online;
   }

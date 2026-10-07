@@ -34,11 +34,11 @@ func (terminalPrompt) ShowPairing(qr, code string, expiresAt time.Time) {
 		BlackWhiteChar: qrterminal.BLACK_WHITE, WhiteBlackChar: qrterminal.WHITE_BLACK, QuietZone: 2,
 	})
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintf(os.Stderr, "无法扫码时，可以在手机上手动输入核对码：%s\n", code)
+	fmt.Fprintf(os.Stderr, "无法扫码时，可以在管理设备上手动输入核对码：%s\n", code)
 	fmt.Fprintf(os.Stderr, "请确认手机上显示的设备名称与本机一致。配对请求 %s 前有效。\n", expiresAt.Format("15:04"))
 }
 
-func (terminalPrompt) Waiting() { fmt.Fprintln(os.Stderr, "\n正在等待手机批准……（按 Ctrl+C 取消）") }
+func (terminalPrompt) Waiting() { fmt.Fprintln(os.Stderr, "\n正在等待管理设备批准……（按 Ctrl+C 取消）") }
 
 func cmdLogin(ctx context.Context, args []string) error {
 	f, err := parseFlags(args, "email", "name")
@@ -149,7 +149,7 @@ func printEnvs(a *app.App) error {
 		return err
 	}
 	if len(cache.Environments) == 0 {
-		fmt.Println("这台设备还没有任何环境的访问权限。可以在手机上为它授权。")
+		fmt.Println("这台设备还没有任何环境的访问权限。可以在管理设备上为它授权。")
 		return nil
 	}
 	active := map[string]int{}

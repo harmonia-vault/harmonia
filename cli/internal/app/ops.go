@@ -43,10 +43,10 @@ func (a *App) writableEnv(nameOrID string) (*api.Environment, error) {
 		return nil, err
 	}
 	if vault.Expired(*env, nowMs()) {
-		return nil, fmt.Errorf("这台设备对环境“%s”的授权已到期，请在手机上重新授权", env.Name)
+		return nil, fmt.Errorf("这台设备对环境“%s”的授权已到期，请在管理设备上重新授权", env.Name)
 	}
 	if env.Role == "ro" {
-		return nil, fmt.Errorf("这台设备对环境“%s”只有只读权限，不能修改。可以在手机上调整权限", env.Name)
+		return nil, fmt.Errorf("这台设备对环境“%s”只有只读权限，不能修改。可以在管理设备上调整权限", env.Name)
 	}
 	return env, nil
 }

@@ -122,7 +122,7 @@ class _SettingsTabState extends State<SettingsTab> {
     final ok = await confirmDialog(context,
         title: '退出登录？',
         body: last
-            ? '这是账号里唯一的管理手机。退出后，只能用恢复码在新手机上找回账号。请确认恢复码还在。'
+            ? '这是账号里唯一的管理设备。退出后，只能用恢复码在新手机上找回账号。请确认恢复码还在。'
             : '这台手机将从账号中移除，并清除本机保存的数据。',
         ok: '退出',
         danger: true);

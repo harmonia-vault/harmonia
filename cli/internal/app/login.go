@@ -25,7 +25,7 @@ type LoginInput struct {
 	DeviceName string
 }
 
-// Login 用邮箱和密码登录，然后发起配对并等待手机批准。
+// Login 用邮箱和密码登录，然后发起配对并等待管理设备批准。
 func Login(ctx context.Context, in LoginInput, prompt PairingPrompt) (*App, int, error) {
 	server, err := api.NormalizeServer(in.Server)
 	if err != nil {
@@ -76,8 +76,9 @@ func Login(ctx context.Context, in LoginInput, prompt PairingPrompt) (*App, int,
 	if name == "" {
 		name = defaultDeviceName()
 	}
-	req, err := c.CreatePairing(ctx, sess.Token, map[string]string{
+	req, err := c.CreatePairing(ctx, sess.Token, map[string]any{
 		"name": name, "platform": runtime.GOOS, "signPub": signPub, "boxPub": boxPub, "rootPub": acct.RootPub,
+		"canManage": false, // CLI 还不具备管理功能，不能被批准为管理设备
 	})
 	if err != nil {
 		return nil, 0, err

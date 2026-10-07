@@ -105,7 +105,7 @@ func (c *Client) Account(ctx context.Context, token string) (*Account, error) {
 	return &out, c.WithToken(ctx, token, "GET", "/api/v1/account", nil, &out)
 }
 
-func (c *Client) CreatePairing(ctx context.Context, token string, body map[string]string) (*PairingRequest, error) {
+func (c *Client) CreatePairing(ctx context.Context, token string, body map[string]any) (*PairingRequest, error) {
 	var out PairingRequest
 	return &out, c.WithToken(ctx, token, "POST", "/api/v1/pairings", body, &out)
 }

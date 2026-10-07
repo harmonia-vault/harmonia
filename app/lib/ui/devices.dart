@@ -105,7 +105,7 @@ class _DevicesTabState extends State<DevicesTab> {
                     leading: Icon(platformIcon(d.platform)),
                     title: Text(d.id == me ? '${d.name}（本机）' : d.name),
                     subtitle: Text(d.isManager
-                        ? '管理手机 · ${formatTime(d.lastSeenAt)}活动'
+                        ? '管理设备 · ${formatTime(d.lastSeenAt)}活动'
                         : '${d.grants.length} 个环境 · ${formatTime(d.lastSeenAt)}活动'),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => Navigator.push(
@@ -275,7 +275,7 @@ class _DevicePageState extends State<DevicePage> {
         Card(
           child: Column(children: [
             ListTile(leading: Icon(platformIcon(d.platform)), title: Text(platformName(d.platform)),
-                subtitle: Text(d.isManager ? '管理手机' : '电脑')),
+                subtitle: Text(d.isManager ? '管理设备' : '电脑')),
             const Divider(),
             ListTile(title: const Text('接入时间'), trailing: Text(formatTime(d.createdAt))),
             const Divider(),
@@ -298,7 +298,7 @@ class _DevicePageState extends State<DevicePage> {
         ] else
           const Padding(
             padding: EdgeInsets.only(top: Space.lg),
-            child: Banner2('管理手机可以访问全部环境，并能批准和移除其他设备。'),
+            child: Banner2('管理设备可以访问全部环境，并能批准和移除其他设备。'),
           ),
         if (!me) ...[
           const SizedBox(height: Space.xl),

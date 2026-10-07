@@ -30,7 +30,7 @@ class SetupDraft {
   String get formattedCode => formatRecoveryCode(code);
 }
 
-/// 作为新的管理手机发起的配对请求。
+/// 作为新的管理设备发起的配对请求。
 class PendingPairing {
   PendingPairing(this.session, this.id, this.secret, this.signSeed, this.boxSeed, this.qr,
       this.code, this.expiresAt, this.deviceName);
@@ -164,6 +164,7 @@ class AccountService {
       'signPub': signPub,
       'boxPub': boxPub,
       'rootPub': s.rootPub,
+      'canManage': true,
     });
     final id = res['id'] as String;
     final fp = pairingFingerprint(id, signPub, boxPub, s.rootPub!);
@@ -210,7 +211,7 @@ class AccountService {
 
   // ---- 恢复 ----
 
-  /// 用恢复码把本机登记为管理手机。之后必须立即轮换恢复码。
+  /// 用恢复码把本机登记为管理设备。之后必须立即轮换恢复码。
   Future<LocalConfig> recover(String server, String email, String codeInput, String deviceName) async {
     final code = parseRecoveryCode(codeInput);
     if (code == null) throw VaultException('恢复码格式不对，请检查是否完整输入了 26 个字符。');

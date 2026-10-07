@@ -121,14 +121,14 @@ class UnpairedPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AuthScaffold(
         title: '这台手机还没有授权',
-        subtitle: '账号 ${c.session?.email ?? ''} 已在其他手机上使用。请选择一种方式让这台手机获得访问权限。',
+        subtitle: '账号 ${c.session?.email ?? ''} 已在其他设备上使用。请选择一种方式让这台手机获得访问权限。',
         onBack: c.cancelToSignIn,
         children: [
           if (c.notice != null) ...[Banner2(c.notice!, warn: true), const SizedBox(height: Space.lg)],
           _Choice(
             icon: Icons.phonelink_lock_outlined,
-            title: '让另一台手机批准',
-            body: '在已授权的手机上扫描这台手机显示的二维码。',
+            title: '让管理设备批准',
+            body: '在管理设备上扫描这台手机显示的二维码。',
             onTap: () => runBusy(context, c.startPairing),
           ),
           const SizedBox(height: Space.md),
@@ -181,7 +181,7 @@ class PairingWaitPage extends StatelessWidget {
     final palette = context.palette;
     return AuthScaffold(
       title: '等待批准',
-      subtitle: '在已授权的手机上打开 Harmonia，进入“设备 → 添加设备”，扫描下面的二维码。',
+      subtitle: '在管理设备上打开 Harmonia，进入“设备 → 添加设备”，扫描下面的二维码。',
       onBack: c.cancelPairing,
       children: [
         Center(
@@ -196,7 +196,7 @@ class PairingWaitPage extends StatelessWidget {
           ),
         ),
         const SizedBox(height: Space.xl),
-        const Text('无法扫码时，在另一台手机上手动输入核对码：'),
+        const Text('无法扫码时，在管理设备上手动输入核对码：'),
         const SizedBox(height: Space.sm),
         CodeBox(p.code, copyable: false),
         const SizedBox(height: Space.lg),
@@ -230,7 +230,7 @@ class _RecoverPageState extends State<RecoverPage> {
   @override
   Widget build(BuildContext context) => AuthScaffold(
         title: '用恢复码恢复',
-        subtitle: '输入注册邮箱和恢复码。恢复后这台手机会成为管理手机，并需要立即更换新的恢复码。',
+        subtitle: '输入注册邮箱和恢复码。恢复后这台手机会成为管理设备，并需要立即更换新的恢复码。',
         onBack: () => Navigator.pop(context),
         children: [
           TextField(

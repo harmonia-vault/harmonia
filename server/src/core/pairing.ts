@@ -1,4 +1,4 @@
-// 配对：新设备发起请求并保持等待连接，管理手机核对后批准（docs/protocol.md 3.3、3.5.1，5.10）。
+// 配对：新设备发起请求并保持等待连接，管理设备核对后批准（docs/protocol.md 3.3、3.5.1，5.10）。
 import type { Hono } from "hono";
 import { bump, headSeq, one } from "./db";
 import {
@@ -27,6 +27,8 @@ type Pairing = {
   root_pub: string;
   status: string;
   ip: string;
+  /** 发起方的客户端具备管理功能，才能被批准为管理设备。 */
+  can_manage: number;
   created_at: number;
   expires_at: number;
 };
@@ -44,6 +46,7 @@ const view = (p: Pairing) => ({
   boxPub: p.box_pub,
   rootPub: p.root_pub,
   ip: p.ip,
+  canManage: p.can_manage === 1,
   createdAt: p.created_at,
   expiresAt: p.expires_at,
 });
@@ -124,6 +127,7 @@ export function pairingRoutes(app: Hono, deps: Deps) {
     }
     const body = await readJson(c);
     const rootPub = bin(body.rootPub, "账号公钥", 32);
+    if (typeof body.canManage !== "boolean") throw bad("canManage 字段格式不对。");
     if (rootPub !== a.root_pub) {
       throw conflict("服务器返回的账号公钥与本机记录不一致，已停止配对。请确认服务器地址是否正确。");
     }
@@ -141,12 +145,13 @@ export function pairingRoutes(app: Hono, deps: Deps) {
       root_pub: rootPub,
       status: "pending",
       ip,
+      can_manage: body.canManage ? 1 : 0,
       created_at: now,
       expires_at: now + PAIRING_TTL,
     };
     sql.run(
-      `INSERT INTO pairings (id, secret_hash, name, platform, sign_pub, box_pub, root_pub, status, ip, created_at, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO pairings (id, secret_hash, name, platform, sign_pub, box_pub, root_pub, status, ip, can_manage, created_at, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       p.id,
       p.secret_hash,
       p.name,
@@ -156,6 +161,7 @@ export function pairingRoutes(app: Hono, deps: Deps) {
       p.root_pub,
       p.status,
       p.ip,
+      p.can_manage,
       p.created_at,
       p.expires_at,
     );
@@ -197,6 +203,7 @@ export function pairingRoutes(app: Hono, deps: Deps) {
     const body = await readJson(c);
     const kind = body.kind;
     if (kind !== "client" && kind !== "manager") throw bad("设备类型不对。");
+    if (kind === "manager" && p.can_manage !== 1) throw bad("这台设备的客户端还不具备管理功能，不能作为管理设备。");
     const cert = bin(body.cert, "设备证书", 64);
     await verifyCert(a.root_pub, p.id, kind, p.sign_pub, p.box_pub, cert);
     const envelopes = await parseEnvelopes(a.root_pub, p.id, body.envelopes);

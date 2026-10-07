@@ -165,10 +165,10 @@ PIN 槽（必有）：
 | `PUT /account/password` | device（管理设备） | `{kdfSalt, authKey}` |
 | `POST /auth/challenge` | 请求头 `X-Harmonia-Account` | `{deviceId}` → `{nonce, expiresAt}`，nonce 只能使用一次，2 分钟内有效 |
 | `POST /auth/device-session` | 请求头 `X-Harmonia-Account` | `{deviceId, nonce, signature}` → `{token, expiresAt}` |
-| `POST /pairings` | password | `{name, platform, signPub, boxPub, rootPub}` → `{id, secret, expiresAt}`，10 分钟内有效。服务端记录发起方 IP；该 IP 被阻止时返回 `pairing_blocked` |
+| `POST /pairings` | password | `{name, platform, signPub, boxPub, rootPub, canManage}` → `{id, secret, expiresAt}`，10 分钟内有效。`canManage` 表示发起方的客户端具备管理功能（目前只有 App 为 true）。服务端记录发起方 IP；该 IP 被阻止时返回 `pairing_blocked` |
 | `GET /pairings/{id}/events` | 请求头 `X-Harmonia-Account` 和 `X-Pairing-Secret` | 发起方的等待连接（WebSocket），见 3.5.1 |
 | `GET /pairings/{id}/status` | 请求头 `X-Harmonia-Account` 和 `X-Pairing-Secret` | `{status}`：`pending` / `approved` / `rejected` / `expired` / `cancelled`。只在等待连接意外断开后查询一次 |
-| `GET /pairings` | device（管理设备） | 列出发起方仍在等待的请求，每项带 `ip` |
+| `GET /pairings` | device（管理设备） | 列出发起方仍在等待的请求，每项带 `ip` 和 `canManage` |
 | `GET /pairings/{id}` | device（管理设备） | 单个请求；发起方已离开或请求已处理时返回 `conflict` |
 | `POST /pairings/{id}/approve` | device（管理设备） | 见 3.3；发起方已离开时返回 `conflict` |
 | `POST /pairings/{id}/reject` | device（管理设备） | `{block?: bool}`；`block` 为 true 时，30 分钟内拒绝来自该请求 IP 的新配对请求 |
@@ -213,6 +213,7 @@ PIN 槽（必有）：
 ```
 
 - 新设备的 ID 等于配对 ID。
+- `kind=manager` 只能用于 `canManage=true` 的请求，否则返回 `invalid_request`。管理设备不限平台，取决于客户端是否具备管理功能。
 - `kind=manager` 时不带 grants，envelopes 必须覆盖全部环境。
 - `kind=client` 时，每条授权都必须带对应环境的封装。
 - `expiresAt` 为 0 表示一直有效，直到被撤销。
@@ -317,7 +318,7 @@ PIN 槽（必有）：
 - 受攻击状态：15 分钟内全部网络的失败合计达到 20 次时进入，连续 1 小时没有失败后退出。期间所有网络的登录：
   - 服务器配置了发信：密码正确后不发会话，而是向账号邮箱发送登录验证码，返回 `code_required` 和 `flow`；带上 `flow` 和 `code` 再次登录才发会话。密码不对时不发邮件。
   - 未配置发信：每个网络的免限制次数从 5 降为 1。
-- 这些限制只作用于密码登录。被挡住的合法用户可以：等待提示的时间后重试；在管理手机上修改密码（所有密码会话和待处理的配对请求随之作废，账号随即退出受攻击状态）；用恢复码恢复（不需要密码）。
+- 这些限制只作用于密码登录。被挡住的合法用户可以：等待提示的时间后重试；在管理设备上修改密码（所有密码会话和待处理的配对请求随之作废，账号随即退出受攻击状态）；用恢复码恢复（不需要密码）。
 
 **邮件**
 

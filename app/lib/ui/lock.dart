@@ -215,8 +215,8 @@ class _LockPageState extends State<LockPage> {
     final ok = await confirmDialog(context,
         title: '清除本机数据？',
         body: '${_bio ? '如果只是忘记了 PIN，可以先用指纹解锁，再到“设置”中修改 PIN。\n\n' : ''}'
-            '清除后，账号和云端数据不受影响，但这台手机需要重新登录，并通过另一台手机批准或用恢复码恢复。'
-            '这台手机原来的设备记录需要在其他手机上移除。',
+            '清除后，账号和云端数据不受影响，但这台手机需要重新登录，并由管理设备批准或用恢复码恢复。'
+            '这台手机原来的设备记录需要在管理设备上移除。',
         ok: '清除本机数据',
         danger: true);
     if (!ok || !mounted) return;

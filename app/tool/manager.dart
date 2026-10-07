@@ -1,4 +1,4 @@
-// 无界面的“管理手机”，供端到端测试使用：与 App 共用 lib/core 的全部逻辑。
+// 无界面的“管理设备”，供端到端测试使用：与 App 共用 lib/core 的全部逻辑。
 // ignore_for_file: avoid_print
 // 用法：dart run tool/manager.dart --home <目录> <命令> [参数...]
 import 'dart:io';
@@ -92,7 +92,7 @@ Future<void> main(List<String> argv) async {
         print('${d.name}\t${d.kind}\t${d.grants.map((g) => '${g.envId}:${g.role}').join(',')}');
       }
     case 'pair':
-      // 作为新的管理手机发起配对，等待另一台手机批准。
+      // 作为新的管理设备发起配对，等待管理设备批准。
       final s = await account.login(opt('server'), opt('email'), opt('password'));
       final p = await account.startPairing(s, opt('name', '第二台手机'));
       await vault.adopt(await account.waitPairing(p, onReady: () => stderr.writeln('核对码：${p.code}')));

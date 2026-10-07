@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# 端到端流程测试：本地 workerd 服务端 + 真实 harmonia CLI + 无界面管理手机（app/lib/core）。
-# 覆盖：注册验证、首次初始化、电脑配对（含取消等待）、exec、实时推送、写入、本地覆盖、权限变更、撤销、恢复与轮换、多管理手机。
+# 端到端流程测试：本地 workerd 服务端 + 真实 harmonia CLI + 无界面管理设备（app/lib/core）。
+# 覆盖：注册验证、首次初始化、电脑配对（含取消等待）、exec、实时推送、写入、本地覆盖、权限变更、撤销、恢复与轮换、多管理设备。
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -128,7 +128,7 @@ if cli var set OpenAI NEW "x" 2>"$TMP/ro.err"; then fail "只读设备不应能�
 grep -q "只读" "$TMP/ro.err" || fail "只读错误提示不清楚：$(cat "$TMP/ro.err")"
 cli env list | grep -q Other && fail "未授权的环境不应可见"
 
-step "J9 第二台管理手机加入，并能管理全部环境"
+step "J9 第二台管理设备加入，并能管理全部环境"
 manager phone2 pair --server "$SERVER" --email "$EMAIL" --password "$PASSWORD" --name "第二台手机" \
   >"$TMP/pair2.out" 2>"$TMP/pair2.err" &
 PAIR_PID=$!

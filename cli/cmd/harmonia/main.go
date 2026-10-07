@@ -20,7 +20,7 @@ var version = "dev"
 const usage = `Harmonia（和弦）：在手机上管理环境变量，同步到这台电脑。
 
 用法：
-  harmonia login [服务器地址]              登录账号并发起配对，在手机上批准后完成接入
+  harmonia login [服务器地址]              登录账号并发起配对，在管理设备上批准后完成接入
   harmonia status                         查看接入状态、环境和后台服务
   harmonia sync                           立即同步
 

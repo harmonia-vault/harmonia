@@ -37,7 +37,7 @@ export function deviceRoutes(app: Hono, deps: Deps) {
     await requireDevice(c, deps, { manager: true });
     const a = requireInitialized(sql);
     const t = target(sql, id(c.req.param("id"), "设备 ID"));
-    if (t.kind !== "client") throw bad("管理手机拥有全部环境的权限，不需要单独授权。");
+    if (t.kind !== "client") throw bad("管理设备拥有全部环境的权限，不需要单独授权。");
     const body = await readJson(c);
     const grants = parseGrants(body.grants);
     const envelopes = await parseEnvelopes(a.root_pub, t.id, body.envelopes);
@@ -80,7 +80,7 @@ export function deviceRoutes(app: Hono, deps: Deps) {
     const d = await requireDevice(c, deps, { allowRotation: true });
     const body = await readJson(c).catch(() => ({}) as Record<string, unknown>);
     if (d.kind === "manager" && activeManagerCount(sql) === 1 && body.confirmLast !== true) {
-      throw conflict("这是账号里唯一的管理手机。退出后只能用恢复码找回账号。");
+      throw conflict("这是账号里唯一的管理设备。退出后只能用恢复码找回账号。");
     }
     revokeDevice(deps, d.id);
     return c.json({ ok: true });
@@ -90,7 +90,7 @@ export function deviceRoutes(app: Hono, deps: Deps) {
     await requireDevice(c, deps, { manager: true });
     const t = target(sql, id(c.req.param("id"), "设备 ID"));
     if (t.kind === "manager" && activeManagerCount(sql) === 1) {
-      throw conflict("不能移除最后一台管理手机。");
+      throw conflict("不能移除最后一台管理设备。");
     }
     revokeDevice(deps, t.id);
     return c.json({ ok: true });

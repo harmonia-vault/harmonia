@@ -184,7 +184,7 @@ func cmdLogout(ctx context.Context, args []string) error {
 	if online {
 		fmt.Println("已退出账号，这台设备已从账号中移除，本机数据已清除。")
 	} else {
-		fmt.Println("已清除本机数据。暂时无法连接服务器，请在手机上手动移除这台设备。")
+		fmt.Println("已清除本机数据。暂时无法连接服务器，请在管理设备上手动移除这台设备。")
 	}
 	fmt.Println("新开的终端将不再带上 Harmonia 的变量。")
 	return nil
@@ -204,7 +204,7 @@ func cmdUninstall(ctx context.Context, args []string) error {
 		if online, err := a.Logout(ctx); err != nil {
 			return err
 		} else if !online {
-			fmt.Println("暂时无法连接服务器，请在手机上手动移除这台设备。")
+			fmt.Println("暂时无法连接服务器，请在管理设备上手动移除这台设备。")
 		}
 	}
 	if err := service.Uninstall(); err != nil {

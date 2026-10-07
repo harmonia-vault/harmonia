@@ -91,6 +91,8 @@ class PairingRequest {
   String get rootPub => json['rootPub'] as String;
   /// 发起请求的网络地址，用于判断是否本人发起和“阻止这个网络”。
   String get ip => json['ip'] as String? ?? '';
+  /// 发起方的客户端具备管理功能，才能被批准为管理设备。
+  bool get canManage => json['canManage'] as bool? ?? false;
   int get expiresAt => json['expiresAt'] as int;
 }
 

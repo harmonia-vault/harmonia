@@ -235,7 +235,7 @@ class Vault {
 
   SignKey _root() {
     final r = root;
-    if (r == null) throw VaultException('只有管理手机可以执行这个操作。');
+    if (r == null) throw VaultException('只有管理设备可以执行这个操作。');
     return r;
   }
 
@@ -356,7 +356,7 @@ class Vault {
     throw VaultException('没有找到匹配的配对请求。请确认核对码正确，并且电脑上的配对还没有过期。');
   }
 
-  /// 批准配对。asManager=true 时新设备成为管理手机，拥有全部环境。
+  /// 批准配对。asManager=true 时新设备成为管理设备，拥有全部环境。
   Future<void> approvePairing(PairingRequest p,
       {required bool asManager, List<Grant> grants = const []}) async {
     final r = _root();

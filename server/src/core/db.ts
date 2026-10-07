@@ -128,6 +128,7 @@ const MIGRATIONS: string[][] = [
     `ALTER TABLE pairings ADD COLUMN ip TEXT NOT NULL DEFAULT ''`,
     `CREATE TABLE pairing_blocks (ip TEXT PRIMARY KEY, until INTEGER NOT NULL)`,
   ],
+  [`ALTER TABLE pairings ADD COLUMN can_manage INTEGER NOT NULL DEFAULT 0`],
 ];
 
 export function migrate(sql: Sql): void {

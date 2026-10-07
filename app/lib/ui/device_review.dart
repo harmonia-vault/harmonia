@@ -9,7 +9,7 @@ import 'lock.dart';
 import 'theme.dart';
 import 'widgets.dart';
 
-/// 账号中除本机以外的设备，管理手机在前。
+/// 账号中除本机以外的设备，管理设备在前。
 List<DeviceInfo> otherDevices(AppController c) {
   final me = c.vault.config!.deviceId;
   final others = c.vault.devices.where((d) => d.id != me);
@@ -95,7 +95,7 @@ class _DeviceReviewViewState extends State<DeviceReviewView> {
       subtitle: '恢复不会让账号中的其他设备失效。旧手机仍然可以访问全部环境，也能批准和移除设备。',
       children: [
         const Banner2('已丢失或不再使用的设备，请勾选后移除；还在使用的设备不用勾选。', warn: true),
-        if (managers.isNotEmpty) ...[const SectionTitle('管理手机'), ...managers.map(_tile)],
+        if (managers.isNotEmpty) ...[const SectionTitle('管理设备'), ...managers.map(_tile)],
         if (clients.isNotEmpty) ...[const SectionTitle('电脑'), ...clients.map(_tile)],
         const SizedBox(height: Space.xl),
         if (_selected.isEmpty)

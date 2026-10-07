@@ -105,7 +105,7 @@ ExecStart=/home/me/.local/bin/harmonia exec -- /usr/bin/node /srv/agent/index.js
 **不保证的：**
 
 - 变量下发到设备后，风险由使用者承担：同一用户的任何进程（包括 AI Agent）都能读到注入的变量和 `~/.harmonia/env.sh`。撤销收不回已经复制或泄露的值，必要时请到服务商处更换密钥。
-- 手机被他人拿到并解开锁屏不在防护范围内，请用另一台手机或恢复码移除它。
+- 手机被他人拿到并解开锁屏不在防护范围内，请用另一台管理设备或恢复码移除它。
 - 服务端被攻破时，可能拒绝服务、回滚数据，或假装执行撤销。
 - 服务端能看到变量名、环境名、设备名和访问时间。
 - **恢复码等于整个账号。** 恢复码泄露，别人就能接管账号；恢复码和所有手机都丢失，数据无法找回。
@@ -135,7 +135,7 @@ curl -fsSL https://github.com/harmonia-vault/harmonia/releases/download/update-f
 
 **忘记密码？** 在登录页选择“忘记密码”，通过邮件验证码设置新密码，数据不受影响（需要服务端配置了发信）。没有配置发信时，用“用恢复码恢复”也可以设置新密码。
 
-**手机丢了？** 用另一台已授权的手机移除它；没有其他手机时，在新手机上登录后选择“用恢复码恢复”，之后会要求更换恢复码。
+**手机丢了？** 用另一台管理设备移除它；没有其他管理设备时，在新手机上登录后选择“用恢复码恢复”，之后会要求更换恢复码。
 
 **密码、恢复码、手机全丢了？** 只能在登录页选择“重置账号”（需要服务端配置了发信），删除这个账号的全部数据后重新开始；没有配置发信时，在 Cloudflare 控制台删除 Worker 后重新部署。
 
@@ -148,7 +148,7 @@ curl -fsSL https://github.com/harmonia-vault/harmonia/releases/download/update-f
 ```bash
 mise install
 mise run test        # 三端单元测试
-mise run e2e         # 端到端流程：本地 workerd + 真实 CLI + 无界面管理手机
+mise run e2e         # 端到端流程：本地 workerd + 真实 CLI + 无界面管理设备
 mise run dev-server  # 本地运行服务端
 ```
 

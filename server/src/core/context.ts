@@ -155,7 +155,7 @@ export async function requireDevice(
   const d = deviceById(deps.sql, s.deviceId);
   if (!d) throw unauthorized();
   if (d.status !== "active") throw new ApiError(401, "device_revoked", "这台设备已被移除，请重新连接。");
-  if (opts.manager && d.kind !== "manager") throw forbidden("只有管理手机可以执行此操作。");
+  if (opts.manager && d.kind !== "manager") throw forbidden("只有管理设备可以执行此操作。");
   if (d.rotation_required && !opts.allowRotation) {
     throw new ApiError(403, "rotation_required", "请先完成恢复码更换。");
   }

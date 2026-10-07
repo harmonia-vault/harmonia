@@ -97,7 +97,7 @@ func EnvKey(c *state.Cache, k *state.DeviceKeys, envID string) ([]byte, int, err
 		}
 		key, err := k.Box.Open(sealed)
 		if err != nil || len(key) != 32 {
-			return nil, 0, errors.New("无法解开环境密钥，可能需要在手机上重新授权这台设备")
+			return nil, 0, errors.New("无法解开环境密钥，可能需要在管理设备上重新授权这台设备")
 		}
 		kv, _ := strconv.Atoi(e.KeyVersion)
 		return key, kv, nil

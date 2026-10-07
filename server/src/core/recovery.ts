@@ -1,4 +1,4 @@
-// 恢复：凭恢复码登记新管理手机，并原子轮换恢复码（docs/protocol.md 3.6）。
+// 恢复：凭恢复码登记新管理设备，并原子轮换恢复码（docs/protocol.md 3.6）。
 import type { Hono } from "hono";
 import { bump, headSeq, one } from "./db";
 import {
