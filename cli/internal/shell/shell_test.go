@@ -39,10 +39,11 @@ func TestInstallUninstallKeepsUserContent(t *testing.T) {
 	rc := filepath.Join(dir, ".zshenv")
 	orig := "export FOO=mine\nalias ll='ls -l'"
 	os.WriteFile(rc, []byte(orig), 0o640)
-	if err := Install(rc, "/tmp/x/env.sh"); err != nil {
+	env := filepath.Join(dir, "env.sh")
+	if err := Install(rc, env); err != nil {
 		t.Fatal(err)
 	}
-	if err := Install(rc, "/tmp/x/env.sh"); err != nil { // 重复安装不重复添加
+	if err := Install(rc, env); err != nil { // 重复安装不重复添加
 		t.Fatal(err)
 	}
 	data, _ := os.ReadFile(rc)
@@ -52,7 +53,7 @@ func TestInstallUninstallKeepsUserContent(t *testing.T) {
 	if fi, _ := os.Stat(rc); fi.Mode().Perm() != 0o640 {
 		t.Errorf("mode changed: %v", fi.Mode())
 	}
-	if !Installed(rc) {
+	if !Installed(rc, env) {
 		t.Error("should be installed")
 	}
 	if err := Uninstall(rc); err != nil {
@@ -64,8 +65,14 @@ func TestInstallUninstallKeepsUserContent(t *testing.T) {
 	}
 	link := filepath.Join(dir, ".bashrc")
 	os.Symlink(rc, link)
-	if err := Install(link, "/x"); err != ErrSymlink {
+	if err := os.Remove(IntegrationFile(env)); err != nil {
+		t.Fatal(err)
+	}
+	if err := Install(link, env); err != ErrSymlink {
 		t.Errorf("symlink should be refused, got %v", err)
+	}
+	if _, err := os.Stat(IntegrationFile(env)); err != nil {
+		t.Fatalf("手动加载所需的脚本未准备好：%v", err)
 	}
 }
 

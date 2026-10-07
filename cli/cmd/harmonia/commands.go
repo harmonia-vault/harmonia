@@ -91,7 +91,7 @@ func cmdLogin(ctx context.Context, args []string) error {
 	fmt.Printf("\n已接入账号，这台设备可以访问 %d 个环境，授权的环境默认已启用。\n", n)
 	next := [][]string{{"harmonia env list", "查看环境和变量来源"}}
 	if !shellInstalledAny(a.Dir) {
-		next = append(next, []string{"harmonia shell install", "新开的终端自动带上变量"})
+		next = append(next, []string{"harmonia shell install", "在终端中自动加载和更新变量"})
 	}
 	if s := service.Check(); s.Supported && !s.Installed {
 		next = append(next, []string{"harmonia service install", "安装后台服务，实时同步"})
@@ -135,16 +135,16 @@ func cmdEnv(ctx context.Context, args []string) error {
 		if err != nil {
 			return err
 		}
-		fmt.Printf("已启用环境“%s”。新开的终端或 harmonia exec 会带上其中的变量。\n", env.Name)
+		fmt.Printf("已启用环境“%s”。\n", env.Name)
 		if !shellInstalledAny(a.Dir) {
-			fmt.Println("提示：还没有安装 shell 集成，运行 harmonia shell install 让新终端自动加载。")
+			fmt.Println("提示：运行 harmonia shell install 启用终端变量。")
 		}
 	case "deactivate":
 		env, err := a.Deactivate(ctx, f.args[1])
 		if err != nil {
 			return err
 		}
-		fmt.Printf("已停用环境“%s”。新开的终端将不再带上其中的变量。\n", env.Name)
+		fmt.Printf("已停用环境“%s”。\n", env.Name)
 	case "order":
 		if err := a.Order(ctx, f.args[1:]); err != nil {
 			return err

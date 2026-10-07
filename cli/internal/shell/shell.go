@@ -1,7 +1,8 @@
-// Package shell 生成 env.sh，并在 shell 启动文件末尾添加或移除 source 行。
+// Package shell 生成环境变量与提示符刷新脚本，并管理 shell 启动入口。
 package shell
 
 import (
+	_ "embed"
 	"errors"
 	"fmt"
 	"os"
@@ -15,6 +16,18 @@ import (
 
 var validName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
+//go:embed prompt.sh
+var promptScript string
+
+// IntegrationFile 是 shell 启动入口和安装提示共同使用的加载文件。
+func IntegrationFile(envFile string) string {
+	return filepath.Join(filepath.Dir(envFile), "shell.sh")
+}
+
+func integration(envFile string) string {
+	return "__HARMONIA_FILE=" + Quote(envFile) + "\n" + promptScript
+}
+
 // Quote 用单引号字面量安全转义，值中的 $()、反引号、换行都不会被执行。
 func Quote(v string) string { return "'" + strings.ReplaceAll(v, "'", `'\''`) + "'" }
 
@@ -22,13 +35,17 @@ func Quote(v string) string { return "'" + strings.ReplaceAll(v, "'", `'\''`) + 
 func Render(vars map[string]string) []byte {
 	names := make([]string, 0, len(vars))
 	for n := range vars {
-		if validName.MatchString(n) {
+		if validName.MatchString(n) && !strings.HasPrefix(strings.ToUpper(n), "__HARMONIA_") {
 			names = append(names, n)
 		}
 	}
 	sort.Strings(names)
 	var b strings.Builder
 	b.WriteString(state.EnvFileHeader)
+	for _, n := range names {
+		b.WriteString(" " + n)
+	}
+	b.WriteByte('\n')
 	for _, n := range names {
 		fmt.Fprintf(&b, "export %s=%s\n", n, Quote(vars[n]))
 	}
@@ -92,20 +109,29 @@ func Detect() string {
 }
 
 func block(envFile string) string {
-	return fmt.Sprintf("%s\n[ -f %s ] && . %s\n%s\n", beginMark, Quote(envFile), Quote(envFile), endMark)
+	file := Quote(IntegrationFile(envFile))
+	return fmt.Sprintf("%s\n[ -f %s ] && . %s\n%s\n", beginMark, file, file, endMark)
 }
 
 // ErrSymlink 表示启动文件是符号链接（例如由 dotfiles 工具管理），需要用户手动添加。
 var ErrSymlink = errors.New("启动文件是符号链接")
 
-// Installed 判断启动文件里是否已有 Harmonia 的 source 行。
-func Installed(path string) bool {
+// Installed 检查启动入口和集成脚本是否都是当前内容。
+func Installed(path, envFile string) bool {
 	data, err := os.ReadFile(path)
-	return err == nil && strings.Contains(string(data), beginMark)
+	if err != nil || !strings.Contains(string(data), block(envFile)) {
+		return false
+	}
+	script, err := os.ReadFile(IntegrationFile(envFile))
+	return err == nil && string(script) == integration(envFile)
 }
 
-// Install 在文件末尾追加 source 行；已存在时不重复添加。
+// Install 更新已有标记块，或在文件末尾添加入口，保留用户的其他配置。
 func Install(path, envFile string) error {
+	// 启动文件由 dotfiles 管理时仍准备脚本，让手动添加的入口可以工作。
+	if err := state.WriteAtomic(IntegrationFile(envFile), []byte(integration(envFile))); err != nil {
+		return err
+	}
 	if fi, err := os.Lstat(path); err == nil && fi.Mode()&os.ModeSymlink != 0 {
 		return ErrSymlink
 	}
@@ -114,17 +140,23 @@ func Install(path, envFile string) error {
 		return err
 	}
 	text := string(data)
-	if strings.Contains(text, beginMark) {
-		return nil
+	start, end, err := blockBounds(text)
+	if err != nil {
+		return err
 	}
-	if text != "" && !strings.HasSuffix(text, "\n") {
-		text += "\n"
+	if start >= 0 {
+		text = text[:start] + block(envFile) + text[end:]
+	} else {
+		if text != "" && !strings.HasSuffix(text, "\n") {
+			text += "\n"
+		}
+		text += "\n" + block(envFile)
 	}
 	mode := os.FileMode(0o644)
 	if fi, err := os.Stat(path); err == nil {
 		mode = fi.Mode().Perm()
 	}
-	return writeKeepMode(path, text+"\n"+block(envFile), mode)
+	return writeKeepMode(path, text, mode)
 }
 
 // Uninstall 按标记删除 source 行。
@@ -140,23 +172,37 @@ func Uninstall(path string) error {
 		return err
 	}
 	text := string(data)
-	start := strings.Index(text, beginMark)
+	start, end, err := blockBounds(text)
+	if err != nil {
+		return err
+	}
 	if start < 0 {
 		return nil
 	}
+	if start > 1 && text[start-1] == '\n' && text[start-2] == '\n' {
+		start--
+	}
+	fi, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	return writeKeepMode(path, text[:start]+text[end:], fi.Mode().Perm())
+}
+
+func blockBounds(text string) (int, int, error) {
+	start := strings.Index(text, beginMark)
+	if start < 0 {
+		return -1, -1, nil
+	}
 	end := strings.Index(text[start:], endMark)
 	if end < 0 {
-		return errors.New("启动文件中的 Harmonia 标记不完整，请手动删除")
+		return 0, 0, errors.New("启动文件中的 Harmonia 标记不完整，请手动删除")
 	}
 	end += start + len(endMark)
 	if end < len(text) && text[end] == '\n' {
 		end++
 	}
-	if start > 0 && text[start-1] == '\n' && start > 1 && text[start-2] == '\n' {
-		start--
-	}
-	fi, _ := os.Stat(path)
-	return writeKeepMode(path, text[:start]+text[end:], fi.Mode().Perm())
+	return start, end, nil
 }
 
 // SourceLine 是需要用户手动添加时显示的内容。

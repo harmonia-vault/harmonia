@@ -68,7 +68,7 @@ esac
 # 有终端可以交互时，询问是否安装 shell 集成和后台服务，直接回车即安装；没有终端时只提示命令。
 if (exec </dev/tty) 2>/dev/null; then
   echo
-  echo "[1/2] Shell 集成：新开的终端会自动带上已启用环境中的变量。"
+  echo "[1/2] Shell 集成：在终端中自动加载和更新变量。"
   echo
   "$DEST/harmonia" shell install </dev/tty || true
   echo
@@ -83,6 +83,6 @@ if (exec </dev/tty) 2>/dev/null; then
   esac
   echo
 else
-  echo "提示：运行 harmonia shell install 让新终端自动带上变量，运行 harmonia service install 安装后台服务。"
+  echo "提示：运行 harmonia shell install 启用终端变量，运行 harmonia service install 安装后台服务。"
 fi
 echo "下一步：运行 harmonia login <服务器地址>"

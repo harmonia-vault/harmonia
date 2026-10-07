@@ -175,7 +175,7 @@ func (d *Dir) Wipe() error {
 			return err
 		}
 	}
-	if err := WriteAtomic(d.EnvFile(), []byte(EnvFileHeader)); err != nil {
+	if err := WriteAtomic(d.EnvFile(), []byte(EnvFileHeader+"\n")); err != nil {
 		return err
 	}
 	c, err := d.Config()
@@ -186,7 +186,7 @@ func (d *Dir) Wipe() error {
 }
 
 // EnvFileHeader 是变量文件的固定开头。
-const EnvFileHeader = "# 由 Harmonia 自动生成，请勿手动修改；修改会在下一次同步时被覆盖。\n"
+const EnvFileHeader = "# 由 Harmonia 自动生成，请勿手动修改；修改会在下一次同步时被覆盖。\n# keys:"
 
 // DeviceKeys 由保存的种子还原设备密钥，并实现 api.Signer。
 type DeviceKeys struct {

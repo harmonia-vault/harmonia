@@ -22,6 +22,31 @@ description = "CLI 单元测试"
 dir = "cli"
 run = "go test ./..."
 
+[tasks.check-cli]
+description = "CLI 静态检查"
+dir = "cli"
+run = "go vet ./..."
+
+[tasks.fmt-cli]
+description = "格式化 CLI 代码"
+dir = "cli"
+run = "go fmt ./..."
+
+[tasks.test-shell-linux]
+description = "验证 Bash、Zsh 的最低支持版本及 Bash 5.2.21"
+dir = "cli"
+run = '''
+set -eu
+test_dir=$(mktemp -d)
+trap 'rm -rf "$test_dir"' EXIT
+GOOS=linux CGO_ENABLED=0 go test -c -o "$test_dir/shell.test" ./internal/shell
+for bash_version in 5.1.16 5.2.21; do
+  docker run --rm -v "$test_dir:/tests:ro" "bash:$bash_version" /tests/shell.test -test.v
+done
+GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go test -c -o "$test_dir/shell-zsh.test" ./internal/shell
+docker run --rm --platform linux/amd64 -v "$test_dir:/tests:ro" --entrypoint /tests/shell-zsh.test zshusers/zsh:5.0.0 -test.v
+'''
+
 [tasks.test-server]
 description = "服务端单元测试"
 dir = "server"

@@ -29,7 +29,7 @@ func shellInstalledAny(d *state.Dir) bool {
 	for _, sh := range []string{"zsh", "bash"} {
 		ts, _ := shellTargets(sh)
 		for _, t := range ts {
-			if shell.Installed(t.Path) {
+			if shell.Installed(t.Path, d.EnvFile()) {
 				return true
 			}
 		}
@@ -42,7 +42,7 @@ func shellSummary(d *state.Dir) string {
 	for _, sh := range []string{"zsh", "bash"} {
 		ts, _ := shellTargets(sh)
 		for _, t := range ts {
-			if shell.Installed(t.Path) {
+			if shell.Installed(t.Path, d.EnvFile()) {
 				on = append(on, t.Path)
 			}
 		}
@@ -97,38 +97,49 @@ func cmdShell(ctx context.Context, args []string) error {
 		fmt.Println("已移除 shell 集成。新开的终端将不再加载 Harmonia 的变量。")
 		return nil
 	}
-	if _, err := os.Stat(d.EnvFile()); errors.Is(err, os.ErrNotExist) {
-		if err := state.WriteAtomic(d.EnvFile(), []byte(state.EnvFileHeader)); err != nil {
-			return err
-		}
-	}
 	installed := true
 	for _, t := range targets {
-		installed = installed && shell.Installed(t.Path)
+		installed = installed && shell.Installed(t.Path, d.EnvFile())
 	}
 	if installed {
-		fmt.Println("shell 集成已经安装，新开的终端会自动带上已启用环境中的变量。")
+		printShellReady(d.EnvFile())
 		return nil
 	}
-	fmt.Println("将在以下文件末尾添加一段加载 Harmonia 变量的代码：")
+	fmt.Println("将更新以下文件中的 Harmonia 变量加载设置（支持 Bash 5.1+、Zsh 5.0+）：")
 	for _, t := range targets {
 		fmt.Println("  " + t.Path)
 	}
 	fmt.Print("\n" + shell.SourceLine(d.EnvFile()) + "\n")
-	if !f.bools["yes"] && !confirmYes("确认添加？") {
-		fmt.Println("已取消。也可以把上面的内容手动加到启动文件末尾。")
+	if !f.bools["yes"] && !confirmYes("安装 Shell 集成？") {
+		fmt.Println("已取消。需要时重新运行 harmonia shell install。")
 		return nil
+	}
+	a, err := app.Load(false)
+	if err != nil {
+		return err
+	}
+	if a.Keys != nil {
+		if _, err := a.RefreshEnvFile(); err != nil {
+			return err
+		}
+	} else if err := state.WriteAtomic(d.EnvFile(), shell.Render(nil)); err != nil {
+		return err
 	}
 	for _, t := range targets {
 		if err := shell.Install(t.Path, d.EnvFile()); errors.Is(err, shell.ErrSymlink) {
-			fmt.Printf("%s 是符号链接（可能由 dotfiles 工具管理），没有自动修改。请手动把上面的内容加到它指向的文件末尾。\n", t.Path)
+			fmt.Printf("未修改符号链接 %s。请在它指向的文件中添加或替换上面的加载设置。\n", t.Path)
 		} else if err != nil {
 			return err
 		}
 	}
-	fmt.Println("已安装。新开的终端会自动带上已启用环境中的变量；已打开的终端可以运行：")
-	fmt.Printf("  . %s\n", shell.Quote(d.EnvFile()))
+	printShellReady(d.EnvFile())
 	return nil
+}
+
+func printShellReady(envFile string) {
+	fmt.Println("当前终端运行以下命令启用变量自动更新：")
+	fmt.Printf("  . %s\n", shell.Quote(shell.IntegrationFile(envFile)))
+	fmt.Println("变量同步后，按一次空回车即可在当前终端使用新值。")
 }
 
 // enableLinger 在没能开启开机自启时询问是否用 sudo 开启：systemd 用户服务默认只在用户登录期间运行，
@@ -217,7 +228,7 @@ func cmdLogout(ctx context.Context, args []string) error {
 	} else {
 		fmt.Println("已清除本机数据。暂时无法连接服务器，请在管理设备上手动移除这台设备。")
 	}
-	fmt.Println("新开的终端将不再带上 Harmonia 的变量。")
+	fmt.Println("已启用 Shell 集成的终端会在下一次命令提示符出现时清理变量。")
 	return nil
 }
 
