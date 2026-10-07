@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { b64, recoveryAuthMsg, rootRecoveryMsg } from "../src/core/util";
-import { Ed, FakeDevice, newId, rand, TestAccount, TestServer, waitApproval } from "./helpers";
+import { Ed, FakeDevice, newId, pairClient, rand, TestAccount, TestServer, waitApproval } from "./helpers";
 
 const value = () => b64(rand(60));
 const put = (s: TestServer, token: string, env: string, name: string, key = newId()) =>
@@ -9,32 +9,6 @@ const put = (s: TestServer, token: string, env: string, name: string, key = newI
     body: { value: value(), keyVersion: "1" },
     headers: { "idempotency-key": key },
   });
-
-/** 电脑发起配对并由手机以指定授权批准。 */
-async function pairClient(s: TestServer, a: TestAccount, grants: { envId: string; role: string; expiresAt?: number }[]) {
-  const cli = await FakeDevice.create();
-  const pw = await a.passwordLogin(s);
-  const req = await s.ok("POST", "/api/v1/pairings", {
-    token: pw.token,
-    body: { name: "笔记本", platform: "darwin", signPub: cli.sign.pub, boxPub: cli.boxPub, rootPub: a.root.pub, canManage: false },
-  });
-  cli.id = req.id;
-  await waitApproval(s, a, req);
-  const list = await s.ok("GET", "/api/v1/pairings", { token: a.phone.token });
-  expect(list.pairings.map((p: { id: string }) => p.id)).toContain(req.id);
-  const envelopes = [];
-  for (const g of grants) envelopes.push(await a.envelope(g.envId, cli.id));
-  await s.ok("POST", `/api/v1/pairings/${req.id}/approve`, {
-    token: a.phone.token,
-    body: { kind: "client", cert: await a.cert(cli, "client"), grants: grants.map((g) => ({ expiresAt: 0, ...g })), envelopes },
-  });
-  const st = await s.ok("GET", `/api/v1/pairings/${req.id}/status`, {
-    headers: { "x-harmonia-account": a.accountId, "x-pairing-secret": req.secret },
-  });
-  expect(st.status).toBe("approved");
-  await cli.login(s, a.accountId);
-  return cli;
-}
 
 describe("环境、变量与同步", () => {
   it("环境封装必须覆盖全部管理设备和恢复码", async () => {

@@ -49,13 +49,19 @@ class CachedVariable {
 }
 
 class Grant {
-  Grant(this.envId, this.role, this.expiresAt);
+  Grant(this.envId, this.role, this.expiresAt, {this.active = true, this.position = 0});
   final String envId;
   final String role;
   final int expiresAt;
 
-  factory Grant.fromJson(Map<String, dynamic> j) =>
-      Grant(j['envId'] as String, j['role'] as String, j['expiresAt'] as int);
+  /// 激活状态和顺序：排在前面（position 小）的环境提供同名变量。只由服务端下发，修改授权时不提交。
+  final bool active;
+  final int position;
+
+  Grant copyWith({bool? active}) => Grant(envId, role, expiresAt, active: active ?? this.active, position: position);
+
+  factory Grant.fromJson(Map<String, dynamic> j) => Grant(j['envId'] as String, j['role'] as String, j['expiresAt'] as int,
+      active: j['active'] as bool? ?? true, position: j['position'] as int? ?? 0);
 
   Map<String, dynamic> toJson() => {'envId': envId, 'role': role, 'expiresAt': expiresAt};
 }
@@ -74,9 +80,9 @@ class DeviceInfo {
   int get createdAt => json['createdAt'] as int;
   int get lastSeenAt => json['lastSeenAt'] as int;
   bool get isManager => kind == 'manager';
-  List<Grant> get grants => (json['grants'] as List)
-      .map((g) => Grant.fromJson((g as Map).cast<String, dynamic>()))
-      .toList();
+  /// 按激活顺序排列。
+  List<Grant> get grants => (json['grants'] as List).map((g) => Grant.fromJson((g as Map).cast<String, dynamic>())).toList()
+    ..sort((a, b) => a.position.compareTo(b.position));
 }
 
 class PairingRequest {

@@ -122,41 +122,102 @@ func Values(c *state.Cache, k *state.DeviceKeys, envID string) (map[string]strin
 	return out, nil
 }
 
-// Merge 按优先级合并激活的环境：同名变量以优先级数值较大的为准；本地覆盖值先替换所在环境中的值。
+// Ordered 返回按顺序排列的环境副本（靠前的提供同名变量）。
+func Ordered(c *state.Cache) []api.Environment {
+	envs := append([]api.Environment(nil), c.Environments...)
+	sort.SliceStable(envs, func(i, j int) bool { return envs[i].Position < envs[j].Position })
+	return envs
+}
+
+// ActiveIDs 返回激活的环境，按顺序排列。
+func ActiveIDs(c *state.Cache) []string {
+	var ids []string
+	for _, e := range Ordered(c) {
+		if e.Active {
+			ids = append(ids, e.ID)
+		}
+	}
+	return ids
+}
+
+// Merge 按顺序合并环境：同名变量由排在前面的环境提供；本地覆盖值先替换所在环境中的值。
 // 未授权、已到期或已删除的环境被跳过，并在 skipped 中说明。
-func Merge(c *state.Cache, k *state.DeviceKeys, acts []state.Activation, ov state.Overrides, nowMs int64) (map[string]string, []string) {
-	sorted := append([]state.Activation(nil), acts...)
-	sort.SliceStable(sorted, func(i, j int) bool { return sorted[i].Priority < sorted[j].Priority })
+func Merge(c *state.Cache, k *state.DeviceKeys, ids []string, ov state.Overrides, nowMs int64) (map[string]string, []string) {
 	out := map[string]string{}
 	var skipped []string
-	for _, a := range sorted {
+	for _, src := range sources(c, k, ids, ov, nowMs, &skipped) {
+		for name, v := range src.vals {
+			if _, ok := out[name]; !ok {
+				out[name] = v
+			}
+		}
+	}
+	return out, skipped
+}
+
+// Conflict 表示一个变量同时出现在多个环境中；Envs 按顺序排列，第一个生效。
+type Conflict struct {
+	Name string
+	Envs []string
+}
+
+// Conflicts 列出按 ids 顺序合并时，同名变量分别来自哪些环境（环境名）。
+func Conflicts(c *state.Cache, k *state.DeviceKeys, ids []string, nowMs int64) []Conflict {
+	by := map[string][]string{}
+	for _, src := range sources(c, k, ids, nil, nowMs, nil) {
+		for name := range src.vals {
+			by[name] = append(by[name], src.env.Name)
+		}
+	}
+	var out []Conflict
+	for name, envs := range by {
+		if len(envs) > 1 {
+			out = append(out, Conflict{Name: name, Envs: envs})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
+}
+
+type source struct {
+	env  *api.Environment
+	vals map[string]string
+}
+
+// sources 按 ids 顺序解出各环境的变量（已套用本地覆盖），跳过的原因写入 skipped（可为 nil）。
+func sources(c *state.Cache, k *state.DeviceKeys, ids []string, ov state.Overrides, nowMs int64, skipped *[]string) []source {
+	note := func(s string) {
+		if skipped != nil {
+			*skipped = append(*skipped, s)
+		}
+	}
+	var out []source
+	for _, id := range ids {
 		var env *api.Environment
 		for i := range c.Environments {
-			if c.Environments[i].ID == a.EnvID {
+			if c.Environments[i].ID == id {
 				env = &c.Environments[i]
 			}
 		}
 		if env == nil {
-			skipped = append(skipped, fmt.Sprintf("环境 %s 已不可访问，已跳过", a.EnvID))
+			note(fmt.Sprintf("环境 %s 已不可访问，已跳过", id))
 			continue
 		}
 		if Expired(*env, nowMs) {
-			skipped = append(skipped, fmt.Sprintf("环境“%s”的授权已到期，已跳过", env.Name))
+			note(fmt.Sprintf("环境“%s”的授权已到期，已跳过", env.Name))
 			continue
 		}
-		vals, err := Values(c, k, a.EnvID)
+		vals, err := Values(c, k, id)
 		if err != nil {
-			skipped = append(skipped, fmt.Sprintf("环境“%s”：%v", env.Name, err))
+			note(fmt.Sprintf("环境“%s”：%v", env.Name, err))
 			continue
 		}
-		for name, v := range ov[a.EnvID] {
+		for name, v := range ov[id] {
 			if _, ok := vals[name]; ok {
 				vals[name] = v
 			}
 		}
-		for name, v := range vals {
-			out[name] = v
-		}
+		out = append(out, source{env: env, vals: vals})
 	}
-	return out, skipped
+	return out
 }

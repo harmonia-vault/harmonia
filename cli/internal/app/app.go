@@ -136,7 +136,7 @@ func (a *App) Effective() (map[string]string, []string, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	vars, skipped := vault.Merge(cache, a.Keys, a.Config.Activations, ov, nowMs())
+	vars, skipped := vault.Merge(cache, a.Keys, vault.ActiveIDs(cache), ov, nowMs())
 	return vars, skipped, nil
 }
 
@@ -159,42 +159,14 @@ func (a *App) writeEnvLocked(cache *state.Cache) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	// 每次都从磁盘读取激活列表：后台服务与命令行可能同时修改。
-	cfg, err := a.Dir.Config()
-	if err != nil {
-		return false, err
-	}
-	a.Config = cfg
 	if a.Keys == nil {
 		return false, nil
 	}
-	vars, _ := vault.Merge(cache, a.Keys, cfg.Activations, ov, nowMs())
+	vars, _ := vault.Merge(cache, a.Keys, vault.ActiveIDs(cache), ov, nowMs())
 	data := shell.Render(vars)
 	old, _ := os.ReadFile(a.Dir.EnvFile())
 	if bytes.Equal(old, data) {
 		return false, nil
 	}
 	return true, state.WriteAtomic(a.Dir.EnvFile(), data)
-}
-
-// UpdateConfig 在锁内修改配置并刷新 env.sh。
-func (a *App) UpdateConfig(fn func(c *state.Config) error) error {
-	unlock, err := a.Dir.Lock()
-	if err != nil {
-		return err
-	}
-	cfg, err := a.Dir.Config()
-	if err == nil {
-		err = fn(cfg)
-	}
-	if err == nil {
-		err = a.Dir.SaveConfig(cfg)
-	}
-	unlock()
-	if err != nil {
-		return err
-	}
-	a.Config = cfg
-	_, err = a.RefreshEnvFile()
-	return err
 }

@@ -129,6 +129,11 @@ const MIGRATIONS: string[][] = [
     `CREATE TABLE pairing_blocks (ip TEXT PRIMARY KEY, until INTEGER NOT NULL)`,
   ],
   [`ALTER TABLE pairings ADD COLUMN can_manage INTEGER NOT NULL DEFAULT 0`],
+  [
+    `ALTER TABLE grants ADD COLUMN active INTEGER NOT NULL DEFAULT 1`,
+    `ALTER TABLE grants ADD COLUMN position INTEGER NOT NULL DEFAULT 0`,
+    `UPDATE grants SET position = (SELECT COUNT(*) FROM grants g WHERE g.device_id = grants.device_id AND g.rowid < grants.rowid)`,
+  ],
 ];
 
 export function migrate(sql: Sql): void {

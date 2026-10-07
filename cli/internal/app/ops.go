@@ -11,7 +11,6 @@ import (
 
 	"github.com/harmonia-vault/harmonia/cli/internal/api"
 	hc "github.com/harmonia-vault/harmonia/cli/internal/crypto"
-	"github.com/harmonia-vault/harmonia/cli/internal/state"
 	"github.com/harmonia-vault/harmonia/cli/internal/vault"
 )
 
@@ -99,39 +98,84 @@ func (a *App) DeleteVariable(ctx context.Context, envNameOrID, name string) erro
 	return a.Sync(ctx)
 }
 
-// Activate 激活环境并设置优先级。
-func (a *App) Activate(nameOrID string, priority int) (*api.Environment, error) {
+// Activate、Deactivate 与 Order 修改本机的激活状态和顺序：先同步取得最新授权，
+// 提交到服务端（需要联网），再同步一次让 env.sh 生效。
+func (a *App) Activate(ctx context.Context, nameOrID string) (*api.Environment, error) {
+	return a.setActive(ctx, nameOrID, true)
+}
+
+func (a *App) Deactivate(ctx context.Context, nameOrID string) (*api.Environment, error) {
+	return a.setActive(ctx, nameOrID, false)
+}
+
+func (a *App) setActive(ctx context.Context, nameOrID string, active bool) (*api.Environment, error) {
+	if err := a.Sync(ctx); err != nil {
+		return nil, err
+	}
 	env, err := a.Env(nameOrID)
 	if err != nil {
 		return nil, err
 	}
-	return env, a.UpdateConfig(func(c *state.Config) error {
-		for i := range c.Activations {
-			if c.Activations[i].EnvID == env.ID {
-				c.Activations[i].Priority = priority
-				return nil
+	return env, a.submitActivation(ctx, func(envs []api.Environment) []api.Environment {
+		for i := range envs {
+			if envs[i].ID == env.ID {
+				envs[i].Active = active
 			}
 		}
-		c.Activations = append(c.Activations, state.Activation{EnvID: env.ID, Priority: priority})
-		return nil
+		return envs
 	})
 }
 
-func (a *App) Deactivate(nameOrID string) (*api.Environment, error) {
-	env, err := a.Env(nameOrID)
-	if err != nil {
-		return nil, err
+// Order 把给定的环境按顺序移到最前面，其余环境保持原有顺序。
+func (a *App) Order(ctx context.Context, namesOrIDs []string) error {
+	if err := a.Sync(ctx); err != nil {
+		return err
 	}
-	return env, a.UpdateConfig(func(c *state.Config) error {
-		out := c.Activations[:0]
-		for _, x := range c.Activations {
-			if x.EnvID != env.ID {
-				out = append(out, x)
+	first := make([]*api.Environment, 0, len(namesOrIDs))
+	seen := map[string]bool{}
+	for _, n := range namesOrIDs {
+		env, err := a.Env(n)
+		if err != nil {
+			return err
+		}
+		if seen[env.ID] {
+			return fmt.Errorf("环境“%s”重复出现", env.Name)
+		}
+		seen[env.ID] = true
+		first = append(first, env)
+	}
+	return a.submitActivation(ctx, func(envs []api.Environment) []api.Environment {
+		out := make([]api.Environment, 0, len(envs))
+		for _, f := range first {
+			for _, e := range envs {
+				if e.ID == f.ID {
+					out = append(out, e)
+				}
 			}
 		}
-		c.Activations = out
-		return nil
+		for _, e := range envs {
+			if !seen[e.ID] {
+				out = append(out, e)
+			}
+		}
+		return out
 	})
+}
+
+func (a *App) submitActivation(ctx context.Context, change func([]api.Environment) []api.Environment) error {
+	cache, err := a.Dir.Cache()
+	if err != nil {
+		return err
+	}
+	envs := change(vault.Ordered(cache))
+	items := make([]api.ActivationItem, len(envs))
+	for i, e := range envs {
+		items[i] = api.ActivationItem{EnvID: e.ID, Active: e.Active}
+	}
+	if err := a.Client.SetActivation(ctx, items); err != nil {
+		return a.HandleRevoked(err)
+	}
+	return a.Sync(ctx)
 }
 
 // SetOverride 为已存在的云端变量设置仅本机生效的值；value=nil 表示移除。

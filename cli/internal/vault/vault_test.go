@@ -47,7 +47,7 @@ func TestApplyMergeOverride(t *testing.T) {
 	if err := Apply(f.cache, s, 0, hc.B64(f.root.Pub), f.dev.ID); err != nil {
 		t.Fatal(err)
 	}
-	acts := []state.Activation{{EnvID: "high", Priority: 10}, {EnvID: "low", Priority: 1}}
+	acts := []string{"high", "low"}
 	ov := state.Overrides{"low": {"B": "local-b", "NOT_IN_CLOUD": "x"}, "high": {"A": "local-a"}}
 	got, skipped := Merge(f.cache, f.dev, acts, ov, 0)
 	want := map[string]string{"A": "local-a", "B": "local-b", "C": "high-c"}
@@ -83,12 +83,40 @@ func TestApplyMergeOverride(t *testing.T) {
 	}
 }
 
+func TestActiveOrderAndConflicts(t *testing.T) {
+	f := newFixture(t)
+	s := f.sync(t, 0, map[string]map[string]string{
+		"a": {"K": "from-a", "ONLY_A": "1"},
+		"b": {"K": "from-b"},
+		"c": {"K": "from-c"},
+	})
+	if err := Apply(f.cache, s, 0, hc.B64(f.root.Pub), f.dev.ID); err != nil {
+		t.Fatal(err)
+	}
+	pos := map[string]int{"b": 0, "a": 1, "c": 2}
+	for i := range f.cache.Environments {
+		e := &f.cache.Environments[i]
+		e.Position, e.Active = pos[e.ID], e.ID != "c"
+	}
+	ids := ActiveIDs(f.cache)
+	if len(ids) != 2 || ids[0] != "b" || ids[1] != "a" {
+		t.Fatalf("active ids: %v", ids)
+	}
+	if got, _ := Merge(f.cache, f.dev, ids, nil, 0); got["K"] != "from-b" || got["ONLY_A"] != "1" {
+		t.Fatalf("merge: %v", got)
+	}
+	cs := Conflicts(f.cache, f.dev, ids, 0)
+	if len(cs) != 1 || cs[0].Name != "K" || len(cs[0].Envs) != 2 || cs[0].Envs[0] != "b" {
+		t.Fatalf("conflicts: %+v", cs)
+	}
+}
+
 func TestExpiredEnvironmentSkippedOffline(t *testing.T) {
 	f := newFixture(t)
 	s := f.sync(t, 0, map[string]map[string]string{"e": {"K": "v"}})
 	s.Environments[0].ExpiresAt = 1000
 	Apply(f.cache, s, 0, hc.B64(f.root.Pub), f.dev.ID)
-	acts := []state.Activation{{EnvID: "e"}}
+	acts := []string{"e"}
 	if got, _ := Merge(f.cache, f.dev, acts, nil, 999); got["K"] != "v" {
 		t.Error("should be valid before expiry")
 	}

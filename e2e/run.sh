@@ -93,8 +93,7 @@ manager phone approve "$CODE" OpenAI:rw >/dev/null
 wait $LOGIN_PID || { cat "$TMP/login.err"; fail "CLI 登录失败"; }
 grep -q "可以访问 1 个环境" "$TMP/login.out" || fail "配对后环境数量不对"
 
-step "J4 激活环境并通过 exec 使用"
-cli env activate OpenAI --priority 10 >/dev/null
+step "J4 授权的环境默认启用，通过 exec 使用"
 expect_eq "$(cli exec -- printenv OPENAI_API_KEY 2>/dev/null)" "sk-first 'quoted' \$(no)" "exec 注入"
 expect_eq "$(bash -c ". '$TMP/cli/env.sh'; printf %s \"\$OPENAI_API_KEY\"")" "sk-first 'quoted' \$(no)" "env.sh 内容"
 
@@ -120,6 +119,31 @@ expect_eq "$(cli exec -- printenv FROM_CLI 2>/dev/null)" "local-only" "本地覆
 expect_eq "$(manager phone var-get OpenAI FROM_CLI)" "written-by-cli" "云端值不受本地覆盖影响"
 cli var rm OpenAI FROM_CLI >/dev/null
 expect_eq "$(cli exec -- sh -c 'printf %s "${FROM_CLI-unset}"' 2>/dev/null)" "unset" "云端删除后覆盖失效"
+
+step "J4 激活与顺序：手机和电脑两边修改，env.sh 随之变化"
+wait_env() {
+  START=$(date +%s)
+  until [ "$(bash -c ". '$TMP/cli/env.sh'; printf %s \"\$OPENAI_API_KEY\"")" == "$1" ]; do
+    [ $(( $(date +%s) - START )) -le 5 ] || fail "$2：5 秒内 env.sh 没有变为 [$1]"
+    sleep 0.2
+  done
+}
+manager phone var-set Other OPENAI_API_KEY "from-other" >/dev/null
+manager phone grants e2e-laptop OpenAI:rw Other:ro >/dev/null
+cli sync >/dev/null
+wait_env "sk-second" "新授权的环境默认启用并排在最后"
+manager phone activation e2e-laptop Other OpenAI >/dev/null
+wait_env "from-other" "手机把 Other 移到最前"
+manager phone activation e2e-laptop Other:off OpenAI >/dev/null
+wait_env "sk-second" "手机停用 Other"
+cli env activate Other >/dev/null
+wait_env "from-other" "电脑重新启用 Other"
+cli env order OpenAI >/dev/null
+wait_env "sk-second" "电脑把 OpenAI 移到最前"
+cli env list | grep -q "OPENAI_API_KEY：使用“OpenAI”中的值（同时出现在“Other”）" || fail "env list 没有显示同名变量来源"
+expect_eq "$(manager phone devices | grep e2e-laptop | cut -f3)" "OpenAI:rw,Other:ro" "手机看到电脑上的顺序"
+cli env deactivate Other >/dev/null
+expect_eq "$(manager phone devices | grep e2e-laptop | cut -f3)" "OpenAI:rw,Other:ro:off" "手机看到电脑停用的环境"
 
 step "J7 降为只读后写入被拒绝；未授权环境不可见"
 manager phone grants e2e-laptop OpenAI:ro >/dev/null

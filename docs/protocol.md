@@ -179,7 +179,8 @@ PIN 槽（必有）：
 | `DELETE /environments/{id}` | 管理设备或该环境的 admin | 删除环境和其中全部变量 |
 | `PUT /environments/{id}/variables/{name}` | rw、admin 或管理设备 | `{value, keyVersion}`，请求头带 `Idempotency-Key` |
 | `DELETE /environments/{id}/variables/{name}` | 同上 | 请求头带 `Idempotency-Key` |
-| `PUT /devices/{id}/grants` | 管理设备 | `{grants:[{envId, role, expiresAt}], envelopes:[{envId, keyVersion, sealed, sig}]}`，整体替换；新授权的环境必须附带封装 |
+| `PUT /devices/{id}/grants` | 管理设备 | `{grants:[{envId, role, expiresAt}], envelopes:[{envId, keyVersion, sealed, sig}]}`，整体替换；新授权的环境必须附带封装。已有授权保留激活状态和顺序，新授权默认激活并排在最后 |
+| `PUT /devices/{id}/activation` | 管理设备；或设备本身，此时 `{id}` 为 `self` | `{envs:[{envId, active}]}`，按顺序从前到后排列（排在前面的覆盖后面的同名变量），必须包含该设备全部未到期的授权环境（可以带上已到期的），不能有未授权的环境，否则返回 `conflict`；没有列出的已到期授权保持原有相对顺序，排在后面。只修改激活状态和顺序 |
 | `PATCH /devices/{id}` | 管理设备 | `{name}` |
 | `POST /devices/{id}/revoke` | 管理设备 | 撤销。不能撤销最后一台管理设备 |
 | `POST /devices/self/revoke` | device | 本机退出。最后一台管理设备需要带上 `{confirmLast:true}` |
@@ -226,13 +227,13 @@ PIN 槽（必有）：
 {
   "seq": 42,
   "self": {"id": "...", "kind": "client", "name": "...", "rotationRequired": false},
-  "environments": [{"id": "...", "name": "...", "keyVersion": "1", "role": "rw", "expiresAt": 0}],
+  "environments": [{"id": "...", "name": "...", "keyVersion": "1", "role": "rw", "expiresAt": 0, "active": true, "position": 0}],
   "envelopes": [{"envId": "...", "keyVersion": "1", "sealed": "...", "sig": "..."}],
   "variables": [{"envId": "...", "name": "K", "value": "<密文>", "keyVersion": "1", "deleted": false, "seq": 40}],
   "manager": {
     "rootSealed": "...",
     "recovery": {"generation": "1", "boxPub": "..."},
-    "devices": [{"id": "...", "name": "...", "platform": "...", "kind": "...", "signPub": "...", "boxPub": "...", "cert": "...", "createdAt": 0, "lastSeenAt": 0, "grants": [{"envId": "...", "role": "...", "expiresAt": 0}]}]
+    "devices": [{"id": "...", "name": "...", "platform": "...", "kind": "...", "signPub": "...", "boxPub": "...", "cert": "...", "createdAt": 0, "lastSeenAt": 0, "grants": [{"envId": "...", "role": "...", "expiresAt": 0, "active": true, "position": 0}]}]
   }
 }
 ```
@@ -240,6 +241,7 @@ PIN 槽（必有）：
 - `environments` 和 `envelopes` 每次都返回当前可访问的**完整列表**。客户端据此清除不在列表中的环境。
 - `variables` 只返回增量：所在环境可见，并且满足 `seq > N`，或者本设备对该环境的授权是在 N 之后获得的。
 - `manager` 字段只返回给管理设备。管理设备的 `role` 恒为 `admin`。
+- `active` 和 `position` 是授权上的激活状态和顺序，`position` 从 0 开始，越小越靠前。管理设备的 `environments` 中 `active` 恒为 true，`position` 按环境创建先后排列。
 
 ### 3.5 推送
 
@@ -343,5 +345,6 @@ PIN 槽（必有）：
 - **权限**：ro 只读；rw 可写变量；admin 在 rw 之外可改名、删除环境；管理设备拥有全部权限，并且是唯一能批准设备、修改授权、撤销设备、轮换恢复码的角色。
 - **写入**：同一变量按服务器接受顺序，后写覆盖先写。客户端不做乐观更新，以同步结果为准。
 - **到期**：服务器拒绝已到期的授权；客户端离线时同样停用到期的环境。
+- **激活**：激活状态和顺序只决定设备把哪些环境写入本机环境变量、同名变量由哪个环境提供，不是安全边界；设备能读取什么只由授权决定。新授权默认激活并排在最后。
 - **撤销**：服务器删除该设备的授权、封装和会话，推送 `revoked`；客户端收到 `revoked` 推送或 `device_revoked` 错误后，清除本地全部数据。
 - **限流与风控**：按网络和来源分开计数，不锁定账号，见 3.8。

@@ -28,16 +28,19 @@ type VarRow = { env_id: string; name: string; value: string; key_version: number
 const MAX_VALUE_B64 = Math.ceil(((65536 + 40) * 4) / 3);
 
 /** 设备当前可访问的环境（含权限与到期时间）。 */
-function accessible(deps: Deps, d: Device): (EnvRow & { role: Role; expires_at: number; grant_seq: number })[] {
+type AccessibleEnv = EnvRow & { role: Role; expires_at: number; grant_seq: number; active: number; position: number };
+
+/** 设备当前可访问的环境，按激活顺序排列；管理设备可访问全部环境，恒为激活。 */
+function accessible(deps: Deps, d: Device): AccessibleEnv[] {
   if (d.kind === "manager") {
     return deps.sql
       .all<EnvRow>(`SELECT id, name, key_version FROM environments ORDER BY created_at`)
-      .map((e) => ({ ...e, role: "admin" as Role, expires_at: 0, grant_seq: 0 }));
+      .map((e, i) => ({ ...e, role: "admin" as Role, expires_at: 0, grant_seq: 0, active: 1, position: i }));
   }
   return deps.sql.all(
-    `SELECT e.id, e.name, e.key_version, g.role, g.expires_at, g.seq AS grant_seq
+    `SELECT e.id, e.name, e.key_version, g.role, g.expires_at, g.seq AS grant_seq, g.active, g.position
      FROM grants g JOIN environments e ON e.id = g.env_id
-     WHERE g.device_id = ? AND (g.expires_at = 0 OR g.expires_at > ?) ORDER BY e.created_at`,
+     WHERE g.device_id = ? AND (g.expires_at = 0 OR g.expires_at > ?) ORDER BY g.position`,
     d.id,
     deps.now(),
   );
@@ -130,6 +133,8 @@ export function dataRoutes(app: Hono, deps: Deps) {
         keyVersion: String(e.key_version),
         role: e.role,
         expiresAt: e.expires_at,
+        active: e.active === 1,
+        position: e.position,
       })),
       envelopes: envelopes.map((e) => ({ envId: e.env_id, keyVersion: String(e.key_version), sealed: e.sealed, sig: e.sig })),
       variables: vars
@@ -146,8 +151,8 @@ export function dataRoutes(app: Hono, deps: Deps) {
     if (d.kind === "manager") {
       const a = requireInitialized(sql);
       const devices = sql.all<Device>(`SELECT * FROM devices WHERE status = 'active' ORDER BY created_at`);
-      const grants = sql.all<{ device_id: string; env_id: string; role: string; expires_at: number }>(
-        `SELECT device_id, env_id, role, expires_at FROM grants`,
+      const grants = sql.all<{ device_id: string; env_id: string; role: string; expires_at: number; active: number; position: number }>(
+        `SELECT device_id, env_id, role, expires_at, active, position FROM grants ORDER BY position`,
       );
       out.manager = {
         rootSealed: d.root_sealed,
@@ -164,7 +169,7 @@ export function dataRoutes(app: Hono, deps: Deps) {
           lastSeenAt: x.last_seen_at,
           grants: grants
             .filter((g) => g.device_id === x.id)
-            .map((g) => ({ envId: g.env_id, role: g.role, expiresAt: g.expires_at })),
+            .map((g) => ({ envId: g.env_id, role: g.role, expiresAt: g.expires_at, active: g.active === 1, position: g.position })),
         })),
       };
     }

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 
 import '../app/controller.dart';
 import '../core/models.dart';
+import '../core/vault.dart';
+import 'activation.dart';
 import 'environments.dart' show askName;
 import 'lock.dart';
 import 'pairing.dart';
@@ -295,6 +297,7 @@ class _DevicePageState extends State<DevicePage> {
             ),
           const SizedBox(height: Space.lg),
           FilledButton(onPressed: _dirty ? () => _save(d) : null, child: const Text('保存权限')),
+          if (d.grants.isNotEmpty) ActivationEditor(c: c, device: d),
         ] else
           const Padding(
             padding: EdgeInsets.only(top: Space.lg),

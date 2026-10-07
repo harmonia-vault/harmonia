@@ -19,7 +19,6 @@ import (
 	"github.com/harmonia-vault/harmonia/cli/internal/daemon"
 	"github.com/harmonia-vault/harmonia/cli/internal/service"
 	"github.com/harmonia-vault/harmonia/cli/internal/shell"
-	"github.com/harmonia-vault/harmonia/cli/internal/state"
 	"github.com/harmonia-vault/harmonia/cli/internal/vault"
 )
 
@@ -39,7 +38,9 @@ func (terminalPrompt) ShowPairing(qr, code string, expiresAt time.Time) {
 	fmt.Fprintf(os.Stderr, "请确认手机上显示的设备名称与本机一致。配对请求 %s 前有效。\n", expiresAt.Format("15:04"))
 }
 
-func (terminalPrompt) Waiting() { fmt.Fprintln(os.Stderr, "\n正在等待管理设备批准……（按 Ctrl+C 取消）") }
+func (terminalPrompt) Waiting() {
+	fmt.Fprintln(os.Stderr, "\n正在等待管理设备批准……（按 Ctrl+C 取消）")
+}
 
 func cmdLogin(ctx context.Context, args []string) error {
 	f, err := parseFlags(args, "email", "name")
@@ -86,8 +87,7 @@ func cmdLogin(ctx context.Context, args []string) error {
 	}
 	fmt.Printf("\n已接入账号，这台设备可以访问 %d 个环境。\n", n)
 	fmt.Println("接下来：")
-	fmt.Println("  harmonia env list                     查看环境")
-	fmt.Println("  harmonia env activate <环境>           在本机启用")
+	fmt.Println("  harmonia env list                     查看环境（授权的环境默认已启用）")
 	if !shellInstalledAny(a.Dir) {
 		fmt.Println("  harmonia shell install                新开的终端自动带上变量")
 	}
@@ -157,17 +157,20 @@ func printEnvs(a *app.App) error {
 		fmt.Println("这台设备还没有任何环境的访问权限。可以在管理设备上为它授权。")
 		return nil
 	}
-	active := map[string]int{}
-	for _, x := range a.Config.Activations {
-		active[x.EnvID] = x.Priority
-	}
-	fmt.Println("环境：")
-	for _, e := range cache.Environments {
+	envs := vault.Ordered(cache)
+	fmt.Println("环境（按顺序排列，同名变量由排在前面的环境提供）：")
+	for i, e := range envs {
 		state := "未启用"
-		if p, ok := active[e.ID]; ok {
-			state = fmt.Sprintf("已启用（优先级 %d）", p)
+		if e.Active {
+			state = "已启用"
 		}
-		fmt.Printf("  %-20s %-4s %-6s %-22s %s\n", e.Name, roleNames[e.Role], fmt.Sprintf("%d 个变量", len(cache.Variables[e.ID])), expiry(e.ExpiresAt), state)
+		fmt.Printf("  %d. %-20s %-4s %-6s %-22s %s\n", i+1, e.Name, roleNames[e.Role], fmt.Sprintf("%d 个变量", len(cache.Variables[e.ID])), expiry(e.ExpiresAt), state)
+	}
+	if cs := vault.Conflicts(cache, a.Keys, vault.ActiveIDs(cache), time.Now().UnixMilli()); len(cs) > 0 {
+		fmt.Println("\n同名变量：")
+		for _, c := range cs {
+			fmt.Printf("  %s：使用“%s”中的值（同时出现在“%s”）\n", c.Name, c.Envs[0], strings.Join(c.Envs[1:], "”“"))
+		}
 	}
 	return nil
 }
@@ -185,7 +188,7 @@ func cmdSync(ctx context.Context, args []string) error {
 }
 
 func cmdEnv(ctx context.Context, args []string) error {
-	f, err := parseFlags(args, "priority")
+	f, err := parseFlags(args)
 	if err != nil {
 		return err
 	}
@@ -196,37 +199,36 @@ func cmdEnv(ctx context.Context, args []string) error {
 	if len(f.args) == 0 || f.args[0] == "list" {
 		return printEnvs(a)
 	}
-	if len(f.args) != 2 {
-		return errors.New("用法：harmonia env activate|deactivate <环境>")
+	usage := errors.New("用法：harmonia env list | activate <环境> | deactivate <环境> | order <环境>...")
+	if len(f.args) < 2 || (f.args[0] != "order" && len(f.args) != 2) {
+		return usage
 	}
 	switch f.args[0] {
 	case "activate":
-		p := 0
-		if v, ok := f.values["priority"]; ok {
-			if p, err = strconv.Atoi(v); err != nil {
-				return errors.New("优先级必须是整数")
-			}
-		}
-		env, err := a.Activate(f.args[1], p)
+		env, err := a.Activate(ctx, f.args[1])
 		if err != nil {
 			return err
 		}
-		fmt.Printf("已在本机启用环境“%s”（优先级 %d）。新开的终端或 harmonia exec 会带上其中的变量。\n", env.Name, p)
+		fmt.Printf("已启用环境“%s”。新开的终端或 harmonia exec 会带上其中的变量。\n", env.Name)
 		if !shellInstalledAny(a.Dir) {
 			fmt.Println("提示：还没有安装 shell 集成，运行 harmonia shell install 让新终端自动加载。")
 		}
 	case "deactivate":
-		env, err := a.Deactivate(f.args[1])
+		env, err := a.Deactivate(ctx, f.args[1])
 		if err != nil {
 			return err
 		}
-		fmt.Printf("已在本机停用环境“%s”。新开的终端将不再带上其中的变量。\n", env.Name)
+		fmt.Printf("已停用环境“%s”。新开的终端将不再带上其中的变量。\n", env.Name)
+	case "order":
+		if err := a.Order(ctx, f.args[1:]); err != nil {
+			return err
+		}
+		return printEnvs(a)
 	default:
-		return fmt.Errorf("未知操作：%s", f.args[0])
+		return usage
 	}
 	return nil
 }
-
 func cmdVar(ctx context.Context, args []string) error {
 	f, err := parseFlags(args, "env")
 	if err != nil {
@@ -435,21 +437,21 @@ func effective(ctx context.Context, a *app.App, envs string) (map[string]string,
 	}
 	cancel()
 	if envs != "" {
-		var acts []state.Activation
-		for i, name := range strings.Split(envs, ",") {
+		// 按列出的顺序合并，同名变量由排在前面的环境提供。
+		var ids []string
+		for _, name := range strings.Split(envs, ",") {
 			e, err := a.Env(strings.TrimSpace(name))
 			if err != nil {
 				return nil, err
 			}
-			acts = append(acts, state.Activation{EnvID: e.ID, Priority: i})
+			ids = append(ids, e.ID)
 		}
-		a.Config.Activations = acts
 		cache, err := a.Dir.Cache()
 		if err != nil {
 			return nil, err
 		}
 		ov, _ := a.Dir.Overrides()
-		vars, skipped := vault.Merge(cache, a.Keys, acts, ov, time.Now().UnixMilli())
+		vars, skipped := vault.Merge(cache, a.Keys, ids, ov, time.Now().UnixMilli())
 		for _, s := range skipped {
 			fmt.Fprintln(os.Stderr, "harmonia：", s)
 		}

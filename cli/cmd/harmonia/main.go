@@ -24,9 +24,10 @@ const usage = `Harmonia（和弦）：在手机上管理环境变量，同步到
   harmonia status                         查看接入状态、环境和后台服务
   harmonia sync                           立即同步
 
-  harmonia env list                       列出可访问的环境
-  harmonia env activate <环境> [--priority N]  在本机启用环境（数值大的优先）
-  harmonia env deactivate <环境>          在本机停用环境
+  harmonia env list                       列出可访问的环境、顺序和同名变量
+  harmonia env activate <环境>            启用环境（新授权的环境默认已启用）
+  harmonia env deactivate <环境>          停用环境
+  harmonia env order <环境>...            把这些环境按给定顺序移到最前面（同名变量由靠前的提供）
 
   harmonia var list [--env 环境] [--show]  列出变量（默认隐藏值）
   harmonia var set <环境> <变量名> [值]     写入变量（不给值时交互输入）
@@ -37,7 +38,7 @@ const usage = `Harmonia（和弦）：在手机上管理环境变量，同步到
   harmonia override rm <环境> <变量名>
   harmonia override list
 
-  harmonia exec [--env a,b] -- <命令...>   带上变量运行命令
+  harmonia exec [--env a,b] -- <命令...>   带上变量运行命令（--env 按列出顺序，靠前的优先）
   harmonia export [--format sh|dotenv|json]  输出当前生效的变量
 
   harmonia shell install|uninstall [--shell zsh|bash]  在 shell 启动文件中加载变量

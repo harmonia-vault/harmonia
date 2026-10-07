@@ -83,13 +83,24 @@ Future<void> main(List<String> argv) async {
         for (final g in args.sublist(1)) Grant(envId(g.split(':')[0]), g.split(':')[1], 0),
       ]);
       print('ok');
+    case 'activation':
+      // 按给定顺序设置某台设备的激活状态，环境名后加 :off 表示停用。
+      final v = await loaded();
+      final d = device(args[0]);
+      final byEnv = {for (final g in d.grants) g.envId: g};
+      await v.setActivation(d.id, [
+        for (final a in args.sublist(1)) byEnv[envId(a.split(':')[0])]!.copyWith(active: !a.endsWith(':off')),
+      ]);
+      print('ok');
     case 'revoke':
       final v = await loaded();
       await v.revokeDevice(device(args[0]).id);
       print('ok');
     case 'devices':
-      for (final d in (await loaded()).devices) {
-        print('${d.name}\t${d.kind}\t${d.grants.map((g) => '${g.envId}:${g.role}').join(',')}');
+      final v = await loaded();
+      for (final d in v.devices) {
+        final grants = d.grants.map((g) => '${v.environment(g.envId).name}:${g.role}${g.active ? '' : ':off'}');
+        print('${d.name}\t${d.kind}\t${grants.join(',')}');
       }
     case 'pair':
       // 作为新的管理设备发起配对，等待管理设备批准。

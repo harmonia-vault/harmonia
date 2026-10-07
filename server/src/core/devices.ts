@@ -3,8 +3,8 @@ import type { Hono } from "hono";
 import { bump, headSeq, one, type Sql } from "./db";
 import { readJson, requireDevice, requireInitialized, type Deps, type Device } from "./context";
 import { checkKeyVersions, insertEnvelopes, parseEnvelopes } from "./keys";
-import { parseGrants, writeGrants } from "./grants";
-import { bad, conflict, id, label, notFound } from "./util";
+import { parseGrants, writeActivation, writeGrants } from "./grants";
+import { bad, conflict, forbidden, id, label, notFound } from "./util";
 
 function target(sql: Sql, deviceId: string): Device {
   const d = one<Device>(sql, `SELECT * FROM devices WHERE id = ? AND status = 'active'`, deviceId);
@@ -59,6 +59,22 @@ export function deviceRoutes(app: Hono, deps: Deps) {
       insertEnvelopes(sql, envelopes);
       const seq = bump(sql);
       writeGrants(sql, t.id, grants, seq);
+    });
+    deps.notifier.send("all", { type: "changed", seq: headSeq(sql) });
+    return c.json({ ok: true });
+  });
+
+  // 激活状态和顺序：管理设备可以修改任何设备，设备本身用 self 修改自己（docs/protocol.md 3.2）。
+  app.put("/api/v1/devices/:id/activation", async (c) => {
+    const d = await requireDevice(c, deps);
+    const param = c.req.param("id");
+    if (param !== "self" && d.kind !== "manager") throw forbidden("只有管理设备可以修改其他设备。");
+    const t = param === "self" ? d : target(sql, id(param, "设备 ID"));
+    if (t.kind !== "client") throw bad("管理设备可以访问全部环境，没有激活设置。");
+    const body = await readJson(c);
+    sql.transaction(() => {
+      writeActivation(sql, t.id, body.envs, deps.now());
+      bump(sql);
     });
     deps.notifier.send("all", { type: "changed", seq: headSeq(sql) });
     return c.json({ ok: true });

@@ -45,6 +45,15 @@ type Environment struct {
 	KeyVersion string `json:"keyVersion"`
 	Role       string `json:"role"`
 	ExpiresAt  int64  `json:"expiresAt"`
+	// Active 与 Position 是授权上的激活状态和顺序（越小越靠前，同名变量由靠前的环境提供）。
+	Active   bool `json:"active"`
+	Position int  `json:"position"`
+}
+
+// ActivationItem 是提交激活状态时的一项，整个列表按顺序排列。
+type ActivationItem struct {
+	EnvID  string `json:"envId"`
+	Active bool   `json:"active"`
 }
 
 type Envelope struct {
@@ -114,6 +123,11 @@ func (c *Client) PairingStatus(ctx context.Context, id, secret string) (string, 
 	var out struct{ Status string }
 	err := c.do(ctx, "GET", "/api/v1/pairings/"+id+"/status", nil, &out, reqOpts{headers: map[string]string{"x-pairing-secret": secret}})
 	return out.Status, err
+}
+
+// SetActivation 按顺序提交本机全部授权环境的激活状态。
+func (c *Client) SetActivation(ctx context.Context, envs []ActivationItem) error {
+	return c.Device(ctx, "PUT", "/api/v1/devices/self/activation", map[string]any{"envs": envs}, nil, nil)
 }
 
 func (c *Client) Sync(ctx context.Context, since int64) (*Sync, error) {

@@ -44,21 +44,17 @@ harmonia login https://你的服务器地址
 
 安装过程中会询问是否安装 shell 集成（新开的终端自动带上变量）和后台服务（实时同步，开机自动运行），直接回车即安装。跳过的话，之后可以运行 `harmonia shell install` 和 `harmonia service install`。
 
-终端会显示二维码。在 App 中打开“设备 → 添加设备”扫码，选择这台电脑可以访问的环境和权限，批准。
+终端会显示二维码。在 App 中打开“设备 → 添加设备”扫码，选择这台电脑可以访问的环境和权限，批准。授权的环境默认已启用，新开的终端就能拿到变量。
 
-```bash
-harmonia env activate OpenAI          # 在本机启用环境
-```
-
-之后在手机上修改变量，电脑上新开的终端会拿到新值。
+之后在手机上修改变量，电脑上新开的终端会拿到新值。在 App 的“设备详情”里可以开关某个环境、拖动调整顺序。
 
 ## 常用命令
 
 ```text
 harmonia status                       查看接入状态、环境、后台服务
-harmonia env list                     列出可访问的环境
-harmonia env activate <环境> --priority 10
-                                      启用多个环境时，同名变量以优先级数值大的为准
+harmonia env list                     列出可访问的环境、顺序和同名变量
+harmonia env deactivate <环境>        停用环境（activate 重新启用）
+harmonia env order <环境>...          调整顺序：同名变量由排在前面的环境提供
 harmonia exec -- <命令>               只给这个命令注入变量
 harmonia exec --env OpenAI,Other -- <命令>
 harmonia export --format dotenv       输出当前生效的变量

@@ -1,5 +1,6 @@
 // 测试工具：node:sqlite 存储、内存路由后端，以及模拟客户端的签名操作。
 import { DatabaseSync } from "node:sqlite";
+import { expect } from "vitest";
 import { createAccountApp } from "../src/core/app";
 import type { Deps, PairingResult, PairingWaiters, PushMessage, PushTarget } from "../src/core/context";
 import { migrate, wipe, type Param, type Sql } from "../src/core/db";
@@ -269,6 +270,32 @@ export async function waitApproval(s: TestServer, a: TestAccount, req: Record<st
   return s.call("GET", `/api/v1/pairings/${req.id}/events`, {
     headers: { "x-harmonia-account": a.accountId, "x-pairing-secret": req.secret, upgrade: "websocket" },
   });
+}
+
+/** 电脑发起配对并由手机以指定授权批准。 */
+export async function pairClient(s: TestServer, a: TestAccount, grants: { envId: string; role: string; expiresAt?: number }[]) {
+  const cli = await FakeDevice.create();
+  const pw = await a.passwordLogin(s);
+  const req = await s.ok("POST", "/api/v1/pairings", {
+    token: pw.token,
+    body: { name: "笔记本", platform: "darwin", signPub: cli.sign.pub, boxPub: cli.boxPub, rootPub: a.root.pub, canManage: false },
+  });
+  cli.id = req.id;
+  await waitApproval(s, a, req);
+  const list = await s.ok("GET", "/api/v1/pairings", { token: a.phone.token });
+  expect(list.pairings.map((p: { id: string }) => p.id)).toContain(req.id);
+  const envelopes = [];
+  for (const g of grants) envelopes.push(await a.envelope(g.envId, cli.id));
+  await s.ok("POST", `/api/v1/pairings/${req.id}/approve`, {
+    token: a.phone.token,
+    body: { kind: "client", cert: await a.cert(cli, "client"), grants: grants.map((g) => ({ expiresAt: 0, ...g })), envelopes },
+  });
+  const st = await s.ok("GET", `/api/v1/pairings/${req.id}/status`, {
+    headers: { "x-harmonia-account": a.accountId, "x-pairing-secret": req.secret },
+  });
+  expect(st.status).toBe("approved");
+  await cli.login(s, a.accountId);
+  return cli;
 }
 
 export { canonical };

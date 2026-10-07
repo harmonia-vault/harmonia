@@ -13,20 +13,14 @@ import (
 	hc "github.com/harmonia-vault/harmonia/cli/internal/crypto"
 )
 
-type Activation struct {
-	EnvID    string `json:"envId"`
-	Priority int    `json:"priority"`
-}
-
 type Config struct {
-	Server      string       `json:"server"`
-	AccountID   string       `json:"accountId"`
-	Email       string       `json:"email"`
-	RootPub     string       `json:"rootPub"`
-	DeviceID    string       `json:"deviceId"`
-	DeviceName  string       `json:"deviceName"`
-	Activations []Activation `json:"activations"`
-	LastSync    int64        `json:"lastSync"`
+	Server     string `json:"server"`
+	AccountID  string `json:"accountId"`
+	Email      string `json:"email"`
+	RootPub    string `json:"rootPub"`
+	DeviceID   string `json:"deviceId"`
+	DeviceName string `json:"deviceName"`
+	LastSync   int64  `json:"lastSync"`
 }
 
 // Paired 表示本机已接入账号。
