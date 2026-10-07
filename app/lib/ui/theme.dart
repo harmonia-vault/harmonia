@@ -96,6 +96,8 @@ ThemeData buildTheme(Brightness brightness) {
       color: p.card,
       elevation: 0,
       margin: EdgeInsets.zero,
+      // 裁到圆角内，里面列表项的按压高亮才不会露出直角。
+      clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(18),
         side: BorderSide(color: p.line, width: 1.2),

@@ -341,21 +341,25 @@ class _ReviewPairingPageState extends State<ReviewPairingPage> {
         Text(widget.scanned ? '核对码' : '请确认设备上显示的核对码与下面完全一致：'),
         const SizedBox(height: Space.sm),
         CodeBox(code, copyable: false),
-        if (!widget.scanned)
-          CheckboxListTile(
-            value: _matched,
-            contentPadding: EdgeInsets.zero,
-            controlAffinity: ListTileControlAffinity.leading,
-            onChanged: (v) => setState(() => _matched = v ?? false),
-            title: const Text('核对码一致，这是我自己的设备'),
+        if (!widget.scanned) ...[
+          const SizedBox(height: Space.md),
+          Card(
+            child: CheckboxListTile(
+              value: _matched,
+              controlAffinity: ListTileControlAffinity.leading,
+              onChanged: (v) => setState(() => _matched = v ?? false),
+              title: const Text('核对码一致，这是我自己的设备'),
+            ),
           ),
+        ],
         const SizedBox(height: Space.md),
-        SwitchListTile(
-          value: _manager,
-          contentPadding: EdgeInsets.zero,
-          onChanged: (v) => setState(() => _manager = v),
-          title: const Text('作为管理手机'),
-          subtitle: const Text('管理手机可以访问全部环境，并能批准其他设备。只给你自己的手机开启。'),
+        Card(
+          child: SwitchListTile(
+            value: _manager,
+            onChanged: (v) => setState(() => _manager = v),
+            title: const Text('作为管理手机'),
+            subtitle: const Text('管理手机可以访问全部环境，并能批准其他设备。只给你自己的手机开启。'),
+          ),
         ),
         if (!_manager) ...[
           const SectionTitle('允许访问的环境'),

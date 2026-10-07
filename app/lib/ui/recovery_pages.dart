@@ -42,12 +42,13 @@ class _RecoveryCodeConfirmState extends State<RecoveryCodeConfirm> {
           warn: true,
         ),
         const SizedBox(height: Space.md),
-        CheckboxListTile(
-          value: _written,
-          onChanged: (v) => setState(() => _written = v ?? false),
-          controlAffinity: ListTileControlAffinity.leading,
-          contentPadding: EdgeInsets.zero,
-          title: const Text('我已经妥善保存了恢复码'),
+        Card(
+          child: CheckboxListTile(
+            value: _written,
+            onChanged: (v) => setState(() => _written = v ?? false),
+            controlAffinity: ListTileControlAffinity.leading,
+            title: const Text('我已经妥善保存了恢复码'),
+          ),
         ),
         const SizedBox(height: Space.lg),
         FilledButton(
@@ -143,7 +144,6 @@ class _Choice extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Card(
         child: InkWell(
-          borderRadius: BorderRadius.circular(18),
           onTap: onTap,
           child: Padding(
             padding: const EdgeInsets.all(Space.lg),
@@ -270,6 +270,7 @@ class _RotationPageState extends State<RotationPage> {
   late final Uint8List _code = widget.c.newRecoveryCode();
   final _password = TextEditingController();
   bool _changePassword = false;
+  bool _started = false;
 
   Future<void> _submit() async {
     final pw = _changePassword ? _password.text : null;
@@ -287,34 +288,81 @@ class _RotationPageState extends State<RotationPage> {
   }
 
   @override
-  Widget build(BuildContext context) => AuthScaffold(
+  Widget build(BuildContext context) => _started ? _codeStep() : _introStep();
+
+  /// 开始前的说明：新恢复码在核对提交前不会生效。
+  Widget _introStep() => AuthScaffold(
         title: '更换恢复码',
-        subtitle: widget.forced
-            ? '已用恢复码恢复访问。为了安全，旧恢复码需要作废，请保存下面的新恢复码。完成前无法管理设备或修改数据。'
-            : '生成新的恢复码。确认后旧恢复码立即失效。',
+        subtitle: widget.forced ? '恢复还差最后一步：换一个新的恢复码。保存并核对新恢复码后，恢复才算完成。' : '开始前请先了解：',
         onBack: widget.forced ? null : () => Navigator.pop(context),
         children: [
-          RecoveryCodeConfirm(
-            c: widget.c,
-            code: _code,
-            onConfirmed: _submit,
-            extra: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              SwitchListTile(
-                value: _changePassword,
-                contentPadding: EdgeInsets.zero,
-                onChanged: (v) => setState(() => _changePassword = v),
-                title: const Text('同时设置新的登录密码'),
-                subtitle: widget.forced ? const Text('如果忘记了原来的密码，可以在这里重新设置') : null,
-              ),
-              if (_changePassword)
-                TextField(
-                  autofillHints: const [AutofillHints.newPassword],
-                  controller: _password,
-                  obscureText: true,
-                  decoration: const InputDecoration(labelText: '新密码（至少 8 位）'),
-                ),
-            ]),
+          const _Point(Icons.edit_note_outlined, '准备好纸笔或密码管理器。新恢复码只显示这一次，服务器也没有副本。'),
+          const _Point(Icons.fact_check_outlined, '抄好后需要完整输入一遍，核对无误才能提交。'),
+          const _Point(Icons.key_outlined, '提交成功后旧恢复码才作废；在此之前旧恢复码仍然有效。'),
+          if (widget.forced) ...[
+            const _Point(Icons.block_outlined, '完成前无法管理设备或修改数据。'),
+            const _Point(Icons.replay_outlined, '中途退出也没关系，下次打开 Harmonia 会回到这里继续。'),
+            const _Point(Icons.password_outlined, '如果忘记了原来的登录密码，可以在这一步同时设置新密码。'),
+          ] else ...[
+            const _Point(Icons.undo_outlined, '提交前随时可以返回，不会有任何改变。'),
+            const _Point(Icons.fingerprint, '提交时需要再验证一次身份。'),
+          ],
+          const SizedBox(height: Space.lg),
+          FilledButton(
+            onPressed: () => setState(() => _started = true),
+            child: const Text('生成新恢复码'),
           ),
         ],
+      );
+
+  // 返回键和左上角箭头都回到说明页，而不是直接离开。
+  Widget _codeStep() => PopScope(
+        canPop: false,
+        child: AuthScaffold(
+          title: '保存新恢复码',
+          subtitle: '新恢复码还没有生效，旧恢复码仍然可用。保存并核对后提交，才会替换旧恢复码。',
+          onBack: () => setState(() => _started = false),
+          children: [
+            RecoveryCodeConfirm(
+              c: widget.c,
+              code: _code,
+              onConfirmed: _submit,
+              extra: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Card(
+                  child: SwitchListTile(
+                    value: _changePassword,
+                    onChanged: (v) => setState(() => _changePassword = v),
+                    title: const Text('同时设置新的登录密码'),
+                    subtitle: widget.forced ? const Text('如果忘记了原来的密码，可以在这里重新设置') : null,
+                  ),
+                ),
+                if (_changePassword) ...[
+                  const SizedBox(height: Space.md),
+                  TextField(
+                    autofillHints: const [AutofillHints.newPassword],
+                    controller: _password,
+                    obscureText: true,
+                    decoration: const InputDecoration(labelText: '新密码（至少 8 位）'),
+                  ),
+                ],
+              ]),
+            ),
+          ],
+        ),
+      );
+}
+
+class _Point extends StatelessWidget {
+  const _Point(this.icon, this.text);
+  final IconData icon;
+  final String text;
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(bottom: Space.lg),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Icon(icon, size: 24, color: context.palette.mute),
+          const SizedBox(width: Space.md),
+          Expanded(child: Text(text, style: const TextStyle(height: 1.5))),
+        ]),
       );
 }

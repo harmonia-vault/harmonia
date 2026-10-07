@@ -179,7 +179,7 @@ class _SettingsTabState extends State<SettingsTab> {
             ListTile(
               leading: const Icon(Icons.key_outlined),
               title: const Text('更换恢复码'),
-              subtitle: const Text('生成新的恢复码，旧恢复码随即失效'),
+              subtitle: const Text('保存并核对新恢复码后，旧恢复码失效'),
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => RotationPage(c: c))),
             ),
           ]),
