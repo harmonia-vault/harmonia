@@ -161,7 +161,7 @@ function backend(env: Env): Backend {
     },
     config: {
       allowRegistration: env.ALLOW_REGISTRATION === "true",
-      requireVerification: env.REQUIRE_EMAIL_VERIFICATION !== "false",
+      requireVerification: env.REQUIRE_EMAIL_VERIFICATION === "true",
       version: VERSION,
     },
   };

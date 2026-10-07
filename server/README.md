@@ -14,8 +14,9 @@ Harmonia（和弦）是一个自托管的环境变量同步工具：在手机上
 ## 部署前准备
 
 1. 一个 Cloudflare 账号（免费套餐即可）。
-2. 用于发送验证码的发信域名：在 Cloudflare 中启用 [Email Service](https://developers.cloudflare.com/email-service/) 并验证该域名。验证码用于注册验证、找回密码和重置账号。
-   - 暂时不想配置发信：把 `REQUIRE_EMAIL_VERIFICATION` 设为 `false`。此时注册无需验证邮箱，但“找回密码”和“重置账号”不可用。
+2. （可选）邮件验证码：在 Cloudflare 中启用 [Email Service](https://developers.cloudflare.com/email-service/) 并验证发信域名，然后设置 `EMAIL_FROM`。Email Service 需要付费套餐。
+   - 不配置时（默认）：注册不验证邮箱，“找回密码”和“重置账号”不可用；其余功能不受影响，个人使用通常不需要。
+   - 配置后可以把 `REQUIRE_EMAIL_VERIFICATION` 设为 `true`，要求注册时验证邮箱。
 
 ## 部署
 
@@ -36,9 +37,9 @@ Harmonia（和弦）是一个自托管的环境变量同步工具：在手机上
 
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
-| `EMAIL_FROM` | 空 | 发件地址，例如 `noreply@example.com`，域名需已在 Email Service 验证。为空时无法发送验证码 |
+| `EMAIL_FROM` | 空 | 发件地址，例如 `noreply@example.com`，域名需已在 Email Service 验证。为空时不发送邮件，“找回密码”和“重置账号”不可用 |
 | `ALLOW_REGISTRATION` | `false` | 设为 `true` 开放注册。`false` 时只允许注册第一个账号；之后重置过的账号可以用同一邮箱重新注册 |
-| `REQUIRE_EMAIL_VERIFICATION` | `true` | 设为 `false` 时注册不需要验证邮箱 |
+| `REQUIRE_EMAIL_VERIFICATION` | `false` | 设为 `true` 时注册需要验证邮箱（需要先配置 `EMAIL_FROM`） |
 
 每个账号的数据相互隔离，存放在各自的 Durable Object 中。
 

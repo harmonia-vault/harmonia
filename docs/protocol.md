@@ -82,7 +82,7 @@ fp = SHA-256(C(["harmonia.pairing", pairingId, signPub, boxPub, rootPub]))
 - 一个实例可以有多个相互隔离的账号，账号以**邮箱**标识。服务端为每个账号使用一个独立的 Durable Object，另有一个目录 Durable Object 负责“邮箱 → 账号 ID”的映射和注册策略。
 - 注册策略由两个部署变量控制：
   - `ALLOW_REGISTRATION`：为 `false` 时只允许注册第一个账号。
-  - `REQUIRE_EMAIL_VERIFICATION`：为 `true` 时注册需要验证邮箱（默认 `true`）。
+  - `REQUIRE_EMAIL_VERIFICATION`：为 `true` 时注册需要验证邮箱（默认 `false`）。
 - 账号状态：
   - `pending`：邮箱未验证。15 分钟内不验证，该注册作废，可以重新注册。
   - `active`：可以登录。
