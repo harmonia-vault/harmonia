@@ -83,32 +83,25 @@ func Login(ctx context.Context, in LoginInput, prompt PairingPrompt) (*App, int,
 		return nil, 0, err
 	}
 	fp := hc.PairingFingerprint(req.ID, signPub, boxPub, acct.RootPub)
-	prompt.ShowPairing(hc.PairingQR(req.ID, fp), hc.PairingCode(fp), time.UnixMilli(req.ExpiresAt))
-	prompt.Waiting()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return nil, 0, errors.New("已取消配对")
-		case <-time.After(2 * time.Second):
-		}
-		status, err := c.PairingStatus(ctx, req.ID, req.Secret)
-		if err != nil {
-			if api.IsCode(err, "not_found") {
-				return nil, 0, errors.New("配对请求已过期，请重新运行 harmonia login")
-			}
-			continue // 网络抖动时继续等待
-		}
-		switch status {
-		case "approved":
-		case "rejected":
-			return nil, 0, errors.New("手机拒绝了这次配对")
-		case "expired":
-			return nil, 0, errors.New("配对请求已过期（10 分钟），请重新运行 harmonia login")
-		default:
-			continue
-		}
-		break
+	status, err := c.WaitPairing(ctx, req.ID, req.Secret, func() {
+		prompt.ShowPairing(hc.PairingQR(req.ID, fp), hc.PairingCode(fp), time.UnixMilli(req.ExpiresAt))
+		prompt.Waiting()
+	})
+	if ctx.Err() != nil {
+		return nil, 0, errors.New("已取消配对")
+	}
+	if err != nil {
+		// 等待连接意外断开：可能刚好已被批准，查一次最终状态。
+		status, _ = c.PairingStatus(ctx, req.ID, req.Secret)
+	}
+	switch status {
+	case "approved":
+	case "rejected":
+		return nil, 0, errors.New("这次配对被拒绝或已作废。如需重试，请重新运行 harmonia login")
+	case "expired":
+		return nil, 0, errors.New("配对请求已过期（10 分钟），请重新运行 harmonia login")
+	default:
+		return nil, 0, errors.New("与服务器的连接中断，这次配对已作废。请检查网络后重新运行 harmonia login")
 	}
 
 	keys.ID = req.ID

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 端到端流程测试：本地 workerd 服务端 + 真实 harmonia CLI + 无界面管理手机（app/lib/core）。
-# 覆盖：注册验证、首次初始化、电脑配对、exec、实时推送、写入、本地覆盖、权限变更、撤销、恢复与轮换、多管理手机。
+# 覆盖：注册验证、首次初始化、电脑配对（含取消等待）、exec、实时推送、写入、本地覆盖、权限变更、撤销、恢复与轮换、多管理手机。
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -45,6 +45,38 @@ RECOVERY=$(manager phone setup --server "$SERVER" --email "$EMAIL" --password "$
 manager phone env-create OpenAI >/dev/null
 manager phone env-create Other >/dev/null
 manager phone var-set OpenAI OPENAI_API_KEY "sk-first 'quoted' \$(no)" >/dev/null
+
+step "J3 终端取消等待后，请求立即作废"
+echo "$PASSWORD" | HARMONIA_HOME="$TMP/cli-cancel" "$TMP/harmonia" login "$SERVER" --email "$EMAIL" --password-stdin --name "e2e-cancel" \
+  >/dev/null 2>"$TMP/cancel.err" &
+CANCEL_PID=$!
+CODE=""
+for _ in $(seq 1 60); do
+  CODE=$(grep -ao '核对码：[0-9A-HJKMNP-TV-Z-]*' "$TMP/cancel.err" | sed 's/核对码：//' || true)
+  [ -n "$CODE" ] && break
+  sleep 1
+done
+[ -n "$CODE" ] || { cat "$TMP/cancel.err"; fail "没有看到配对核对码"; }
+kill -INT $CANCEL_PID
+wait $CANCEL_PID 2>/dev/null || true
+sleep 1
+if manager phone approve "$CODE" OpenAI:rw >/dev/null 2>&1; then fail "取消后的配对请求仍然可以批准"; fi
+
+step "J3 终端失去响应（心跳中断）后，请求自动作废"
+echo "$PASSWORD" | HARMONIA_HOME="$TMP/cli-stall" "$TMP/harmonia" login "$SERVER" --email "$EMAIL" --password-stdin --name "e2e-stall" \
+  >/dev/null 2>"$TMP/stall.err" &
+STALL_PID=$!
+CODE=""
+for _ in $(seq 1 60); do
+  CODE=$(grep -ao '核对码：[0-9A-HJKMNP-TV-Z-]*' "$TMP/stall.err" | sed 's/核对码：//' || true)
+  [ -n "$CODE" ] && break
+  sleep 1
+done
+[ -n "$CODE" ] || { cat "$TMP/stall.err"; fail "没有看到配对核对码"; }
+kill -STOP $STALL_PID
+sleep 42
+if manager phone approve "$CODE" OpenAI:rw >/dev/null 2>&1; then fail "心跳中断后的配对请求仍然可以批准"; fi
+kill -KILL $STALL_PID 2>/dev/null || true
 
 step "J3 电脑登录并配对"
 echo "$PASSWORD" | HARMONIA_HOME="$TMP/cli" "$TMP/harmonia" login "$SERVER" --email "$EMAIL" --password-stdin --name "e2e-laptop" \

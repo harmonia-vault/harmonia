@@ -13,6 +13,7 @@ import {
 } from "./context";
 import { insertEnvelopes, parseEnvelopes, requireAllEnvironments, verifyCert } from "./keys";
 import { parsePassword } from "./auth";
+import { rejectPendingPairings } from "./pairing";
 import {
   bad,
   bin,
@@ -175,6 +176,7 @@ export function recoveryRoutes(app: Hono, deps: Deps) {
       );
       bump(sql);
     });
+    if (password) rejectPendingPairings(deps);
     deps.notifier.send("all", { type: "changed", seq: headSeq(sql) });
     return c.json(response);
   });

@@ -95,15 +95,7 @@ Future<void> main(List<String> argv) async {
       // 作为新的管理手机发起配对，等待另一台手机批准。
       final s = await account.login(opt('server'), opt('email'), opt('password'));
       final p = await account.startPairing(s, opt('name', '第二台手机'));
-      stderr.writeln('核对码：${p.code}');
-      while (true) {
-        await Future<void>.delayed(const Duration(seconds: 1));
-        final cfg = await account.pollPairing(p);
-        if (cfg != null) {
-          await vault.adopt(cfg);
-          break;
-        }
-      }
+      await vault.adopt(await account.waitPairing(p, onReady: () => stderr.writeln('核对码：${p.code}')));
       print(vault.isManager ? 'manager' : 'client');
     case 'recover':
       await vault.adopt(await account.recover(opt('server'), opt('email'), opt('code'), opt('name', '恢复手机')));

@@ -379,8 +379,9 @@ class Vault {
     await sync();
   }
 
-  Future<void> rejectPairing(String id) async {
-    await api!.device('POST', '/api/v1/pairings/$id/reject', body: {});
+  /// 拒绝配对；[block] 为 true 时 30 分钟内阻止该网络再次发起请求。
+  Future<void> rejectPairing(String id, {bool block = false}) async {
+    await api!.device('POST', '/api/v1/pairings/$id/reject', body: {'block': block});
   }
 
   // ---- 设备管理 ----

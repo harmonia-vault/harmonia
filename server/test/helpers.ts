@@ -1,7 +1,7 @@
 // 测试工具：node:sqlite 存储、内存路由后端，以及模拟客户端的签名操作。
 import { DatabaseSync } from "node:sqlite";
 import { createAccountApp } from "../src/core/app";
-import type { Deps, PushMessage, PushTarget } from "../src/core/context";
+import type { Deps, PairingResult, PairingWaiters, PushMessage, PushTarget } from "../src/core/context";
 import { migrate, wipe, type Param, type Sql } from "../src/core/db";
 import { Directory } from "../src/core/directory";
 import { route, type Backend } from "../src/core/router";
@@ -33,6 +33,29 @@ export function nodeSql(): Sql {
 
 export type Sent = { target: PushTarget; msg: PushMessage; account: string };
 
+/** 内存中的配对等待连接：记录最近心跳时间和发给发起方的结果。 */
+export class FakeWaiters implements PairingWaiters {
+  open = new Map<string, number>();
+  results = new Map<string, PairingResult | "left">();
+  constructor(private now: () => number) {}
+  accept(pairingId: string) {
+    this.open.set(pairingId, this.now());
+    return Response.json({ ok: true });
+  }
+  waiting(pairingId: string) {
+    return this.open.has(pairingId);
+  }
+  list() {
+    return [...this.open].map(([pairingId, seenAt]) => ({ pairingId, seenAt }));
+  }
+  close(pairingId: string, result?: PairingResult) {
+    if (this.open.delete(pairingId)) this.results.set(pairingId, result ?? "left");
+  }
+  ping(pairingId: string) {
+    this.open.set(pairingId, this.now());
+  }
+}
+
 export class TestServer {
   clock = 1_800_000_000_000;
   mails: { to: string; purpose: string; code: string }[] = [];
@@ -41,6 +64,15 @@ export class TestServer {
   mailAvailable = true;
   private dir = new Directory(nodeSql(), () => this.clock);
   private accounts = new Map<string, { deps: Deps; app: ReturnType<typeof createAccountApp> }>();
+
+  /** 账号的依赖（用于直接调用定时检查等非 HTTP 入口）。 */
+  deps(accountId: string): Deps {
+    return this.account(accountId).deps;
+  }
+
+  waiters(accountId: string): FakeWaiters {
+    return this.deps(accountId).waiters as FakeWaiters;
+  }
 
   private account(id: string) {
     let a = this.accounts.get(id);
@@ -54,6 +86,7 @@ export class TestServer {
           send: (target, msg) => this.pushes.push({ target, msg, account: id }),
           disconnect: () => {},
         },
+        waiters: new FakeWaiters(() => this.clock),
         mailer: {
           get available() {
             return server.mailAvailable;
@@ -229,6 +262,13 @@ export class TestAccount {
   async recoveryAuth(nonce: string) {
     return this.recovery.sign(recoveryAuthMsg(nonce));
   }
+}
+
+/** 发起方连上等待连接（docs/protocol.md 3.5.1）。 */
+export async function waitApproval(s: TestServer, a: TestAccount, req: Record<string, any>) {
+  return s.call("GET", `/api/v1/pairings/${req.id}/events`, {
+    headers: { "x-harmonia-account": a.accountId, "x-pairing-secret": req.secret, upgrade: "websocket" },
+  });
 }
 
 export { canonical };

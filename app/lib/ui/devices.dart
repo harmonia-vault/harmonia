@@ -1,12 +1,11 @@
-// 设备列表、添加设备（扫码 / 核对码 → 核对 → 选择权限 → 批准）、设备详情与权限调整。
+// 设备列表、设备详情与权限调整。添加和批准设备见 pairing.dart。
 import 'package:flutter/material.dart';
-import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../app/controller.dart';
-import '../core/crypto.dart';
 import '../core/models.dart';
 import 'environments.dart' show askName;
 import 'lock.dart';
+import 'pairing.dart';
 import 'theme.dart';
 import 'widgets.dart';
 
@@ -36,7 +35,8 @@ class _DevicesTabState extends State<DevicesTab> {
   Future<void> _loadPending() async {
     try {
       final list = await c.vault.pendingPairings();
-      c.pendingPairingCount = list.length;
+      c.pairings = list;
+      c.refresh();
       if (mounted) setState(() => _pending = list);
     } catch (_) {
       // 离线时不显示待处理请求。
@@ -124,95 +124,6 @@ class _DevicesTabState extends State<DevicesTab> {
   }
 }
 
-class AddDevicePage extends StatefulWidget {
-  const AddDevicePage({super.key, required this.c});
-  final AppController c;
-  @override
-  State<AddDevicePage> createState() => _AddDevicePageState();
-}
-
-class _AddDevicePageState extends State<AddDevicePage> {
-  final _scanner = MobileScannerController(formats: [BarcodeFormat.qrCode]);
-  bool _handling = false;
-
-  @override
-  void dispose() {
-    _scanner.dispose();
-    super.dispose();
-  }
-
-  Future<void> _found(Future<PairingRequest> Function() lookup, {required bool scanned}) async {
-    if (_handling) return;
-    _handling = true;
-    PairingRequest? p;
-    await runBusy(context, () async => p = await widget.c.guard(lookup));
-    if (p != null && mounted) {
-      await Navigator.pushReplacement(context,
-          MaterialPageRoute(builder: (_) => ReviewPairingPage(c: widget.c, request: p!, scanned: scanned)));
-    }
-    _handling = false;
-  }
-
-  Future<void> _manual() async {
-    final ctl = TextEditingController();
-    final code = await showDialog<String>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: const Text('输入核对码'),
-        content: TextField(
-          controller: ctl,
-          autofillHints: null,
-          autofocus: true,
-          textCapitalization: TextCapitalization.characters,
-          style: const TextStyle(fontFamily: 'monospace', fontSize: 18),
-          decoration: const InputDecoration(hintText: 'XXXX-XXXX-XXXX-XXXX'),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(c), child: const Text('取消')),
-          FilledButton(onPressed: () => Navigator.pop(c, ctl.text), child: const Text('查找')),
-        ],
-      ),
-    );
-    if (code == null || !mounted) return;
-    await _found(() => widget.c.vault.pairingFromCode(code), scanned: true);
-  }
-
-  @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('添加设备')),
-        body: ListView(padding: const EdgeInsets.all(Space.lg), children: [
-          const Text('扫描电脑终端或另一台手机上显示的二维码。'),
-          const SizedBox(height: Space.md),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(18),
-            child: AspectRatio(
-              aspectRatio: 1,
-              child: MobileScanner(
-                controller: _scanner,
-                errorBuilder: (context, error) => Container(
-                  color: context.palette.card,
-                  alignment: Alignment.center,
-                  padding: const EdgeInsets.all(Space.xl),
-                  child: const Text('无法打开相机。请在系统设置中允许 Harmonia 使用相机，或改用核对码。',
-                      textAlign: TextAlign.center),
-                ),
-                onDetect: (capture) {
-                  final raw = capture.barcodes.firstOrNull?.rawValue;
-                  if (raw != null) _found(() => widget.c.vault.pairingFromQr(raw), scanned: true);
-                },
-              ),
-            ),
-          ),
-          const SizedBox(height: Space.lg),
-          OutlinedButton.icon(
-            onPressed: _manual,
-            icon: const Icon(Icons.keyboard_outlined),
-            label: const Text('无法扫码？输入核对码'),
-          ),
-        ]),
-      );
-}
-
 const _expiryChoices = <String, Duration?>{
   '长期有效': null,
   '1 天': Duration(days: 1),
@@ -221,7 +132,7 @@ const _expiryChoices = <String, Duration?>{
   '90 天': Duration(days: 90),
 };
 
-int _expiryFrom(String label) {
+int expiryFrom(String label) {
   final d = _expiryChoices[label];
   return d == null ? 0 : DateTime.now().add(d).millisecondsSinceEpoch;
 }
@@ -280,103 +191,6 @@ class GrantEditor extends StatelessWidget {
       );
 }
 
-class ReviewPairingPage extends StatefulWidget {
-  const ReviewPairingPage({super.key, required this.c, required this.request, required this.scanned});
-  final AppController c;
-  final PairingRequest request;
-  final bool scanned;
-  @override
-  State<ReviewPairingPage> createState() => _ReviewPairingPageState();
-}
-
-class _ReviewPairingPageState extends State<ReviewPairingPage> {
-  late bool _manager = widget.request.platform == 'android';
-  late bool _matched = widget.scanned;
-  final _roles = <String, String?>{};
-  final _expiry = <String, String>{};
-
-  PairingRequest get p => widget.request;
-
-  Future<void> _approve() async {
-    final grants = [
-      for (final e in widget.c.vault.environments)
-        if (_roles[e.id] != null) Grant(e.id, _roles[e.id]!, _expiryFrom(_expiry[e.id] ?? '长期有效')),
-    ];
-    if (!_manager && grants.isEmpty) {
-      final ok = await confirmDialog(context,
-          title: '不授权任何环境？', body: '这台设备接入后暂时无法访问任何变量，之后可以在设备详情中调整。', ok: '仍然批准');
-      if (!ok) return;
-    }
-    if (!mounted || !await confirmIdentity(context, '验证身份以批准“${p.name}”')) return;
-    if (!mounted) return;
-    final nav = Navigator.of(context);
-    final ok = await runBusy(
-        context, () => widget.c.guard(() => widget.c.vault.approvePairing(p, asManager: _manager, grants: grants)),
-        done: '已批准“${p.name}”');
-    if (ok) nav.pop();
-  }
-
-  Future<void> _reject() async {
-    final nav = Navigator.of(context);
-    final ok = await runBusy(context, () => widget.c.guard(() => widget.c.vault.rejectPairing(p.id)),
-        done: '已拒绝');
-    if (ok) nav.pop();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final code = pairingCode(pairingFingerprint(p.id, p.signPub, p.boxPub, p.rootPub));
-    final envs = widget.c.vault.environments;
-    return Scaffold(
-      appBar: AppBar(title: const Text('批准设备')),
-      body: ListView(padding: const EdgeInsets.all(Space.lg), children: [
-        Card(
-          child: ListTile(
-            leading: Icon(platformIcon(p.platform), size: 32),
-            title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-            subtitle: Text(platformName(p.platform)),
-          ),
-        ),
-        const SizedBox(height: Space.lg),
-        Text(widget.scanned ? '核对码' : '请确认设备上显示的核对码与下面完全一致：'),
-        const SizedBox(height: Space.sm),
-        CodeBox(code, copyable: false),
-        if (!widget.scanned) ...[
-          const SizedBox(height: Space.md),
-          Card(
-            child: CheckboxListTile(
-              value: _matched,
-              controlAffinity: ListTileControlAffinity.leading,
-              onChanged: (v) => setState(() => _matched = v ?? false),
-              title: const Text('核对码一致，这是我自己的设备'),
-            ),
-          ),
-        ],
-        const SizedBox(height: Space.md),
-        Card(
-          child: SwitchListTile(
-            value: _manager,
-            onChanged: (v) => setState(() => _manager = v),
-            title: const Text('作为管理手机'),
-            subtitle: const Text('管理手机可以访问全部环境，并能批准其他设备。只给你自己的手机开启。'),
-          ),
-        ),
-        if (!_manager) ...[
-          const SectionTitle('允许访问的环境'),
-          if (envs.isEmpty)
-            const Banner2('还没有任何环境，批准后可以随时在设备详情中授权。')
-          else
-            GrantEditor(envs: envs, roles: _roles, expiry: _expiry, onChanged: () => setState(() {})),
-        ],
-        const SizedBox(height: Space.xl),
-        FilledButton(onPressed: _matched ? _approve : null, child: const Text('批准')),
-        const SizedBox(height: Space.sm),
-        OutlinedButton(onPressed: _reject, child: const Text('拒绝')),
-      ]),
-    );
-  }
-}
-
 class DevicePage extends StatefulWidget {
   const DevicePage({super.key, required this.c, required this.deviceId});
   final AppController c;
@@ -410,7 +224,7 @@ class _DevicePageState extends State<DevicePage> {
       if (role == null) continue;
       final label = _expiry[e.id] ?? '长期有效';
       final old = d.grants.where((g) => g.envId == e.id).firstOrNull;
-      final expiresAt = _expiryChoices.containsKey(label) ? _expiryFrom(label) : (old?.expiresAt ?? 0);
+      final expiresAt = _expiryChoices.containsKey(label) ? expiryFrom(label) : (old?.expiresAt ?? 0);
       grants.add(Grant(e.id, role, expiresAt));
     }
     if (!await confirmIdentity(context, '验证身份以修改“${d.name}”的权限')) return;

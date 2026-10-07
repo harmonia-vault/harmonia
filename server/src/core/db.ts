@@ -124,6 +124,10 @@ const MIGRATIONS: string[][] = [
     )`,
     `CREATE TABLE rate_limits (key TEXT PRIMARY KEY, count INTEGER NOT NULL, window_start INTEGER NOT NULL)`,
   ],
+  [
+    `ALTER TABLE pairings ADD COLUMN ip TEXT NOT NULL DEFAULT ''`,
+    `CREATE TABLE pairing_blocks (ip TEXT PRIMARY KEY, until INTEGER NOT NULL)`,
+  ],
 ];
 
 export function migrate(sql: Sql): void {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { b64, recoveryAuthMsg, rootRecoveryMsg } from "../src/core/util";
-import { Ed, FakeDevice, newId, rand, TestAccount, TestServer } from "./helpers";
+import { Ed, FakeDevice, newId, rand, TestAccount, TestServer, waitApproval } from "./helpers";
 
 const value = () => b64(rand(60));
 const put = (s: TestServer, token: string, env: string, name: string, key = newId()) =>
@@ -19,6 +19,7 @@ async function pairClient(s: TestServer, a: TestAccount, grants: { envId: string
     body: { name: "笔记本", platform: "darwin", signPub: cli.sign.pub, boxPub: cli.boxPub, rootPub: a.root.pub },
   });
   cli.id = req.id;
+  await waitApproval(s, a, req);
   const list = await s.ok("GET", "/api/v1/pairings", { token: a.phone.token });
   expect(list.pairings.map((p: { id: string }) => p.id)).toContain(req.id);
   const envelopes = [];
@@ -186,6 +187,7 @@ describe("配对与权限", () => {
       body: { name: "新手机", platform: "android", signPub: phone2.sign.pub, boxPub: phone2.boxPub, rootPub: a.root.pub },
     });
     phone2.id = req.id;
+    await waitApproval(s, a, req);
     const incomplete = await s.call("POST", `/api/v1/pairings/${req.id}/approve`, {
       token: a.phone.token,
       body: { kind: "manager", cert: await a.cert(phone2, "manager"), rootSealed: b64(rand(80)), envelopes: [] },

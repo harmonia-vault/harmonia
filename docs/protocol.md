@@ -162,11 +162,13 @@ PIN 槽（必有）：
 | `PUT /account/password` | device（管理设备） | `{kdfSalt, authKey}` |
 | `POST /auth/challenge` | 请求头 `X-Harmonia-Account` | `{deviceId}` → `{nonce, expiresAt}`，nonce 只能使用一次，2 分钟内有效 |
 | `POST /auth/device-session` | 请求头 `X-Harmonia-Account` | `{deviceId, nonce, signature}` → `{token, expiresAt}` |
-| `POST /pairings` | password | `{name, platform, signPub, boxPub, rootPub}` → `{id, secret, expiresAt}`，10 分钟内有效 |
-| `GET /pairings/{id}/status` | 请求头 `X-Harmonia-Account` 和 `X-Pairing-Secret` | `{status}`：`pending` / `approved` / `rejected` / `expired` |
-| `GET /pairings` | device（管理设备） | 列出待处理的请求 |
-| `POST /pairings/{id}/approve` | device（管理设备） | 见 3.3 |
-| `POST /pairings/{id}/reject` | device（管理设备） | — |
+| `POST /pairings` | password | `{name, platform, signPub, boxPub, rootPub}` → `{id, secret, expiresAt}`，10 分钟内有效。服务端记录发起方 IP；该 IP 被阻止时返回 `pairing_blocked` |
+| `GET /pairings/{id}/events` | 请求头 `X-Harmonia-Account` 和 `X-Pairing-Secret` | 发起方的等待连接（WebSocket），见 3.5.1 |
+| `GET /pairings/{id}/status` | 请求头 `X-Harmonia-Account` 和 `X-Pairing-Secret` | `{status}`：`pending` / `approved` / `rejected` / `expired` / `cancelled`。只在等待连接意外断开后查询一次 |
+| `GET /pairings` | device（管理设备） | 列出发起方仍在等待的请求，每项带 `ip` |
+| `GET /pairings/{id}` | device（管理设备） | 单个请求；发起方已离开或请求已处理时返回 `conflict` |
+| `POST /pairings/{id}/approve` | device（管理设备） | 见 3.3；发起方已离开时返回 `conflict` |
+| `POST /pairings/{id}/reject` | device（管理设备） | `{block?: bool}`；`block` 为 true 时，30 分钟内拒绝来自该请求 IP 的新配对请求 |
 | `GET /sync?since=N` | device | 见 3.4 |
 | `GET /events` | device | WebSocket，见 3.5 |
 | `POST /environments` | device（管理设备） | `{id, name, envelopes:[{recipient, keyVersion, sealed, sig}]}`，必须覆盖全部活跃的管理设备和 `recovery` |
@@ -248,6 +250,16 @@ PIN 槽（必有）：
 ### 3.6 轮换恢复码
 
 ```json
+#### 3.5.1 配对等待连接
+
+发起方创建配对请求后立即连接 `GET /pairings/{id}/events`，连接存在即表示“仍在等待”：
+
+- 每个请求同时只允许一条等待连接。连接建立后，服务端向管理设备推送 `{"type":"pairing"}`；没有等待连接的请求不会出现在 `GET /pairings` 中，也不能被批准。
+- 服务端在请求被处理后向发起方推送 `{"type":"approved"}`、`{"type":"rejected"}` 或 `{"type":"expired"}`，然后关闭连接。
+- 发起方每 10 秒发送一次 `ping`。服务端发现 25 秒内没有收到 `ping`，或连接断开时，若请求仍是 `pending`，就把它标记为 `cancelled`，并向管理设备推送 `{"type":"pairing"}`。
+- 等待连接意外断开时，发起方查询一次 `GET /pairings/{id}/status`：`approved` 则继续完成接入，否则提示用户重新发起。
+- 请求被批准、拒绝、取消或过期，或账号修改了密码时，服务端都会向管理设备推送 `{"type":"pairing"}`。修改密码会把所有 `pending` 的请求标记为 `rejected`。
+
 {
   "idempotencyKey": "...",
   "generation": "2",
@@ -278,6 +290,7 @@ PIN 槽（必有）：
 | `email_unverified` | 403 | 邮箱还没有验证 |
 | `email_unavailable` | 503 | 服务器没有配置发信，无法发送验证码 |
 | `internal` | 500 | 服务器内部错误 |
+| `pairing_blocked` | 429 | 这个 IP 发起的配对请求刚被拒绝并阻止，30 分钟内不能再发起 |
 
 ## 4. 规则摘要
 

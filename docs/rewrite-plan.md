@@ -199,13 +199,13 @@ harmonia/                     # 唯一开发仓库
 ### 5.5 服务端
 
 - **运行时**：Hono + 一个名为 `instance` 的 Durable Object（SQLite 存储），所有状态都在里面，天然串行、原子。
-- **数据表**：`account`（单行）、`devices`、`pairings`、`environments`、`envelopes`、`grants`、`variables`、`sessions`、`idempotency`、`meta(head_seq)`。每次变更时 `head_seq + 1`，并写入受影响行的 `updated_seq`。
+- **数据表**：`account`（单行）、`devices`、`pairings`、`pairing_blocks`、`environments`、`envelopes`、`grants`、`variables`、`sessions`、`idempotency`、`meta(head_seq)`。每次变更时 `head_seq + 1`，并写入受影响行的 `updated_seq`。
 - **API**（`/api/v1`）：
   - 实例：`GET /instance`（产品标识、服务端版本、协议版本、是否已初始化）
   - 初始化：`POST /setup`
   - 认证：`GET /auth/prelogin`、`POST /auth/login`、`POST /auth/challenge`、`POST /auth/device-session`
   - 账号：`PUT /account/password`（管理设备）
-  - 配对：`POST /pairings`、`GET /pairings/{id}`、`GET /pairings?status=pending`、`POST /pairings/{id}/approve`、`POST /pairings/{id}/reject`
+  - 配对：`POST /pairings`、`GET /pairings/{id}/events`（发起方等待连接）、`GET /pairings/{id}/status`、`GET /pairings`、`GET /pairings/{id}`、`POST /pairings/{id}/approve`、`POST /pairings/{id}/reject`
   - 同步：`GET /sync?since=N`；推送：`GET /events`（WebSocket）
   - 环境：`POST|PATCH|DELETE /environments[/{id}]`
   - 变量：`PUT|DELETE /environments/{id}/variables/{name}`，需要带幂等键
@@ -224,6 +224,7 @@ harmonia/                     # 唯一开发仓库
   - `{"type":"changed","headSeq":N}`
   - `{"type":"pairing"}`（只推给管理设备）
   - `{"type":"revoked"}`（推送后关闭连接）
+- 配对发起方另有一条等待连接 `GET /api/v1/pairings/{id}/events`，用来接收批准结果，同时让服务端知道它还在等待（协议 3.5.1）。
 - 客户端收到 `changed` 后调用 `/sync` 拉取。拉取是唯一的数据来源。重连后立即同步一次。
 - CLI 后台服务：长连接 + 心跳，断线后指数退避重连，另外每 5 分钟兜底同步一次。
 - App：只在前台时连接，不做后台推送。
@@ -302,7 +303,11 @@ harmonia uninstall
 1. 新设备在本地生成密钥，调用 `POST /pairings`，得到 `pairingId` 和 `secret`。
 2. 计算指纹 = `SHA-256(["harmonia/pairing", pairingId, signPub, boxPub])`。二维码包含 `pairingId` 和完整指纹；人工核对码是指纹的前 80 位，显示为 16 个 Crockford Base32 字符（4 组，每组 4 个）。
 3. 手机扫码或手输核对码，拉取该配对请求并重新计算指纹比对。比对一致后，显示设备名和平台，让用户选择环境、角色和有效期，或者选择“作为管理设备”。
-4. 手机签发设备证书、封装环境钥，调用 `approve`；新设备通过推送或轮询得知已批准，换取设备会话后完成同步。
+   - 管理手机在前台且已解锁时，收到新的配对请求（推送或同步时发现）会直接打开批准页，电脑和手机发起的请求都一样。App 在后台时不提醒；回到前台或解锁后先同步，发起方仍在等待的请求随即弹出。每个请求只弹出一次，已经有弹出的批准页时不再叠加，其余请求留在设备页的待批准列表中。
+   - 弹出的批准页和列表中打开的一样，没有经过扫码：用户必须勾选“核对码一致”才能批准，页面同时提示“此刻没有在其他设备上登录就拒绝并修改密码”。
+4. 手机签发设备证书、封装环境钥，调用 `approve`；新设备通过等待连接得知已批准，换取设备会话后完成同步。
+5. **发起方离开**：新设备在等待期间一直保持等待连接（协议 3.5.1）。CLI 按 Ctrl+C 或进程退出、新手机离开等待页或 App 被关闭，连接断开（或 25 秒没有心跳）后请求立即作废：管理手机不再弹出，已经打开的批准页改为显示“这次请求已失效”，只留“关闭”。等待连接因网络中断断开时同样作废，新设备提示重新发起。
+6. **拒绝并阻止**：批准页显示请求来自的 IP。拒绝时可以勾选“30 分钟内阻止这个网络再次发起请求”；被阻止的一方看到“这个网络暂时不能发起配对，请稍后再试”。修改账号密码时，所有待处理的请求一并作废。
 
 ### 5.11 更新机制
 
@@ -454,6 +459,7 @@ harmonia uninstall
 
 - systemd 系统单元开启 `ProtectHome=true` 后无法访问 home 目录；用户级服务没有这个问题。
 - 已经在运行的进程，环境变量无法从外部修改，文档必须写明。
+| M7 配对加固 | 管理手机前台自动弹出批准页；配对等待连接（发起方离开即作废）；拒绝并阻止 IP；修改密码作废待处理请求（5.10、协议 3.5.1） | J3、J9 |
 - Android 的 `versionCode` 不能依赖 CI 的 run_number，迁移仓库后编号会回退。
 - 更新检查失败时，不能显示“已是最新版本”；要区分网络错误、签名错误和元数据错误。
 - 不要根据 Release 列表的第一项、发布时间或文件后缀来猜测最新版本，只认签名清单。

@@ -14,6 +14,7 @@ import {
   type Deps,
 } from "./context";
 import { checkCode, sendCode } from "./email";
+import { rejectPendingPairings } from "./pairing";
 import { verifyCert } from "./keys";
 import {
   ApiError,
@@ -63,6 +64,7 @@ export const VERIFY_HEADER = "x-harmonia-verify";
 function updatePassword(deps: Deps, p: Awaited<ReturnType<typeof parsePassword>>) {
   deps.sql.run(`UPDATE account SET kdf_salt = ?, auth_salt = ?, auth_hash = ? WHERE id = 1`, p.kdfSalt, p.authSalt, p.authHash);
   deps.sql.run(`DELETE FROM sessions WHERE kind = 'password'`);
+  rejectPendingPairings(deps);
 }
 
 function activeAccount(deps: Deps) {

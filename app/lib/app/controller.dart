@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import '../core/account.dart';
 import '../core/api.dart';
 import '../core/crypto.dart';
+import '../core/models.dart';
 import '../core/store.dart';
 import '../core/vault.dart';
 import 'identity.dart';
@@ -76,7 +77,9 @@ class AppController extends ChangeNotifier {
 
   /// 推送连接状态：false 时界面显示“离线”。
   bool online = false;
-  int pendingPairingCount = 0;
+  /// 待批准的配对请求（只有管理手机会有）。
+  List<PairingRequest> pairings = [];
+  int get pendingPairingCount => pairings.length;
   DateTime? _backgroundAt;
   Timer? _lockTimer;
   bool _foreground = true;
@@ -247,37 +250,37 @@ class AppController extends ChangeNotifier {
 
   // ---- 作为新手机配对 ----
 
+  /// 发起配对；连上等待连接后才显示二维码，避免对方扫到一个还不能批准的请求。
   Future<void> startPairing() async {
-    pendingPairing = await account.startPairing(session!, deviceName);
+    final p = await account.startPairing(session!, deviceName);
+    final ready = Completer<void>();
+    pendingPairing = p;
+    unawaited(_waitPairing(p, ready));
+    await ready.future;
     _go(Stage.pairing);
-    unawaited(_pollPairing(pendingPairing!));
   }
 
-  Future<void> _pollPairing(PendingPairing p) async {
-    while (stage == Stage.pairing && identical(pendingPairing, p)) {
-      await Future<void>.delayed(const Duration(seconds: 2));
-      if (stage != Stage.pairing || !identical(pendingPairing, p)) return;
-      try {
-        final cfg = await account.pollPairing(p);
-        if (cfg == null) continue;
-        await vault.adopt(cfg);
-        pendingPairing = null;
-        session = null;
-        _go(Stage.home);
-        _onUnlocked();
-        return;
-      } on VaultException catch (e) {
-        pendingPairing = null;
-        notice = e.message;
-        _go(Stage.unpaired);
-        return;
-      } catch (_) {
-        // 网络抖动时继续等待。
-      }
+  Future<void> _waitPairing(PendingPairing p, Completer<void> ready) async {
+    try {
+      final cfg = await account.waitPairing(p, onReady: ready.complete);
+      if (!identical(pendingPairing, p)) return;
+      await vault.adopt(cfg).catchError((_) {}); // 本机配置已保存；只是同步失败时，进入首页后会重试
+      pendingPairing = null;
+      session = null;
+      _go(Stage.home);
+      _onUnlocked();
+    } on VaultException catch (e) {
+      if (!ready.isCompleted) return ready.completeError(e);
+      if (!identical(pendingPairing, p)) return; // 用户已离开等待页
+      pendingPairing = null;
+      notice = e.message;
+      _go(Stage.unpaired);
     }
   }
 
+  /// 离开等待页：断开等待连接，服务端随即作废这次请求。
   void cancelPairing() {
+    pendingPairing?.cancel();
     pendingPairing = null;
     _go(session != null ? Stage.unpaired : Stage.signedOut);
   }
@@ -386,7 +389,7 @@ class AppController extends ChangeNotifier {
       lockNow();
       return;
     }
-    if (stage == Stage.home || stage == Stage.rotation) _startPush();
+    if (stage == Stage.home || stage == Stage.rotation) _onUnlocked(); // 补上后台期间错过的变更和配对请求
   }
 
   // ---- 已接入后的同步与推送 ----
@@ -401,7 +404,7 @@ class AppController extends ChangeNotifier {
       await vault.sync();
       online = true;
       if (vault.isManager) {
-        pendingPairingCount = (await vault.pendingPairings()).length;
+        pairings = await vault.pendingPairings();
       }
       if (vault.cache.rotationRequired && stage == Stage.home) stage = Stage.rotation;
     } on RevokedException {
@@ -457,13 +460,13 @@ class AppController extends ChangeNotifier {
           if (gen != _pushGeneration) return;
           if (vault.isManager) {
             try {
-              pendingPairingCount = (await vault.pendingPairings()).length;
+              pairings = await vault.pendingPairings();
             } catch (_) {}
           }
           notifyListeners();
         }, () async {
           if (gen != _pushGeneration) return;
-          pendingPairingCount = (await vault.pendingPairings()).length;
+          pairings = await vault.pendingPairings();
           notifyListeners();
         });
       } on RevokedException {

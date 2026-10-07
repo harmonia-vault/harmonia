@@ -1,4 +1,5 @@
 // 本机还没有接入账号时的流程：注册、验证、登录、首次初始化、作为新手机配对、恢复、找回密码、重置账号。
+import 'dart:io' show WebSocket;
 import 'dart:typed_data';
 
 import 'api.dart';
@@ -37,6 +38,10 @@ class PendingPairing {
   final String id, secret, qr, code, deviceName;
   final Uint8List signSeed, boxSeed;
   final DateTime expiresAt;
+
+  /// 等待连接；关闭它即放弃这次请求，服务端随即作废。
+  WebSocket? _socket;
+  void cancel() => _socket?.close();
 }
 
 class AccountService {
@@ -166,19 +171,25 @@ class AccountService {
         pairingCode(fp), DateTime.fromMillisecondsSinceEpoch(res['expiresAt'] as int), deviceName);
   }
 
-  /// 查询配对结果：批准后返回本机配置；仍在等待返回 null。
-  Future<LocalConfig?> pollPairing(PendingPairing p) async {
-    Map<String, dynamic> res;
+  /// 保持等待连接直到有结果：批准后返回本机配置，否则抛出说明原因的异常。连上后调用 [onReady]。
+  Future<LocalConfig> waitPairing(PendingPairing p, {required void Function() onReady}) async {
     final c = _client(p.session.server, p.session.accountId);
+    String? result;
     try {
-      res = await c.publicWithHeaders('GET', '/api/v1/pairings/${p.id}/status',
-          {'x-pairing-secret': p.secret});
-    } on ApiException catch (e) {
-      if (e.code == 'not_found') throw VaultException('配对请求已过期，请重新发起。');
-      if (e.isNetwork) return null;
-      rethrow;
+      result = await c.waitPairing(p.id, p.secret, onReady: (ws) {
+        p._socket = ws;
+        onReady();
+      });
+    } catch (_) {
+      // 连接失败或中断，下面查一次最终状态。
     }
-    switch (res['status']) {
+    if (result == null) {
+      try {
+        final res = await c.publicWithHeaders('GET', '/api/v1/pairings/${p.id}/status', {'x-pairing-secret': p.secret});
+        result = res['status'] as String?;
+      } catch (_) {}
+    }
+    switch (result) {
       case 'approved':
         return LocalConfig(
             server: p.session.server,
@@ -190,11 +201,11 @@ class AccountService {
             signSeed: b64(p.signSeed),
             boxSeed: b64(p.boxSeed));
       case 'rejected':
-        throw VaultException('另一台手机拒绝了这次配对。');
+        throw VaultException('这次配对被拒绝或已作废，请重新发起。');
       case 'expired':
         throw VaultException('配对请求已过期（10 分钟），请重新发起。');
     }
-    return null;
+    throw VaultException('与服务器的连接中断，这次配对已作废。请检查网络后重新发起。');
   }
 
   // ---- 恢复 ----

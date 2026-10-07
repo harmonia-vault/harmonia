@@ -161,4 +161,29 @@ class ApiClient {
       await ws.close();
     }
   }
+
+  /// 作为配对发起方保持等待连接（协议 3.5.1）：连上后调用 [onReady]，返回服务端推送的结果
+  /// （approved、rejected 或 expired）；连接断开时返回 null。关闭 [onReady] 拿到的连接即放弃这次请求。
+  Future<String?> waitPairing(String id, String secret, {required void Function(WebSocket ws) onReady}) async {
+    final wsUrl = '${base.replaceFirst('http', 'ws')}/api/v1/pairings/$id/events';
+    final ws = await WebSocket.connect(wsUrl, headers: {'x-harmonia-account': accountId!, 'x-pairing-secret': secret})
+        .timeout(const Duration(seconds: 20));
+    onReady(ws);
+    final ping = Timer.periodic(const Duration(seconds: 10), (_) {
+      try {
+        ws.add('ping');
+      } catch (_) {}
+    });
+    try {
+      await for (final msg in ws) {
+        if (msg is! String || msg == 'pong') continue;
+        final type = (jsonDecode(msg) as Map)['type'];
+        if (type == 'approved' || type == 'rejected' || type == 'expired') return type as String;
+      }
+      return null;
+    } finally {
+      ping.cancel();
+      await ws.close();
+    }
+  }
 }

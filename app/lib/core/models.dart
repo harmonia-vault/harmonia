@@ -89,6 +89,8 @@ class PairingRequest {
   String get signPub => json['signPub'] as String;
   String get boxPub => json['boxPub'] as String;
   String get rootPub => json['rootPub'] as String;
+  /// 发起请求的网络地址，用于判断是否本人发起和“阻止这个网络”。
+  String get ip => json['ip'] as String? ?? '';
   int get expiresAt => json['expiresAt'] as int;
 }
 

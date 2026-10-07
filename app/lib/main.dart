@@ -16,6 +16,7 @@ import 'core/store.dart';
 import 'ui/auth_pages.dart';
 import 'ui/home.dart';
 import 'ui/lock.dart';
+import 'ui/pairing.dart';
 import 'ui/pin_setup.dart';
 import 'ui/recovery_pages.dart';
 import 'ui/theme.dart';
@@ -67,6 +68,8 @@ class HarmoniaApp extends StatefulWidget {
 class _HarmoniaAppState extends State<HarmoniaApp> with WidgetsBindingObserver {
   final _navigator = GlobalKey<NavigatorState>();
   Stage? _shownStage;
+  final _seenPairings = <String>{};
+  bool _reviewing = false;
 
   @override
   void initState() {
@@ -88,7 +91,21 @@ class _HarmoniaAppState extends State<HarmoniaApp> with WidgetsBindingObserver {
       _shownStage = widget.c.stage;
       _navigator.currentState?.popUntil((r) => r.isFirst);
     }
+    _popupPairing();
     setState(() {});
+  }
+
+  /// 在首页收到新的配对请求时直接打开批准页。每个请求只弹一次；已有弹出的批准页时不再叠加，
+  /// 其余请求留在“设备”页的待批准列表里。
+  Future<void> _popupPairing() async {
+    final c = widget.c;
+    final nav = _navigator.currentState;
+    if (c.stage != Stage.home || nav == null) return;
+    final fresh = c.pairings.where((p) => _seenPairings.add(p.id)).toList();
+    if (fresh.isEmpty || _reviewing) return;
+    _reviewing = true;
+    await nav.push(MaterialPageRoute(builder: (_) => ReviewPairingPage(c: c, request: fresh.last, scanned: false)));
+    _reviewing = false;
   }
 
   @override

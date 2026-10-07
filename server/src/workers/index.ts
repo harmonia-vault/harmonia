@@ -1,10 +1,11 @@
 // Cloudflare Workers 入口：目录 Durable Object、账号 Durable Object 与请求路由。
 import { DurableObject } from "cloudflare:workers";
 import { createAccountApp } from "../core/app";
-import type { Deps, Device, Notifier, PushMessage, PushTarget } from "../core/context";
+import type { Deps, Device, Notifier, PairingWaiters, PushMessage, PushTarget } from "../core/context";
 import { migrate, wipe, type Param, type Sql } from "../core/db";
 import { Directory as DirectoryCore } from "../core/directory";
 import type { Mailer } from "../core/email";
+import { checkWaiters, pairingLeft } from "../core/pairing";
 import { VERSION } from "../core/protocol";
 import { route, type Backend } from "../core/router";
 
@@ -18,6 +19,10 @@ export interface Env {
   /** 仅本地开发：把验证码打印到日志而不是发送邮件。 */
   DEV_MAIL_LOG?: string;
 }
+
+/** 配对发起方等待连接的标签；另加 `pairing:<配对 ID>` 用于按请求查找。 */
+const PAIRING_TAG = "pairing";
+const WAITER_CHECK = 10_000;
 
 function doSql(storage: DurableObjectStorage): Sql {
   return {
@@ -49,6 +54,7 @@ export class Account extends DurableObject<Env> {
   private sql: Sql;
   private ready = false;
   private app: ReturnType<typeof createAccountApp>;
+  private deps: Deps;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -56,7 +62,7 @@ export class Account extends DurableObject<Env> {
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
     const notifier: Notifier = {
       send: (target: PushTarget, msg: PushMessage) => {
-        const tag = target === "all" ? undefined : target === "managers" ? "manager" : target.device;
+        const tag = target === "all" ? "device" : target === "managers" ? "manager" : target.device;
         for (const ws of ctx.getWebSockets(tag)) {
           try {
             ws.send(JSON.stringify(msg));
@@ -69,17 +75,45 @@ export class Account extends DurableObject<Env> {
         for (const ws of ctx.getWebSockets(deviceId)) ws.close(4001, "revoked");
       },
     };
+    const waiters: PairingWaiters = {
+      accept: (pairingId) => {
+        const pair = new WebSocketPair();
+        ctx.acceptWebSocket(pair[1], [PAIRING_TAG, `${PAIRING_TAG}:${pairingId}`]);
+        pair[1].serializeAttachment({ pairingId, since: Date.now() });
+        void ctx.storage.setAlarm(Date.now() + WAITER_CHECK);
+        return new Response(null, { status: 101, webSocket: pair[0] });
+      },
+      waiting: (pairingId) => ctx.getWebSockets(`${PAIRING_TAG}:${pairingId}`).length > 0,
+      list: () =>
+        ctx.getWebSockets(PAIRING_TAG).map((ws) => {
+          const a = ws.deserializeAttachment() as { pairingId: string; since: number };
+          const ping = ctx.getWebSocketAutoResponseTimestamp(ws)?.getTime() ?? 0;
+          return { pairingId: a.pairingId, seenAt: Math.max(a.since, ping) };
+        }),
+      close: (pairingId, result) => {
+        for (const ws of ctx.getWebSockets(`${PAIRING_TAG}:${pairingId}`)) {
+          try {
+            if (result) ws.send(JSON.stringify({ type: result }));
+            ws.close(1000, result ?? "left");
+          } catch {
+            // 连接已断开时忽略。
+          }
+        }
+      },
+    };
     const deps: Deps = {
       sql: this.sql,
       notifier,
+      waiters,
       mailer: mailer(env),
       now: () => Date.now(),
       acceptSocket: (d: Device) => {
         const pair = new WebSocketPair();
-        ctx.acceptWebSocket(pair[1], [d.id, d.kind]);
+        ctx.acceptWebSocket(pair[1], ["device", d.id, d.kind]);
         return new Response(null, { status: 101, webSocket: pair[0] });
       },
     };
+    this.deps = deps;
     this.app = createAccountApp(deps);
   }
 
@@ -111,6 +145,15 @@ export class Account extends DurableObject<Env> {
 
   async webSocketClose(ws: WebSocket, code: number) {
     ws.close(code === 1005 ? 1000 : code, "closed");
+    if (!this.ctx.getTags(ws).includes(PAIRING_TAG) || !this.exists()) return;
+    const { pairingId } = ws.deserializeAttachment() as { pairingId: string };
+    pairingLeft(this.deps, pairingId);
+  }
+
+  /** 有等待连接时每 10 秒检查一次心跳和请求状态。 */
+  async alarm() {
+    if (!this.exists()) return;
+    if (checkWaiters(this.deps)) await this.ctx.storage.setAlarm(Date.now() + WAITER_CHECK);
   }
 
   async webSocketMessage() {}

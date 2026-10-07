@@ -13,9 +13,24 @@ export interface Notifier {
   disconnect(deviceId: string): void;
 }
 
+/** 发给配对发起方的最终结果。 */
+export type PairingResult = "approved" | "rejected" | "expired";
+
+/** 配对发起方的等待连接（docs/protocol.md 3.5.1）。 */
+export interface PairingWaiters {
+  accept(pairingId: string): Response;
+  /** 发起方是否仍保持等待连接。 */
+  waiting(pairingId: string): boolean;
+  /** 全部等待连接，以及最近一次收到心跳（或建立连接）的时间。 */
+  list(): { pairingId: string; seenAt: number }[];
+  /** 把结果发给发起方（可省略）并关闭连接。 */
+  close(pairingId: string, result?: PairingResult): void;
+}
+
 export interface Deps {
   sql: Sql;
   notifier: Notifier;
+  waiters: PairingWaiters;
   mailer: Mailer;
   now(): number;
   /** 接受一条推送连接（仅 Durable Object 环境提供）。 */
@@ -165,9 +180,11 @@ export function activeManagers(sql: Sql): Device[] {
 }
 
 /** 简单的按 IP 固定窗口限流。 */
+/** 请求方 IP；本地开发时没有该请求头。 */
+export const clientIp = (c: Context) => c.req.header("cf-connecting-ip") ?? "local";
+
 export function rateLimit(c: Context, deps: Deps, bucket: string, max: number) {
-  const ip = c.req.header("cf-connecting-ip") ?? "local";
-  const key = `${bucket}:${ip}`;
+  const key = `${bucket}:${clientIp(c)}`;
   const now = deps.now();
   const row = one<{ count: number; window_start: number }>(deps.sql, `SELECT * FROM rate_limits WHERE key = ?`, key);
   if (!row || now - row.window_start > 60_000) {
@@ -178,13 +195,14 @@ export function rateLimit(c: Context, deps: Deps, bucket: string, max: number) {
   deps.sql.run(`UPDATE rate_limits SET count = count + 1 WHERE key = ?`, key);
 }
 
-/** 清理过期的会话、挑战与配对请求。 */
+/** 清理过期的会话、挑战、配对请求与配对阻止记录。 */
 export function sweep(deps: Deps) {
   const now = deps.now();
   deps.sql.run(`DELETE FROM sessions WHERE expires_at <= ?`, now);
   deps.sql.run(`DELETE FROM challenges WHERE expires_at <= ?`, now);
   deps.sql.run(`UPDATE pairings SET status = 'expired' WHERE status = 'pending' AND expires_at <= ?`, now);
   deps.sql.run(`DELETE FROM pairings WHERE expires_at <= ?`, now - 24 * 60 * 60_000);
+  deps.sql.run(`DELETE FROM pairing_blocks WHERE until <= ?`, now);
   deps.sql.run(`DELETE FROM rate_limits WHERE window_start <= ?`, now - 60_000);
   deps.sql.run(`DELETE FROM idempotency WHERE created_at <= ?`, now - 7 * 24 * 60 * 60_000);
 }
