@@ -125,14 +125,6 @@ ThemeData buildTheme(Brightness brightness) {
         side: BorderSide(color: p.ink.withValues(alpha: 0.6), width: 1.2),
       ),
     ),
-    navigationBarTheme: NavigationBarThemeData(
-      backgroundColor: p.card,
-      indicatorColor: p.yellow,
-      surfaceTintColor: Colors.transparent,
-      // 选中的图标落在黄色底上，深浅模式都用深色。
-      iconTheme: WidgetStateProperty.resolveWith((s) =>
-          IconThemeData(color: s.contains(WidgetState.selected) ? Palette.light.ink : p.ink)),
-    ),
     snackBarTheme: const SnackBarThemeData(behavior: SnackBarBehavior.floating),
     dialogTheme: DialogThemeData(backgroundColor: p.card, surfaceTintColor: Colors.transparent),
     dividerTheme: DividerThemeData(color: p.line, thickness: 1, space: 1),

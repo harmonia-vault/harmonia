@@ -50,24 +50,82 @@ class _HomePageState extends State<HomePage> {
           ),
         Expanded(child: IndexedStack(index: _tab, children: pages)),
       ]),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _tab,
-        onDestinationSelected: (i) => setState(() => _tab = i),
-        destinations: [
-          const NavigationDestination(
-              icon: Icon(Icons.inventory_2_outlined), selectedIcon: Icon(Icons.inventory_2), label: '环境'),
-          NavigationDestination(
-            icon: Badge(
-              isLabelVisible: c.pendingPairingCount > 0,
-              label: Text('${c.pendingPairingCount}'),
-              child: const Icon(Icons.devices_outlined),
-            ),
-            selectedIcon: const Icon(Icons.devices),
-            label: '设备',
-          ),
-          const NavigationDestination(
-              icon: Icon(Icons.settings_outlined), selectedIcon: Icon(Icons.settings), label: '设置'),
+      bottomNavigationBar: _NavBar(
+        selected: _tab,
+        onSelect: (i) => setState(() => _tab = i),
+        items: [
+          const _NavItem(Icons.inventory_2_outlined, Icons.inventory_2, '环境'),
+          _NavItem(Icons.devices_outlined, Icons.devices, '设备', badge: c.pendingPairingCount),
+          const _NavItem(Icons.settings_outlined, Icons.settings, '设置'),
         ],
+      ),
+    );
+  }
+}
+
+class _NavItem {
+  const _NavItem(this.icon, this.selectedIcon, this.label, {this.badge = 0});
+  final IconData icon, selectedIcon;
+  final String label;
+  final int badge;
+}
+
+// 底部导航：选中项的黄色底同时包住图标和文字。
+class _NavBar extends StatelessWidget {
+  const _NavBar({required this.selected, required this.onSelect, required this.items});
+  final int selected;
+  final ValueChanged<int> onSelect;
+  final List<_NavItem> items;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    return Material(
+      color: p.card,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: Space.sm, vertical: Space.sm),
+          child: Row(children: [
+            for (var i = 0; i < items.length; i++)
+              Expanded(child: _tile(context, items[i], i == selected, () => onSelect(i))),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _tile(BuildContext context, _NavItem item, bool on, VoidCallback onTap) {
+    final p = context.palette;
+    // 黄色底上深浅模式都用深色。
+    final fg = on ? Palette.light.ink : p.mute;
+    Widget icon = Icon(on ? item.selectedIcon : item.icon, color: fg);
+    if (item.badge > 0) icon = Badge(label: Text('${item.badge}'), child: icon);
+    return Semantics(
+      selected: on,
+      button: true,
+      child: Center(
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+            width: 88,
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            decoration: BoxDecoration(
+              color: on ? p.yellow : Colors.transparent,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              icon,
+              const SizedBox(height: 2),
+              Text(item.label,
+                  style: TextStyle(
+                      fontSize: 12, color: fg, fontWeight: on ? FontWeight.w600 : FontWeight.w500)),
+            ]),
+          ),
+        ),
       ),
     );
   }
