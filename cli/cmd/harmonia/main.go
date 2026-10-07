@@ -117,6 +117,12 @@ func confirm(label string) bool {
 	return err == nil && (strings.EqualFold(ans, "y") || strings.EqualFold(ans, "yes"))
 }
 
+// confirmYes 用于安装类操作：直接回车视为同意，读不到输入时视为不同意。
+func confirmYes(label string) bool {
+	ans, err := prompt(label + "（Y/n）")
+	return err == nil && !strings.EqualFold(ans, "n") && !strings.EqualFold(ans, "no")
+}
+
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

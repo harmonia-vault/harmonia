@@ -99,12 +99,20 @@ func cmdShell(ctx context.Context, args []string) error {
 			return err
 		}
 	}
+	installed := true
+	for _, t := range targets {
+		installed = installed && shell.Installed(t.Path)
+	}
+	if installed {
+		fmt.Println("shell 集成已经安装，新开的终端会自动带上已启用环境中的变量。")
+		return nil
+	}
 	fmt.Println("将在以下文件末尾添加一段加载 Harmonia 变量的代码：")
 	for _, t := range targets {
 		fmt.Println("  " + t.Path)
 	}
 	fmt.Print("\n" + shell.SourceLine(d.EnvFile()) + "\n")
-	if !f.bools["yes"] && !confirm("确认添加？") {
+	if !f.bools["yes"] && !confirmYes("确认添加？") {
 		fmt.Println("已取消。也可以把上面的内容手动加到启动文件末尾。")
 		return nil
 	}

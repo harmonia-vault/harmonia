@@ -260,7 +260,9 @@ harmonia uninstall
 ### 5.8 rc 文件注入（与普通用户的使用习惯一致）
 
 - 后台服务把合并结果原子写入 `~/.harmonia/env.sh`（0600），内容是普通的 `export KEY='value'`，值一律使用单引号字面量安全转义。
-- `harmonia shell install` 先告诉用户要在哪个文件末尾加哪一行，确认后才写入：
+- **安装时询问**：安装脚本装好 `harmonia` 后，如果有终端可以交互，依次询问是否安装 shell 集成和后台服务，直接回车即安装（默认 Y）。shell 集成仍会先显示要修改的文件和内容；没有终端（例如在脚本或 CI 中运行）时跳过询问，只提示对应命令。两者在接入账号之前安装也没问题：`env.sh` 不存在时 source 行什么也不做，后台服务在接入前等待（2026-10-07 用户确认）。
+- `harmonia login` 完成后，只提示还没有安装的 shell 集成或后台服务。
+- `harmonia shell install` 先告诉用户要在哪个文件末尾加哪一行，确认后才写入（默认 Y）；已经安装过时直接提示已安装：
   - zsh 写入 `~/.zshenv`，这样非交互的 zsh 也能读到。
   - bash 写入 `~/.bashrc`，并确保 `~/.bash_profile` 或 `~/.profile` 会加载它。
   - 写入的内容是带标记注释的一行 `source ~/.harmonia/env.sh`。

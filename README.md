@@ -42,12 +42,12 @@ curl -fsSL https://github.com/harmonia-vault/harmonia/releases/download/update-f
 harmonia login https://你的服务器地址
 ```
 
+安装过程中会询问是否安装 shell 集成（新开的终端自动带上变量）和后台服务（实时同步，开机自动运行），直接回车即安装。跳过的话，之后可以运行 `harmonia shell install` 和 `harmonia service install`。
+
 终端会显示二维码。在 App 中打开“设备 → 添加设备”扫码，选择这台电脑可以访问的环境和权限，批准。
 
 ```bash
 harmonia env activate OpenAI          # 在本机启用环境
-harmonia shell install                # 新开的终端自动带上变量
-harmonia service install              # 后台服务：实时同步，开机自动运行
 ```
 
 之后在手机上修改变量，电脑上新开的终端会拿到新值。

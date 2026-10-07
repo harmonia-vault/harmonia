@@ -65,4 +65,22 @@ case ":$PATH:" in
   *":$DEST:"*) ;;
   *) echo "提示：$DEST 不在 PATH 中，请在 shell 配置文件中加入：export PATH=\"$DEST:\$PATH\"" ;;
 esac
+# 有终端可以交互时，询问是否安装 shell 集成和后台服务，直接回车即安装；没有终端时只提示命令。
+if (exec </dev/tty) 2>/dev/null; then
+  echo
+  echo "【shell 集成】新开的终端会自动带上已启用环境中的变量。"
+  "$DEST/harmonia" shell install </dev/tty || true
+  echo
+  echo "【后台服务】开机自动运行，保持与服务器的连接，变量有变化时实时写入本机。"
+  printf "是否安装后台服务？（Y/n）"
+  ans=""
+  read -r ans </dev/tty || true
+  case "$ans" in
+    n|N|no|NO|No) echo "已跳过。之后可以运行 harmonia service install。" ;;
+    *) "$DEST/harmonia" service install || echo "后台服务没有安装成功，可以稍后运行 harmonia service install 重试。" ;;
+  esac
+  echo
+else
+  echo "提示：运行 harmonia shell install 让新终端自动带上变量，运行 harmonia service install 安装后台服务。"
+fi
 echo "下一步：运行 harmonia login <服务器地址>"

@@ -17,6 +17,7 @@ import (
 
 	"github.com/harmonia-vault/harmonia/cli/internal/app"
 	"github.com/harmonia-vault/harmonia/cli/internal/daemon"
+	"github.com/harmonia-vault/harmonia/cli/internal/service"
 	"github.com/harmonia-vault/harmonia/cli/internal/shell"
 	"github.com/harmonia-vault/harmonia/cli/internal/state"
 	"github.com/harmonia-vault/harmonia/cli/internal/vault"
@@ -79,7 +80,7 @@ func cmdLogin(ctx context.Context, args []string) error {
 		return err
 	}
 	fmt.Fprintln(os.Stderr, "正在登录……")
-	_, n, err := app.Login(ctx, in, terminalPrompt{})
+	a, n, err := app.Login(ctx, in, terminalPrompt{})
 	if err != nil {
 		return err
 	}
@@ -87,8 +88,12 @@ func cmdLogin(ctx context.Context, args []string) error {
 	fmt.Println("接下来：")
 	fmt.Println("  harmonia env list                     查看环境")
 	fmt.Println("  harmonia env activate <环境>           在本机启用")
-	fmt.Println("  harmonia shell install                新开的终端自动带上变量")
-	fmt.Println("  harmonia service install              安装后台服务，实时同步")
+	if !shellInstalledAny(a.Dir) {
+		fmt.Println("  harmonia shell install                新开的终端自动带上变量")
+	}
+	if s := service.Check(); s.Supported && !s.Installed {
+		fmt.Println("  harmonia service install              安装后台服务，实时同步")
+	}
 	return nil
 }
 
