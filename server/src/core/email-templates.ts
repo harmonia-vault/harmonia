@@ -36,13 +36,16 @@ const warning = { title: "重置后数据无法找回", body: "保险库中的�
 const caution = "为保障账号安全，请勿将验证码透露给他人。";
 const footer = "此邮件由 Harmonia 服务自动发送，请勿直接回复。";
 
+/** 邮件验证码：8 个 Crockford Base32 字符（不含 I、L、O、U）。 */
+export const CODE_PATTERN = /^[0-9A-HJKMNP-TV-Z]{8}$/;
+
 function escape(value: string): string {
   return value.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 }
 
 export function codeEmail(input: CodeEmailInput): Omit<Email, "to"> {
   const c = copy[input.purpose];
-  if (!c || !/^[A-Z2-7]{8}$/.test(input.code) || !Number.isSafeInteger(input.minutes) || input.minutes < 1) throw new Error("email_template_input_invalid");
+  if (!c || !CODE_PATTERN.test(input.code) || !Number.isSafeInteger(input.minutes) || input.minutes < 1) throw new Error("email_template_input_invalid");
   const head = input.code.slice(0, 4), tail = input.code.slice(4), validity = `${input.minutes} 分钟内有效 · 仅可使用一次`;
   const text = [
     c.title, "", c.lead, "", `用途：${c.label}`, `账号：${input.email}`,

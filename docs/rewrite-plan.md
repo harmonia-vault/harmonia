@@ -168,7 +168,7 @@ harmonia/                     # 唯一开发仓库
 | 环境钥封装 | libsodium sealed box | `x/crypto/nacl/box` | `sodium` | — |
 | 设备身份与证书 | Ed25519 | `crypto/ed25519` | `sodium` | WebCrypto 验签 |
 | 密码 | 客户端 Argon2id（salt 由服务器下发）→ authKey → 服务端再做 PBKDF2-SHA256 存储 | `x/crypto/argon2` | `sodium` | WebCrypto |
-| 恢复码 | 128 位随机数，Base32 分组显示；用 HKDF-SHA256 分用途派生 Ed25519 和 X25519 密钥 | 标准库 | `sodium` / `cryptography` | — |
+| 恢复码 | 128 位随机数，Crockford Base32 分组显示（不含易混淆的 I、L、O、U）；用 HKDF-SHA256 分用途派生 Ed25519 和 X25519 密钥 | 标准库 | `sodium` / `cryptography` | — |
 | 更新清单 | minisign（Ed25519） | `aead.dev/minisign` | Dart 侧用 Ed25519 验证 minisign 格式 | — |
 
 签名原文统一采用 JSON 字符串数组，首项为用途域。全项目只有三种签名：设备证书、登录挑战、恢复钥轮换记录。
@@ -295,7 +295,7 @@ harmonia uninstall
 ### 5.10 配对
 
 1. 新设备在本地生成密钥，调用 `POST /pairings`，得到 `pairingId` 和 `secret`。
-2. 计算指纹 = `SHA-256(["harmonia/pairing", pairingId, signPub, boxPub])`。二维码包含 `pairingId` 和完整指纹；人工核对码是指纹的前 80 位，显示为 16 个 Base32 字符（4 组，每组 4 个）。
+2. 计算指纹 = `SHA-256(["harmonia/pairing", pairingId, signPub, boxPub])`。二维码包含 `pairingId` 和完整指纹；人工核对码是指纹的前 80 位，显示为 16 个 Crockford Base32 字符（4 组，每组 4 个）。
 3. 手机扫码或手输核对码，拉取该配对请求并重新计算指纹比对。比对一致后，显示设备名和平台，让用户选择环境、角色和有效期，或者选择“作为管理设备”。
 4. 手机签发设备证书、封装环境钥，调用 `approve`；新设备通过推送或轮询得知已批准，换取设备会话后完成同步。
 

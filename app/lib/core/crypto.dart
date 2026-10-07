@@ -24,7 +24,8 @@ Uint8List canonical(List<String> items) =>
 Uint8List sha256(List<int> data) =>
     Uint8List.fromList(hash.sha256.convert(data).bytes);
 
-const _b32Alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+/// Crockford Base32 字母表：不含 I、L、O、U，避免手抄时混淆。
+const _b32Alphabet = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 
 String base32Encode(List<int> data) {
   final out = StringBuffer();
@@ -213,11 +214,7 @@ String formatRecoveryCode(List<int> code) => group4(base32Encode(code));
 
 /// 解析用户输入的恢复码；格式不对时返回 null。
 Uint8List? parseRecoveryCode(String input) {
-  final s = input
-      .toUpperCase()
-      .replaceAll(RegExp(r'[\s-]'), '')
-      .replaceAll('0', 'O')
-      .replaceAll('1', 'I');
+  final s = normalizeCode(input);
   if (s.length != 26) return null;
   final b = base32Decode(s);
   return b != null && b.length == 16 ? b : null;
@@ -246,9 +243,12 @@ String pairingQr(String pairingId, List<int> fp) =>
   }
 }
 
-/// 规范化用户手输的核对码。
-String normalizePairingCode(String input) =>
-    input.toUpperCase().replaceAll(RegExp(r'[\s-]'), '');
+/// 规范化用户手输的恢复码或核对码：去掉分隔符和空白，转为大写，O 视为 0，I、L 视为 1。
+String normalizeCode(String input) => input
+    .toUpperCase()
+    .replaceAll(RegExp(r'[\s-]'), '')
+    .replaceAll('O', '0')
+    .replaceAll(RegExp('[IL]'), '1');
 
 /// 在后台 isolate 中计算密码派生密钥，避免界面卡顿。
 Future<Uint8List> passwordKeyInIsolate(String password, Uint8List salt) =>

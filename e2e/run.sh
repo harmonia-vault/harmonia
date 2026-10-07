@@ -41,7 +41,7 @@ expect_eq "$(manager phone register --server "$SERVER" --email "$EMAIL" --passwo
 sleep 1
 manager phone verify --server "$SERVER" --email "$EMAIL" --code "$(mail_code verification)" >/dev/null
 RECOVERY=$(manager phone setup --server "$SERVER" --email "$EMAIL" --password "$PASSWORD" --name "主手机")
-[[ "$RECOVERY" =~ ^[A-Z2-7]{4}(-[A-Z2-7]{1,4}){6}$ ]] || fail "恢复码格式：$RECOVERY"
+[[ "$RECOVERY" =~ ^[0-9A-HJKMNP-TV-Z]{4}(-[0-9A-HJKMNP-TV-Z]{1,4}){6}$ ]] || fail "恢复码格式：$RECOVERY"
 manager phone env-create OpenAI >/dev/null
 manager phone env-create Other >/dev/null
 manager phone var-set OpenAI OPENAI_API_KEY "sk-first 'quoted' \$(no)" >/dev/null
@@ -52,7 +52,7 @@ echo "$PASSWORD" | HARMONIA_HOME="$TMP/cli" "$TMP/harmonia" login "$SERVER" --em
 LOGIN_PID=$!
 CODE=""
 for _ in $(seq 1 60); do
-  CODE=$(grep -ao '核对码：[A-Z2-7-]*' "$TMP/login.err" | sed 's/核对码：//' || true)
+  CODE=$(grep -ao '核对码：[0-9A-HJKMNP-TV-Z-]*' "$TMP/login.err" | sed 's/核对码：//' || true)
   [ -n "$CODE" ] && break
   sleep 1
 done
@@ -102,7 +102,7 @@ manager phone2 pair --server "$SERVER" --email "$EMAIL" --password "$PASSWORD" -
 PAIR_PID=$!
 CODE2=""
 for _ in $(seq 1 60); do
-  CODE2=$(grep -ao '核对码：[A-Z2-7-]*' "$TMP/pair2.err" | sed 's/核对码：//' || true)
+  CODE2=$(grep -ao '核对码：[0-9A-HJKMNP-TV-Z-]*' "$TMP/pair2.err" | sed 's/核对码：//' || true)
   [ -n "$CODE2" ] && break
   sleep 1
 done

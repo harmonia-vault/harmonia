@@ -1,7 +1,7 @@
 // 邮件验证码：生成、发送与校验（docs/protocol.md 3.0）。
 import { one } from "./db";
 import type { Deps } from "./context";
-import { codeEmail, type CodeEmailPurpose, type Email } from "./email-templates";
+import { CODE_PATTERN, codeEmail, type CodeEmailPurpose, type Email } from "./email-templates";
 import { ApiError, b64, bad, sha256, utf8 } from "./util";
 
 export interface Mailer {
@@ -13,14 +13,15 @@ export interface Mailer {
 const CODE_TTL = 15 * 60_000;
 const RESEND_INTERVAL = 60_000;
 const MAX_ATTEMPTS = 5;
-const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+/** Crockford Base32 字母表：不含 I、L、O、U，避免手抄时混淆。 */
+const ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 
 const hashCode = async (purpose: string, code: string) => b64(await sha256(utf8(`${purpose}:${code}`)));
 
 export function normalizeCode(input: unknown): string {
   if (typeof input !== "string") throw bad("请输入邮件中的 8 位验证码。");
-  const s = input.toUpperCase().replace(/[\s-]/g, "").replace(/0/g, "O").replace(/1/g, "I");
-  if (!/^[A-Z2-7]{8}$/.test(s)) throw bad("请输入邮件中的 8 位验证码。");
+  const s = input.toUpperCase().replace(/[\s-]/g, "").replace(/O/g, "0").replace(/[IL]/g, "1");
+  if (!CODE_PATTERN.test(s)) throw bad("请输入邮件中的 8 位验证码。");
   return s;
 }
 

@@ -2,7 +2,7 @@
   "box": {
     "plain": "environment-key-0123456789abcdef",
     "pub": "2AKgsNn2QueLyPryEL9zjXrpGjE7A__CwRyEudgB0Hg",
-    "sealed": "J7QNVIELomUyu-oWpPTPIhYTZFY8IY_3441u-k__S1JEMkDY3kLkvVbnjU9CwEPiFl1A4nQYHw8su-E2R6Yo389siQ9uwJvtz6NuDfy98NQ",
+    "sealed": "1YwIekx-JSg_qjPVlB2LcTZ-Xnxd-q4O-bXH3_xBCgZQvBzWKOXhPjN2jUhXPqOdaEo9pZFJ-_G3ADcOwKWI7n-h2bROUfYOhXwiAPS0gfo",
     "seed": "AgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4fICE"
   },
   "canonical": {
@@ -23,12 +23,12 @@
   },
   "minisign": {
     "message": "{\"version\":\"9.9.9\"}",
-    "publicKey": "untrusted comment: minisign public key: FD02A64DE336630F\nRWQPYzbjTaYC/eg35z0Ub+Ukc0lKNLpRmUw7/0R1KiAYiPG0rNXdbd94",
-    "signature": "untrusted comment: test\nRWQPYzbjTaYC/e23A22hPqiLb4vKQCkQFVTE5SvpJITGuhLx7/Lc5GQ1REy4nOueUJgwI/faQKNr0fQFZL758HsB6+f8LzKRBAg=\ntrusted comment: timestamp:0\nZvjKRxcJCmgPnvbem7uhgs6vo7k4GE5hyXCKgoUXNNXo8j0VLBBn9RZi6b10fgi1jD0RH4jVaRkYlZ7a+kHXAw==\n"
+    "publicKey": "untrusted comment: minisign public key: 3758814B89B39E09\nRWQJnrOJS4FYN+4iTQS+F0EBA2kH7JrsWycaoS9u5tYQ0YM/w01gPXU5",
+    "signature": "untrusted comment: test\nRWQJnrOJS4FYNy+V9ZvZaDEoQPWtI9H/55Z6U4cMQillKgD69+CXT4F96LXDjmhmrXU9NyZjqzYe8tVxkCqXug/2ghWcuEUXTAc=\ntrusted comment: timestamp:0\naCLfn7jTZfUzc89oUo27u7ZsDda9j1NI5z7SqWsoa/ifD9pUv7iTfid31DnD1nNPr6QRVL4CcuIAqqVLYD1ICQ==\n"
   },
   "pairing": {
     "boxPub": "2AKgsNn2QueLyPryEL9zjXrpGjE7A__CwRyEudgB0Hg",
-    "code": "W2LU-QIMR-3H22-B6M2",
+    "code": "PTBM-G8CH-V7TT-1YCT",
     "fingerprint": "tpdIIZHZ9aD5mqvroNu3wHmDUynXXXnNAV2gYVDONAM",
     "pairingId": "CCCCCCCCCCCCCCCCCCCCCC",
     "qr": "harmonia-pair:CCCCCCCCCCCCCCCCCCCCCC:tpdIIZHZ9aD5mqvroNu3wHmDUynXXXnNAV2gYVDONAM",
@@ -43,7 +43,7 @@
   "recovery": {
     "boxPub": "qgXqGHvmYkgJOifqHUPuCB1PjL4hrnhn338c7ddiLVk",
     "code": "BAUGBwgJCgsMDQ4PEBESEw",
-    "formatted": "AQCQ-MBYI-BEFA-WDAN-BYHR-AEIS-CM",
+    "formatted": "0G2G-C1R8-1450-P30D-1R7H-048J-2C",
     "signPub": "vfFpTqMA4G--_XgEwUFjt9EYD9j0wMMERHreyFaaoY4"
   },
   "sign": {
@@ -53,7 +53,7 @@
     "sig": "4JfiYKNw1eVh5bBUu-mw6wT7TamLzE4M2BoTwZ4-cNPuFiTyAlkCnN-gMCRsprIjc3lA6Y8i1l0YybTqPLKKAA"
   },
   "value": {
-    "ciphertext": "7F1UmTKSF6QsCq-ynTGfcg1TwbyA7HlTATtg9OfmR7QUvsiwF7ReAzIsh_UYO9oCH3aEPGTtbUQvkILEPDBXsU4grlE",
+    "ciphertext": "ijB3AgfbXxz4iZm71D472vKxUDMa-rgzV6ZVaBrdwHJAUd6npN2osy_BLeXWXtqDVlORky2EOYpWVdZ_W2dMp7WndZ0",
     "envId": "BBBBBBBBBBBBBBBBBBBBBB",
     "key": "AwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISI",
     "keyVersion": 1,

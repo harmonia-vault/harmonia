@@ -30,7 +30,8 @@ const (
 var (
 	ErrDecrypt   = errors.New("解密失败")
 	ErrSignature = errors.New("签名无效")
-	b32          = base32.StdEncoding.WithPadding(base32.NoPadding)
+	// Crockford Base32 字母表：不含 I、L、O、U，避免手抄时混淆。
+	b32 = base32.NewEncoding("0123456789ABCDEFGHJKMNPQRSTVWXYZ").WithPadding(base32.NoPadding)
 )
 
 // B64 / UnB64 使用无填充 base64url。
@@ -204,7 +205,7 @@ func FormatRecoveryCode(code []byte) string { return group(b32.EncodeToString(co
 
 func ParseRecoveryCode(s string) ([]byte, error) {
 	s = strings.ToUpper(strings.NewReplacer("-", "", " ", "", "\t", "", "\n", "").Replace(s))
-	s = strings.NewReplacer("0", "O", "1", "I").Replace(s)
+	s = strings.NewReplacer("O", "0", "I", "1", "L", "1").Replace(s)
 	b, err := b32.DecodeString(s)
 	if err != nil || len(b) != 16 {
 		return nil, errors.New("恢复码格式不对，请检查是否完整输入了 26 个字符")

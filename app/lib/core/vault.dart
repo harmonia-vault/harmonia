@@ -329,11 +329,11 @@ class Vault {
 
   /// 根据手输的核对码在待处理请求中查找。
   Future<PairingRequest> pairingFromCode(String code) async {
-    final want = normalizePairingCode(code);
+    final want = normalizeCode(code);
     if (want.length != 16) throw VaultException('核对码是 16 位，请检查后重新输入。');
     for (final p in await pendingPairings()) {
       final fp = pairingFingerprint(p.id, p.signPub, p.boxPub, p.rootPub);
-      if (normalizePairingCode(pairingCode(fp)) == want) {
+      if (normalizeCode(pairingCode(fp)) == want) {
         _checkPairing(p);
         return p;
       }
