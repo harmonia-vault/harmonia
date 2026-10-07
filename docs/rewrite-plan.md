@@ -494,7 +494,7 @@ harmonia uninstall
 | CLI 配对命令 | `login` 与 `pair` 两步 | `harmonia login` 一步完成登录和配对 | 密码会话只有 15 分钟，拆成两步容易过期 |
 | 封装构件 | sealed box | libsodium `crypto_box_seal`；加密密钥对按 `crypto_box_seed_keypair` 由 32 字节种子派生 | 三端一致（Go 与 Dart 已用测试向量验证） |
 | App 原生代码 | 不写原生代码 | 约 140 行 Kotlin（`MainActivity` 与 `HtmlPdf`）：设备名、安装更新 APK、HTML 转 PDF、通过系统“保存到”保存文件、敏感内容复制 | `local_auth` 要求 `FlutterFragmentActivity`；现成的安装插件会申请媒体读取权限，不适合存放密钥的 App；现成的 HTML 转 PDF 插件已弃用该接口 |
-| 恢复码导出 | 只抄写 | 恢复码页可以复制和下载 PDF。PDF 由 HTML 模板（`app/assets/recovery_sheet.html`）填入账号、服务器和恢复码后，用系统网页引擎在本机排成 A4，经系统“保存到”由用户选择位置保存，不经过分享面板。复制时标记为敏感内容（Android 13 起剪贴板预览中隐藏），1 分钟后自动清空剪贴板，界面上告知用户 | 模板与平台无关，以后的其他客户端复用同一份 HTML；版式沿用验证码邮件，不用大面积色块，便于打印（2026-10-07 用户确认） |
+| 恢复码导出 | 只抄写 | 恢复码页可以复制；提交成功、恢复码生效后的完成页才提供下载 PDF，避免误以为保存了文件新恢复码就已生效。PDF 由 HTML 模板（`app/assets/recovery_sheet.html`）填入账号、服务器和恢复码后，用系统网页引擎在本机排成 A4，经系统“保存到”由用户选择位置保存，不经过分享面板。复制时标记为敏感内容（Android 13 起剪贴板预览中隐藏），1 分钟后自动清空剪贴板，界面上告知用户 | 模板与平台无关，以后的其他客户端复用同一份 HTML；版式沿用验证码邮件，不用大面积色块，便于打印（2026-10-07 用户确认） |
 | 服务端发布仓库 | 发布到 `harmonia-server` | 发布到 `harmonia-worker`；打正式标签时由 CI（`publish-server.yml`，部署密钥只授权该仓库）推送，也可手动运行 | `harmonia-server` 是旧版部署的 Fork，保持不动 |
 | 服务端配置 | 在 Fork 中编辑 `wrangler.jsonc` 的 `vars` | `wrangler.jsonc` 不含 `vars`，设置 `keep_vars: true`；三个配置在 Cloudflare 控制台的 Worker 变量中填写，缺省值在代码中 | 发布仓库可以被 Cloudflare 直接连接部署（作为示例实例），同时保持为不含个人配置的模板；Fork 后无需改文件，Sync fork 不会冲突（2026-10-07 用户确认） |
 | 本地开发 | — | 服务端对 `localhost`、`127.0.0.1`、`10.0.2.2`（Android 模拟器）放行 HTTP | 便于本地与模拟器调试；线上只走 HTTPS |

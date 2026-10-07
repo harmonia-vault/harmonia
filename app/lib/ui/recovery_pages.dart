@@ -13,8 +13,7 @@ import 'widgets.dart';
 
 /// 两步确认恢复码：先展示让用户抄写，再要求完整重新输入。
 class RecoveryCodeConfirm extends StatefulWidget {
-  const RecoveryCodeConfirm({super.key, required this.c, required this.code, required this.onConfirmed, this.extra});
-  final AppController c;
+  const RecoveryCodeConfirm({super.key, required this.code, required this.onConfirmed, this.extra});
   final Uint8List code;
   final Future<void> Function() onConfirmed;
   final Widget? extra;
@@ -35,10 +34,10 @@ class _RecoveryCodeConfirmState extends State<RecoveryCodeConfirm> {
       return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         CodeBox(formatted, copyable: false),
         const SizedBox(height: Space.md),
-        RecoveryCodeActions(c: widget.c, code: widget.code),
+        CopyRecoveryCode(code: widget.code),
         const SizedBox(height: Space.lg),
         const Banner2(
-          '请把恢复码抄在纸上、存进密码管理器，或下载 PDF 打印后妥善保管。丢失所有手机时，只能用它找回数据；它不会再次显示，服务器也没有副本。',
+          '请把恢复码抄在纸上或存进密码管理器，妥善保管；提交成功后还可以下载 PDF 打印。丢失所有手机时，只能用它找回数据；它不会再次显示，服务器也没有副本。',
           warn: true,
         ),
         const SizedBox(height: Space.md),
@@ -93,18 +92,25 @@ class SetupPage extends StatelessWidget {
   final AppController c;
 
   @override
-  Widget build(BuildContext context) => AuthScaffold(
-        title: '保存恢复码',
-        subtitle: '这是账号的第一台手机。Harmonia 会在本机生成加密密钥，并给你一个恢复码。',
-        onBack: c.cancelToSignIn,
-        children: [
-          RecoveryCodeConfirm(
-            c: c,
-            code: c.setupDraft!.code,
-            onConfirmed: () => runBusy(context, c.completeSetup),
-          ),
-        ],
-      );
+  Widget build(BuildContext context) => c.setupCompleted
+      ? RecoveryDoneView(
+          c: c,
+          code: c.setupDraft!.code,
+          title: '恢复码已生效',
+          subtitle: '账号已经创建，刚才保存的恢复码从现在起可以使用。',
+          onDone: c.finishSetup,
+        )
+      : AuthScaffold(
+          title: '保存恢复码',
+          subtitle: '这是账号的第一台手机。Harmonia 会在本机生成加密密钥，并给你一个恢复码。',
+          onBack: c.cancelToSignIn,
+          children: [
+            RecoveryCodeConfirm(
+              code: c.setupDraft!.code,
+              onConfirmed: () => runBusy(context, c.completeSetup),
+            ),
+          ],
+        );
 }
 
 class UnpairedPage extends StatelessWidget {
@@ -271,6 +277,7 @@ class _RotationPageState extends State<RotationPage> {
   final _password = TextEditingController();
   bool _changePassword = false;
   bool _started = false;
+  bool _done = false;
 
   Future<void> _submit() async {
     final pw = _changePassword ? _password.text : null;
@@ -280,15 +287,22 @@ class _RotationPageState extends State<RotationPage> {
     }
     if (!widget.forced && !await confirmIdentity(context, '验证身份以更换恢复码')) return;
     if (!mounted) return;
-    final nav = Navigator.of(context);
-    final ok = await runBusy(context, () async {
-      await widget.c.rotateRecovery(_code, newPassword: pw);
-    }, done: '恢复码已更换，旧恢复码已失效');
-    if (ok && !widget.forced) nav.pop();
+    final ok = await runBusy(context, () => widget.c.rotateRecovery(_code, newPassword: pw));
+    if (ok && mounted) setState(() => _done = true);
   }
 
   @override
-  Widget build(BuildContext context) => _started ? _codeStep() : _introStep();
+  Widget build(BuildContext context) => _done
+      ? RecoveryDoneView(
+          c: widget.c,
+          code: _code,
+          title: '恢复码已更换',
+          subtitle: '新恢复码已经生效，旧恢复码已作废。',
+          onDone: widget.forced ? widget.c.finishRotation : () => Navigator.pop(context),
+        )
+      : _started
+          ? _codeStep()
+          : _introStep();
 
   /// 开始前的说明：新恢复码在核对提交前不会生效。
   Widget _introStep() => AuthScaffold(
@@ -324,7 +338,6 @@ class _RotationPageState extends State<RotationPage> {
           onBack: () => setState(() => _started = false),
           children: [
             RecoveryCodeConfirm(
-              c: widget.c,
               code: _code,
               onConfirmed: _submit,
               extra: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [

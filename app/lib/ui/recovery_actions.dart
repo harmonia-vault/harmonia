@@ -1,4 +1,4 @@
-// 恢复码的复制与下载 PDF。
+// 恢复码的复制，以及提交成功后的完成页（下载 PDF）。
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -9,15 +9,41 @@ import '../core/recovery_sheet.dart';
 import 'theme.dart';
 import 'widgets.dart';
 
-class RecoveryCodeActions extends StatelessWidget {
-  const RecoveryCodeActions({super.key, required this.c, required this.code});
-  final AppController c;
+/// 复制恢复码：剪贴板预览中隐藏，1 分钟后自动清空。
+class CopyRecoveryCode extends StatelessWidget {
+  const CopyRecoveryCode({super.key, required this.code});
   final List<int> code;
 
-  Future<void> _copy(BuildContext context) async {
-    await copySensitive(formatRecoveryCode(code));
-    if (context.mounted) toast(context, '已复制。为了安全，1 分钟后会自动清空剪贴板');
-  }
+  @override
+  Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        OutlinedButton.icon(
+          onPressed: () async {
+            await copySensitive(formatRecoveryCode(code));
+            if (context.mounted) toast(context, '已复制。为了安全，1 分钟后会自动清空剪贴板');
+          },
+          icon: const Icon(Icons.copy_outlined),
+          label: const Text('复制'),
+        ),
+        const SizedBox(height: Space.sm),
+        Text('复制后 1 分钟会自动清空剪贴板。',
+            textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: context.palette.mute)),
+      ]);
+}
+
+/// 恢复码提交成功后的完成页：此时恢复码已经生效，才提供下载 PDF。
+class RecoveryDoneView extends StatelessWidget {
+  const RecoveryDoneView({
+    super.key,
+    required this.c,
+    required this.code,
+    required this.title,
+    required this.subtitle,
+    required this.onDone,
+  });
+  final AppController c;
+  final List<int> code;
+  final String title, subtitle;
+  final VoidCallback onDone;
 
   Future<void> _download(BuildContext context) async {
     var saved = false;
@@ -36,26 +62,19 @@ class RecoveryCodeActions extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Row(children: [
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: () => _copy(context),
-              icon: const Icon(Icons.copy_outlined),
-              label: const Text('复制'),
-            ),
+  Widget build(BuildContext context) => AuthScaffold(
+        title: title,
+        subtitle: subtitle,
+        children: [
+          const Text('需要纸质备份的话，可以下载包含这个恢复码的 PDF 打印。PDF 只在这里提供一次。'),
+          const SizedBox(height: Space.lg),
+          OutlinedButton.icon(
+            onPressed: () => _download(context),
+            icon: const Icon(Icons.picture_as_pdf_outlined),
+            label: const Text('下载 PDF'),
           ),
-          const SizedBox(width: Space.md),
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: () => _download(context),
-              icon: const Icon(Icons.picture_as_pdf_outlined),
-              label: const Text('下载 PDF'),
-            ),
-          ),
-        ]),
-        const SizedBox(height: Space.sm),
-        Text('复制后 1 分钟会自动清空剪贴板。',
-            textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: context.palette.mute)),
-      ]);
+          const SizedBox(height: Space.md),
+          FilledButton(onPressed: onDone, child: const Text('完成')),
+        ],
+      );
 }

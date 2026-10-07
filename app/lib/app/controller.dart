@@ -62,6 +62,8 @@ class AppController extends ChangeNotifier {
   InstanceInfo? instance;
   PasswordSession? session;
   SetupDraft? setupDraft;
+  /// 首次初始化已提交成功，正在显示完成页。
+  bool setupCompleted = false;
   PendingPairing? pendingPairing;
   String? pendingEmail;
   String? _pendingPassword;
@@ -193,6 +195,7 @@ class AppController extends ChangeNotifier {
   void cancelToSignIn() {
     session = null;
     setupDraft = null;
+    setupCompleted = false;
     pendingPairing = null;
     _pendingPassword = null;
     _go(Stage.signedOut);
@@ -200,12 +203,18 @@ class AppController extends ChangeNotifier {
 
   // ---- 首次初始化 ----
 
-  /// 用户已确认抄写恢复码后提交。
+  /// 用户已确认抄写恢复码后提交。成功后停在完成页，由 [finishSetup] 进入主页。
   Future<void> completeSetup() async {
     final cfg = await account.completeSetup(session!, setupDraft!, deviceName);
     await vault.adopt(cfg);
-    setupDraft = null;
     session = null;
+    setupCompleted = true;
+    notifyListeners();
+  }
+
+  void finishSetup() {
+    setupDraft = null;
+    setupCompleted = false;
     _go(Stage.home);
     _onUnlocked();
   }
@@ -272,12 +281,13 @@ class AppController extends ChangeNotifier {
       if (!await _rotationCompleted()) rethrow;
     }
     rotationKey = null;
-    if (stage == Stage.rotation) {
-      _go(Stage.home);
-      _onUnlocked();
-    } else {
-      notifyListeners();
-    }
+    notifyListeners();
+  }
+
+  /// 恢复后的强制轮换完成：离开完成页，进入主页。
+  void finishRotation() {
+    _go(Stage.home);
+    _onUnlocked();
   }
 
   Future<bool> _rotationCompleted() async {
