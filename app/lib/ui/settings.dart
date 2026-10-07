@@ -2,7 +2,6 @@
 import 'package:flutter/material.dart';
 
 import '../app/controller.dart';
-import '../app/identity.dart';
 import '../app/updater.dart';
 import 'lock.dart';
 import 'recovery_pages.dart';
@@ -17,36 +16,48 @@ class SettingsTab extends StatefulWidget {
 }
 
 class _SettingsTabState extends State<SettingsTab> {
-  IdentityMethod? _method;
-  bool _hasPin = false;
+  bool _bioAvailable = false;
+  bool _bioEnabled = false;
 
   AppController get c => widget.c;
 
   @override
   void initState() {
     super.initState();
-    _loadIdentity();
+    _loadBio();
   }
 
-  Future<void> _loadIdentity() async {
-    final m = await identity.method();
-    final pin = await identity.hasPin();
+  Future<void> _loadBio() async {
+    final available = await identity.bioAvailable();
+    final enabled = await identity.bioEnabled();
     if (mounted) {
       setState(() {
-        _method = m;
-        _hasPin = pin;
+        _bioAvailable = available;
+        _bioEnabled = enabled;
       });
     }
   }
 
-  Future<void> _toggleLock(bool v) async {
-    if (v && _method == IdentityMethod.none) {
-      if (!await setupPin(context)) return;
-      await _loadIdentity();
+  Future<void> _toggleBio(bool v) async {
+    final key = await verifyIdentity(context, v ? '验证身份以开启指纹解锁' : '验证身份以关闭指纹解锁');
+    if (key == null || !mounted) return;
+    if (v) {
+      var enabled = false;
+      if (await runBusy(context, () async => enabled = await identity.enableBio(key)) && enabled && mounted) {
+        toast(context, '已开启指纹解锁');
+      }
+    } else {
+      await identity.disableBio();
     }
-    if (!mounted) return;
-    if (!v && !await confirmIdentity(context, '验证身份以关闭 App 锁')) return;
-    await c.setLockEnabled(v);
+    await _loadBio();
+  }
+
+  Future<void> _changePin() async {
+    final key = await verifyIdentity(context, '验证身份以修改 App PIN');
+    if (key == null || !mounted) return;
+    final pin = await askNewPin(context);
+    if (pin == null || !mounted) return;
+    await runBusy(context, () => identity.keyring.changePin(key, pin), done: 'App PIN 已修改');
   }
 
   Future<void> _changePassword() async {
@@ -146,27 +157,20 @@ class _SettingsTabState extends State<SettingsTab> {
         const SectionTitle('安全'),
         Card(
           child: Column(children: [
-            SwitchListTile(
-              secondary: const Icon(Icons.lock_outline),
-              value: c.prefs.lockEnabled && _method != null && _method != IdentityMethod.none,
-              onChanged: _toggleLock,
-              title: const Text('App 锁'),
-              subtitle: Text(switch (_method) {
-                IdentityMethod.system => '打开 App 或离开超过 5 分钟后，需要指纹或锁屏密码',
-                IdentityMethod.pin => '打开 App 或离开超过 5 分钟后，需要输入 App PIN',
-                _ => '这台手机没有设置锁屏密码，开启时需要设置 App PIN',
-              }),
+            ListTile(
+              leading: const Icon(Icons.pin_outlined),
+              title: const Text('修改 App PIN'),
+              subtitle: const Text('打开 App 或离开超过 5 分钟后，需要输入 App PIN'),
+              onTap: _changePin,
             ),
-            if (_method == IdentityMethod.pin || (_method == IdentityMethod.none && _hasPin)) ...[
+            if (_bioAvailable || _bioEnabled) ...[
               const Divider(),
-              ListTile(
-                leading: const Icon(Icons.pin_outlined),
-                title: const Text('修改 App PIN'),
-                onTap: () async {
-                  if (!await confirmIdentity(context, '验证当前 PIN')) return;
-                  if (!context.mounted) return;
-                  await setupPin(context);
-                },
+              SwitchListTile(
+                secondary: const Icon(Icons.fingerprint),
+                value: _bioEnabled,
+                onChanged: _toggleBio,
+                title: const Text('指纹解锁'),
+                subtitle: const Text('可以用指纹代替 App PIN'),
               ),
             ],
             const Divider(),

@@ -182,6 +182,29 @@ class HCrypto {
     }
   }
 
+  /// XChaCha20-Poly1305：返回 nonce ‖ 密文。用于本机密钥保护（protocol 2.5）。
+  Uint8List aeadSeal(Uint8List key, Uint8List msg, Uint8List aad) {
+    final aead = sodium.crypto.aeadXChaCha20Poly1305IETF;
+    final nonce = random(aead.nonceBytes);
+    final ct = aead.encrypt(
+        message: msg, nonce: nonce, key: sodium.secureCopy(key), additionalData: aad);
+    return Uint8List.fromList([...nonce, ...ct]);
+  }
+
+  Uint8List aeadOpen(Uint8List key, Uint8List box, Uint8List aad) {
+    final aead = sodium.crypto.aeadXChaCha20Poly1305IETF;
+    try {
+      return aead.decrypt(
+        cipherText: box.sublist(aead.nonceBytes),
+        nonce: box.sublist(0, aead.nonceBytes),
+        key: sodium.secureCopy(key),
+        additionalData: aad,
+      );
+    } catch (_) {
+      throw DecryptException();
+    }
+  }
+
   RecoveryKeys deriveRecovery(Uint8List code) => RecoveryKeys(
         signKeyFromSeed(hkdf(code, 'harmonia.recovery.sign')),
         boxKeyFromSeed(hkdf(code, 'harmonia.recovery.box')),

@@ -16,7 +16,7 @@
 
 ## 2. 密码学
 
-全部使用 libsodium 兼容的标准构件。
+全部使用 libsodium 兼容的标准构件。App 本机密钥保护另外使用 Android Keystore，见 2.5。
 
 | 用途 | 构件 |
 | --- | --- |
@@ -73,6 +73,36 @@ fp = SHA-256(C(["harmonia.pairing", pairingId, signPub, boxPub, rootPub]))
 核对码 = CrockfordBase32(fp[0:10])，16 个字符，按 4 个一组用 '-' 分隔
 二维码内容 = "harmonia-pair:" + pairingId + ":" + b64(fp)
 ```
+
+### 2.5 App 本机密钥保护
+
+只用于 Android App 的本机存储，不经过网络，其他端不需要实现。除 2 节的构件外，这里额外使用 Android Keystore 中不可导出的密钥。
+
+```
+DEK  = 32 字节随机数，登录后设置 App PIN 时生成
+本机配置 = XChaCha20-Poly1305(DEK, 配置 JSON, AAD = C(["harmonia.local", "config"]))
+
+PIN 槽（必有）：
+  pk   = Argon2id(PIN, salt)                  // salt 16 字节；参数同 2 节“密码”
+  kek  = HMAC-SHA256(K_hw, pk)                // K_hw：Keystore HMAC 密钥，不可导出，不要求用户验证
+  槽   = XChaCha20-Poly1305(kek, DEK, AAD = C(["harmonia.local-slot", "pin"]))
+
+指纹槽（可选）：
+  K_bio = Keystore AES-256-GCM 密钥：不可导出；每次使用都要求 Class 3 生物识别，
+          通过 BiometricPrompt 的 CryptoObject 授权；新增或删除指纹即作废
+  槽    = AES-256-GCM(K_bio, DEK)，IV 由 Keystore 生成，与密文一起保存
+```
+
+配置 JSON 中含设备签名种子和加密种子。缓存中的环境钥封装和变量值本来就是密文，不再加密。
+
+规则：
+
+- **解锁即解开 DEK。** 任意一个槽解开 DEK 就算验证通过。本机不保存 PIN 的哈希或其他可以离线核对 PIN 的值，PIN 是否正确只看 PIN 槽能否解开。
+- **K_hw 必须参与每一次 PIN 尝试。** 先算 Argon2id，再调用 Keystore 算 HMAC。不能把 Keystore 用作外层加密：外层只要解开一次，就能拿到内层密文，然后在别的机器上暴力破解 PIN。
+- **修改 PIN**：生成新的 salt，用新 PIN 重写 PIN 槽。DEK 和本机配置不变。
+- **指纹槽作废**：Keystore 报告密钥永久失效时，删除指纹槽和 K_bio，只保留 PIN 槽。
+- **清除**：退出登录、本机被撤销、选择“忘记 PIN”时，删除本机配置、两个槽、K_hw 和 K_bio。
+- 以上密文仍然写入 `flutter_secure_storage`。
 
 ## 3. HTTP API
 

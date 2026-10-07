@@ -18,8 +18,9 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 
-// FlutterFragmentActivity 是 local_auth 的要求。平台通道提供：设备名、安装更新 APK、
-// HTML 转 PDF、通过系统“保存到”保存文件、敏感内容复制（1 分钟后清空剪贴板）。
+// FlutterFragmentActivity 是 BiometricPrompt 的要求。平台通道提供：设备名、安装更新 APK、
+// HTML 转 PDF、通过系统“保存到”保存文件、敏感内容复制（1 分钟后清空剪贴板）；
+// 本机密钥保护见 LocalKeys。
 class MainActivity : FlutterFragmentActivity() {
     private val handler = Handler(Looper.getMainLooper())
     private val clearClipboard = Runnable {
@@ -44,6 +45,8 @@ class MainActivity : FlutterFragmentActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        val keys = LocalKeys(this)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "harmonia/keys").setMethodCallHandler(keys::handle)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "harmonia/platform").setMethodCallHandler { call, result ->
             when (call.method) {
                 "deviceName" -> {

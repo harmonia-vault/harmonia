@@ -26,6 +26,10 @@ Future<void> main(List<String> argv) async {
   final crypto = await HCrypto.init();
   final store = FileStore(Directory(home));
   final vault = Vault(crypto, store, store);
+  // App 里本机数据密钥由 PIN 或指纹解开；无界面脚本直接把它存在测试目录中。
+  final localKey = await store.read('localKey');
+  vault.localKey = localKey != null ? unb64(localKey) : crypto.random(32);
+  if (localKey == null) await store.write('localKey', b64(vault.localKey!));
   final account = AccountService(crypto);
   final cmd = args.removeAt(0);
 

@@ -104,7 +104,9 @@ class _NavBar extends StatelessWidget {
     return Semantics(
       selected: on,
       button: true,
+      // heightFactor: 1：只占按钮自身的高度。底部栏的高度上限是整个屏幕，不加会撑满全屏、挤掉页面内容。
       child: Center(
+        heightFactor: 1,
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(16),

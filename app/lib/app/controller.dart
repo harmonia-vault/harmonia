@@ -9,14 +9,15 @@ import '../core/api.dart';
 import '../core/crypto.dart';
 import '../core/store.dart';
 import '../core/vault.dart';
+import 'identity.dart';
 import 'updater.dart' show UpdateChannel;
-
 
 enum Stage {
   loading,
   connect, // 填写服务器地址
   signedOut, // 登录 / 注册 / 找回密码
   verifyEmail, // 注册后验证邮箱
+  setPin, // 登录后设置 App PIN（可选开启指纹）
   setup, // 首次初始化：保存恢复码
   unpaired, // 已登录，本机还不是管理手机
   pairing, // 等待另一台手机批准
@@ -26,18 +27,15 @@ enum Stage {
 }
 
 class Prefs {
-  Prefs({this.server, this.email, this.lockEnabled = true, this.updateChannel});
+  Prefs({this.server, this.email, this.updateChannel});
   String? server;
   String? email;
-  bool lockEnabled;
   String? updateChannel;
 
-  Map<String, dynamic> toJson() =>
-      {'server': server, 'email': email, 'lockEnabled': lockEnabled, 'updateChannel': updateChannel};
+  Map<String, dynamic> toJson() => {'server': server, 'email': email, 'updateChannel': updateChannel};
   factory Prefs.fromJson(Map<String, dynamic> j) => Prefs(
       server: j['server'] as String?,
       email: j['email'] as String?,
-      lockEnabled: j['lockEnabled'] as bool? ?? true,
       updateChannel: j['updateChannel'] as String?);
 }
 
@@ -47,6 +45,7 @@ class AppController extends ChangeNotifier {
     required this.secure,
     required this.files,
     required this.deviceName,
+    required this.identity,
   })  : account = AccountService(crypto),
         vault = Vault(crypto, secure, files);
 
@@ -54,6 +53,7 @@ class AppController extends ChangeNotifier {
   final LocalStore secure;
   final LocalStore files;
   final String deviceName;
+  final Identity identity;
   final AccountService account;
   final Vault vault;
 
@@ -68,6 +68,9 @@ class AppController extends ChangeNotifier {
   String? pendingEmail;
   String? _pendingPassword;
 
+  /// 从登录页直接用恢复码恢复时，设置 App PIN 之前暂存的设备信息。
+  LocalConfig? _pendingRecovery;
+
   /// 显示在登录页顶部的一次性提示（例如“这台手机已被移除”）。
   String? notice;
 
@@ -75,6 +78,7 @@ class AppController extends ChangeNotifier {
   bool online = false;
   int pendingPairingCount = 0;
   DateTime? _backgroundAt;
+  Timer? _lockTimer;
   bool _foreground = true;
   int _pushGeneration = 0;
 
@@ -95,15 +99,9 @@ class AppController extends ChangeNotifier {
   Future<void> start() async {
     final raw = await files.read(_prefsKey);
     if (raw != null) prefs = Prefs.fromJson((jsonDecode(raw) as Map).cast<String, dynamic>());
-    bool paired = false;
-    try {
-      paired = await vault.load();
-    } catch (_) {
-      paired = false;
-    }
-    if (paired) {
-      _go(prefs.lockEnabled ? Stage.locked : _afterUnlock());
-      if (!prefs.lockEnabled) _onUnlocked();
+    await _dropOldFormat();
+    if (await vault.hasAccount()) {
+      _go(Stage.locked);
       return;
     }
     if (prefs.server != null) {
@@ -116,6 +114,15 @@ class AppController extends ChangeNotifier {
     } else {
       _go(Stage.connect);
     }
+  }
+
+  /// 旧版本把设备密钥直接存在安全存储里，没有 App PIN 保护。1.0 之前不做迁移：清除后重新登录。
+  Future<void> _dropOldFormat() async {
+    if (await secure.read('config') == null) return;
+    await secure.delete('config');
+    await secure.delete('pin');
+    await files.delete('cache');
+    notice = 'Harmonia 更新了本机数据的保护方式，请重新登录并设置 App PIN。';
   }
 
   Stage _afterUnlock() => vault.cache.rotationRequired ? Stage.rotation : Stage.home;
@@ -145,11 +152,28 @@ class AppController extends ChangeNotifier {
     await _savePrefs();
     session = s;
     notice = null;
-    if (!s.initialized) {
+    _go(Stage.setPin);
+  }
+
+  // ---- App PIN ----
+
+  /// 生成本机数据密钥并用 PIN 保护。之后保存的设备密钥都用它加密。
+  Future<void> setPin(String pin) async {
+    vault.localKey = await identity.keyring.create(pin);
+  }
+
+  /// 设置 PIN（以及是否开启指纹）完成后，继续登录或恢复流程。
+  Future<void> pinDone() async {
+    final recovered = _pendingRecovery;
+    if (recovered != null) {
+      await vault.adopt(recovered);
+      _pendingRecovery = null;
+      _go(Stage.rotation);
+    } else if (session!.initialized) {
+      _go(Stage.unpaired);
+    } else {
       setupDraft = account.prepareSetup();
       _go(Stage.setup);
-    } else {
-      _go(Stage.unpaired);
     }
   }
 
@@ -198,6 +222,8 @@ class AppController extends ChangeNotifier {
     setupCompleted = false;
     pendingPairing = null;
     _pendingPassword = null;
+    _pendingRecovery = null;
+    vault.localKey = null;
     _go(Stage.signedOut);
   }
 
@@ -260,10 +286,16 @@ class AppController extends ChangeNotifier {
 
   Future<void> recover(String email, String code) async {
     final cfg = await account.recover(server, email, code, deviceName);
-    await vault.adopt(cfg);
     prefs.email = email.trim();
     await _savePrefs();
     session = null;
+    if (vault.localKey == null) {
+      // 从登录页直接恢复：先设置 App PIN，再保存设备密钥。
+      _pendingRecovery = cfg;
+      _go(Stage.setPin);
+      return;
+    }
+    await vault.adopt(cfg);
     _go(Stage.rotation);
   }
 
@@ -300,9 +332,30 @@ class AppController extends ChangeNotifier {
 
   // ---- App 锁 ----
 
-  void unlocked() {
+  /// 用解开的本机数据密钥解锁。
+  Future<void> unlock(Uint8List key) async {
+    vault.localKey = key;
+    await vault.load();
     _go(_afterUnlock());
     _onUnlocked();
+  }
+
+  /// 锁定：清除内存中的全部密钥，解锁后重新解开。
+  void lockNow() {
+    _stopPush();
+    vault.lock();
+    _go(Stage.locked);
+  }
+
+  bool get _lockable => vault.paired && {Stage.home, Stage.rotation}.contains(stage);
+
+  /// 忘记 PIN：清除本机数据和本机密钥，回到登录页。
+  Future<void> forgetDevice() async {
+    _stopPush();
+    await identity.keyring.wipe();
+    await vault.wipe();
+    notice = '已清除本机数据，请重新登录。这台手机原来的设备记录，请在其他手机上移除。';
+    cancelToSignIn();
   }
 
   UpdateChannel get updateChannel => UpdateChannel.parse(prefs.updateChannel);
@@ -313,25 +366,24 @@ class AppController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> setLockEnabled(bool v) async {
-    prefs.lockEnabled = v;
-    await _savePrefs();
-    notifyListeners();
-  }
-
   void onLifecycle({required bool foreground}) {
     if (!foreground) {
       _foreground = false;
       _backgroundAt = DateTime.now();
       _stopPush();
+      // 在后台满 5 分钟就清除内存中的密钥；进程被冻结时，回到前台再按离开时长判断。
+      _lockTimer?.cancel();
+      _lockTimer = Timer(lockTimeout, () {
+        if (!_foreground && _lockable) lockNow();
+      });
       return;
     }
     _foreground = true;
+    _lockTimer?.cancel();
     final away = _backgroundAt == null ? Duration.zero : DateTime.now().difference(_backgroundAt!);
     _backgroundAt = null;
-    if (vault.paired && prefs.lockEnabled && away >= lockTimeout &&
-        {Stage.home, Stage.rotation}.contains(stage)) {
-      _go(Stage.locked);
+    if (away >= lockTimeout && _lockable) {
+      lockNow();
       return;
     }
     if (stage == Stage.home || stage == Stage.rotation) _startPush();
@@ -377,6 +429,7 @@ class AppController extends ChangeNotifier {
 
   Future<void> _handleRevoked() async {
     _stopPush();
+    await identity.keyring.wipe();
     await vault.wipe();
     notice = '这台手机已从账号中移除，本机数据已清除。';
     _go(Stage.signedOut);
@@ -436,6 +489,7 @@ class AppController extends ChangeNotifier {
   Future<bool> logout({bool confirmLast = false}) async {
     _stopPush();
     final online = await vault.logout(confirmLast: confirmLast);
+    await identity.keyring.wipe();
     notice = online ? null : '暂时无法连接服务器，本机数据已清除。请在其他手机上移除这台设备。';
     _go(Stage.signedOut);
     return online;

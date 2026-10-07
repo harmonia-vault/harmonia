@@ -11,14 +11,16 @@ import 'app/controller.dart';
 import 'app/identity.dart';
 import 'app/updater.dart';
 import 'core/crypto.dart';
+import 'core/keyring.dart';
 import 'core/store.dart';
 import 'ui/auth_pages.dart';
 import 'ui/home.dart';
 import 'ui/lock.dart';
+import 'ui/pin_setup.dart';
 import 'ui/recovery_pages.dart';
 import 'ui/theme.dart';
 
-/// 安全存储：Android Keystore 包装加密。
+/// 安全存储：Android Keystore 包装加密。设备密钥另外用本机数据密钥加密（见 core/keyring.dart）。
 class SecureStore implements LocalStore {
   final _s = const FlutterSecureStorage();
   @override
@@ -34,13 +36,14 @@ Future<void> main() async {
   final crypto = await HCrypto.init();
   updaterCrypto = crypto;
   final secure = SecureStore();
-  identity = Identity(secure);
+  identity = Identity(Keyring(crypto, secure, KeystoreKeys()));
   final dir = Directory('${(await getApplicationSupportDirectory()).path}/harmonia');
   final controller = AppController(
     crypto: crypto,
     secure: secure,
     files: FileStore(dir),
     deviceName: await _deviceName(),
+    identity: identity,
   );
   runApp(HarmoniaApp(c: controller));
   await controller.start();
@@ -107,6 +110,7 @@ class _HarmoniaAppState extends State<HarmoniaApp> with WidgetsBindingObserver {
       Stage.connect => ConnectPage(c: c),
       Stage.signedOut => SignInPage(c: c),
       Stage.verifyEmail => VerifyEmailPage(c: c),
+      Stage.setPin => SetPinPage(c: c),
       Stage.setup => SetupPage(c: c),
       Stage.unpaired => UnpairedPage(c: c),
       Stage.pairing => PairingWaitPage(c: c),

@@ -1,38 +1,75 @@
-// App 锁页面、敏感操作前的身份确认，以及 App PIN 的设置。
+// App 锁页面、敏感操作前的身份确认，以及 PIN 输入框和对话框。
+// 验证通过 = 用指纹或 App PIN 解开了本机数据密钥（docs/protocol.md 2.5）。
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../app/controller.dart';
 import '../app/identity.dart';
+import '../core/keyring.dart';
 import 'theme.dart';
 import 'widgets.dart';
 
 late Identity identity;
 
-/// 敏感操作前确认身份。设备既没有锁屏也没有 PIN 时直接通过。
-Future<bool> confirmIdentity(BuildContext context, String reason) async {
-  switch (await identity.method()) {
-    case IdentityMethod.system:
-      final r = await identity.system(reason);
-      if (r != null) return r;
-      if (!await identity.hasPin()) return true;
-      if (!context.mounted) return false;
-      return enterPin(context, reason);
-    case IdentityMethod.pin:
-      if (!context.mounted) return false;
-      return enterPin(context, reason);
-    case IdentityMethod.none:
-      return true;
-  }
-}
+const bioInvalidatedText = '手机指纹有变化，指纹解锁已关闭，可以在设置中重新开启';
 
-Future<bool> enterPin(BuildContext context, String reason) async {
-  final ok = await showDialog<bool>(
+/// 敏感操作前确认身份：开启了指纹时先用指纹，取消或失败时改输 PIN。返回解开的本机数据密钥。
+Future<Uint8List?> verifyIdentity(BuildContext context, String reason) async {
+  final key = await identity.unlockWithBio(reason);
+  if (key != null) return key;
+  if (!context.mounted) return null;
+  if (identity.bioInvalidated) {
+    identity.bioInvalidated = false;
+    toast(context, bioInvalidatedText);
+  }
+  return showDialog<Uint8List>(
     context: context,
     barrierDismissible: false,
     builder: (_) => _PinDialog(reason: reason),
   );
-  return ok ?? false;
+}
+
+Future<bool> confirmIdentity(BuildContext context, String reason) async =>
+    await verifyIdentity(context, reason) != null;
+
+String pinErrorText(PinResult r) {
+  if (r.waitSeconds <= 0) return 'PIN 不对，还可以再试 ${r.remaining} 次';
+  final wait = r.waitSeconds >= 60 ? '${(r.waitSeconds + 59) ~/ 60} 分钟' : '${r.waitSeconds} 秒';
+  return '输错次数过多，请 $wait后再试';
+}
+
+class PinField extends StatelessWidget {
+  const PinField(
+      {super.key, required this.controller, this.label, this.error, this.autofocus = false, this.onSubmitted});
+  final TextEditingController controller;
+  final String? label, error;
+  final bool autofocus;
+  final ValueChanged<String>? onSubmitted;
+
+  @override
+  Widget build(BuildContext context) => TextField(
+        autofillHints: null,
+        controller: controller,
+        autofocus: autofocus,
+        obscureText: true,
+        enableSuggestions: false,
+        autocorrect: false,
+        keyboardType: TextInputType.number,
+        inputFormatters: [
+          FilteringTextInputFormatter.digitsOnly,
+          LengthLimitingTextInputFormatter(Keyring.maxPin),
+        ],
+        decoration: InputDecoration(labelText: label, errorText: error),
+        onSubmitted: onSubmitted,
+      );
+}
+
+/// 检查两次输入的新 PIN，返回错误提示；没有问题时返回 null。
+String? newPinError(String a, String b) {
+  if (!Keyring.validPin(a)) return 'PIN 需要 ${Keyring.minPin}–${Keyring.maxPin} 位数字';
+  if (a != b) return '两次输入不一致';
+  return null;
 }
 
 class _PinDialog extends StatefulWidget {
@@ -48,17 +85,15 @@ class _PinDialogState extends State<_PinDialog> {
   bool _busy = false;
 
   Future<void> _submit() async {
+    if (_pin.text.isEmpty || _busy) return;
     setState(() => _busy = true);
-    final r = await identity.checkPin(_pin.text);
+    final r = await identity.keyring.unlock(_pin.text);
     if (!mounted) return;
-    if (r.ok) {
-      Navigator.pop(context, true);
-      return;
-    }
+    if (r.ok) return Navigator.pop(context, r.key);
     _pin.clear();
     setState(() {
       _busy = false;
-      _error = r.waitSeconds > 0 ? '输错次数过多，请 ${r.waitSeconds} 秒后再试' : 'PIN 不对，还可以再试 ${r.remaining} 次';
+      _error = pinErrorText(r);
     });
   }
 
@@ -68,72 +103,43 @@ class _PinDialogState extends State<_PinDialog> {
         content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(widget.reason),
           const SizedBox(height: Space.md),
-          TextField(
-            autofillHints: null,
-            controller: _pin,
-            autofocus: true,
-            obscureText: true,
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            decoration: InputDecoration(errorText: _error, hintText: '至少 6 位数字'),
-            onSubmitted: (_) => _submit(),
-          ),
+          PinField(controller: _pin, autofocus: true, error: _error, onSubmitted: (_) => _submit()),
         ]),
         actions: [
-          TextButton(onPressed: _busy ? null : () => Navigator.pop(context, false), child: const Text('取消')),
-          FilledButton(onPressed: _busy ? null : _submit, child: const Text('确认')),
+          TextButton(onPressed: _busy ? null : () => Navigator.pop(context), child: const Text('取消')),
+          FilledButton(onPressed: _busy ? null : _submit, child: Text(_busy ? '验证中…' : '确认')),
         ],
       );
 }
 
-/// 设置 App PIN（设备没有锁屏时使用）。返回是否设置成功。
-Future<bool> setupPin(BuildContext context) async {
+/// 输入两次新 PIN。返回新 PIN；取消时返回 null。
+Future<String?> askNewPin(BuildContext context) {
   final a = TextEditingController(), b = TextEditingController();
   String? error;
-  final ok = await showDialog<bool>(
+  return showDialog<String>(
     context: context,
     builder: (c) => StatefulBuilder(
       builder: (c, setState) => AlertDialog(
-        title: const Text('设置 App PIN'),
+        title: const Text('设置新的 App PIN'),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('这台手机没有设置锁屏密码。设置一个至少 6 位的数字 PIN，用来打开 Harmonia。忘记 PIN 后只能清除本机数据并重新接入。'),
-          const SizedBox(height: Space.md),
-          TextField(
-              autofillHints: null,
-              controller: a,
-              obscureText: true,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              decoration: const InputDecoration(labelText: 'PIN')),
+          PinField(controller: a, autofocus: true, label: '新 PIN（${Keyring.minPin}–${Keyring.maxPin} 位数字）'),
           const SizedBox(height: Space.sm),
-          TextField(
-              autofillHints: null,
-              controller: b,
-              obscureText: true,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              decoration: InputDecoration(labelText: '再次输入', errorText: error)),
+          PinField(controller: b, label: '再次输入', error: error),
         ]),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('取消')),
+          TextButton(onPressed: () => Navigator.pop(c), child: const Text('取消')),
           FilledButton(
             onPressed: () {
-              if (a.text.length < 6) {
-                setState(() => error = 'PIN 至少 6 位');
-              } else if (a.text != b.text) {
-                setState(() => error = '两次输入不一致');
-              } else {
-                Navigator.pop(c, true);
-              }
+              final e = newPinError(a.text, b.text);
+              if (e != null) return setState(() => error = e);
+              Navigator.pop(c, a.text);
             },
-            child: const Text('设置'),
+            child: const Text('确定'),
           ),
         ],
       ),
     ),
   );
-  if (ok != true || !context.mounted) return false;
-  return runBusy(context, () => identity.setPin(a.text), done: '已设置 App PIN');
 }
 
 class LockPage extends StatefulWidget {
@@ -144,34 +150,77 @@ class LockPage extends StatefulWidget {
 }
 
 class _LockPageState extends State<LockPage> {
+  final _pin = TextEditingController();
   bool _busy = false;
+  bool _bio = false;
+  String? _error;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _unlock());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _start());
   }
 
-  Future<void> _unlock() async {
+  Future<void> _start() async {
+    final bio = await identity.bioEnabled();
+    if (!mounted) return;
+    setState(() => _bio = bio);
+    if (bio) await _useBio();
+  }
+
+  Future<void> _useBio() async {
     if (_busy) return;
     setState(() => _busy = true);
-    final ok = await confirmIdentity(context, '验证身份以打开 Harmonia');
+    final key = await identity.unlockWithBio('解锁 Harmonia');
     if (!mounted) return;
-    setState(() => _busy = false);
-    if (ok) widget.c.unlocked();
+    if (key != null) return _done(key);
+    final bio = await identity.bioEnabled();
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _bio = bio;
+    });
+  }
+
+  Future<void> _submit() async {
+    if (_pin.text.isEmpty || _busy) return;
+    setState(() => _busy = true);
+    final r = await identity.keyring.unlock(_pin.text);
+    if (!mounted) return;
+    if (r.ok) return _done(r.key!);
+    _pin.clear();
+    setState(() {
+      _busy = false;
+      _error = pinErrorText(r);
+    });
+  }
+
+  Future<void> _done(Uint8List key) async {
+    if (identity.bioInvalidated) {
+      identity.bioInvalidated = false;
+      toast(context, bioInvalidatedText);
+    }
+    try {
+      await widget.c.unlock(key);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _error = '本机数据无法读取。请选择“忘记 PIN”清除本机数据后重新登录';
+      });
+    }
   }
 
   Future<void> _forgot() async {
     final ok = await confirmDialog(context,
         title: '清除本机数据？',
-        body: '将清除这台手机上的 Harmonia 数据，账号和云端数据不受影响。之后需要重新登录，并通过另一台手机批准或恢复码恢复。',
-        ok: '清除',
+        body: '${_bio ? '如果只是忘记了 PIN，可以先用指纹解锁，再到“设置”中修改 PIN。\n\n' : ''}'
+            '清除后，账号和云端数据不受影响，但这台手机需要重新登录，并通过另一台手机批准或用恢复码恢复。'
+            '这台手机原来的设备记录需要在其他手机上移除。',
+        ok: '清除本机数据',
         danger: true);
     if (!ok || !mounted) return;
-    await identity.clearPin();
-    await widget.c.vault.wipe();
-    widget.c.notice = '已清除本机数据，请重新登录。';
-    widget.c.cancelToSignIn();
+    await runBusy(context, widget.c.forgetDevice);
   }
 
   @override
@@ -180,22 +229,37 @@ class _LockPageState extends State<LockPage> {
     return Scaffold(
       body: SafeArea(
         child: Center(
-          child: Padding(
+          child: SingleChildScrollView(
             padding: const EdgeInsets.all(Space.xl),
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               Icon(Icons.lock_outline_rounded, size: 56, color: p.ink),
               const SizedBox(height: Space.lg),
               Text('Harmonia 已锁定', style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: Space.sm),
-              Text(widget.c.vault.config?.email ?? '', style: TextStyle(color: p.mute)),
+              Text(widget.c.prefs.email ?? '', style: TextStyle(color: p.mute)),
               const SizedBox(height: Space.xxl),
-              FilledButton.icon(
-                onPressed: _busy ? null : _unlock,
-                icon: const Icon(Icons.fingerprint),
-                label: const Text('解锁'),
+              PinField(
+                controller: _pin,
+                label: 'App PIN',
+                error: _error,
+                autofocus: !_bio,
+                onSubmitted: (_) => _submit(),
               ),
+              const SizedBox(height: Space.lg),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(onPressed: _busy ? null : _submit, child: Text(_busy ? '正在解锁…' : '解锁')),
+              ),
+              if (_bio) ...[
+                const SizedBox(height: Space.sm),
+                TextButton.icon(
+                  onPressed: _busy ? null : _useBio,
+                  icon: const Icon(Icons.fingerprint),
+                  label: const Text('用指纹解锁'),
+                ),
+              ],
               const SizedBox(height: Space.md),
-              TextButton(onPressed: _forgot, child: const Text('无法解锁？')),
+              TextButton(onPressed: _busy ? null : _forgot, child: const Text('忘记 PIN？')),
             ]),
           ),
         ),

@@ -14,7 +14,7 @@ class VaultException implements Exception {
   String toString() => message;
 }
 
-/// 本机保存的账号与设备信息（存放在安全存储中）。
+/// 本机保存的账号与设备信息（用本机数据密钥加密后存放，见 protocol 2.5）。
 class LocalConfig {
   LocalConfig({
     required this.server,
@@ -73,8 +73,12 @@ class Vault {
   SyncCache cache = SyncCache();
   final Map<String, Uint8List> _envKeys = {};
 
-  static const _configKey = 'config';
+  /// 本机数据密钥：由 App PIN 或指纹解开后设置，锁定时清除。
+  Uint8List? localKey;
+
+  static const _configKey = 'account';
   static const _cacheKey = 'cache';
+  static final _configAad = canonical(['harmonia.local', 'config']);
 
   bool get paired => config != null;
   bool get isManager => cache.self['kind'] == 'manager';
@@ -83,11 +87,15 @@ class Vault {
 
   // ---- 本机状态 ----
 
-  /// 读取本机保存的状态。返回是否已接入账号。
+  /// 本机是否保存了已接入的账号（不需要解锁）。
+  Future<bool> hasAccount() async => await secure.read(_configKey) != null;
+
+  /// 用 [localKey] 解开本机保存的状态。返回是否已接入账号。
   Future<bool> load() async {
     final raw = await secure.read(_configKey);
     if (raw == null) return false;
-    final c = LocalConfig.fromJson((jsonDecode(raw) as Map).cast<String, dynamic>());
+    final json = utf8.decode(crypto.aeadOpen(localKey!, unb64(raw), _configAad));
+    final c = LocalConfig.fromJson((jsonDecode(json) as Map).cast<String, dynamic>());
     _attach(c);
     final cached = await files.read(_cacheKey);
     if (cached != null) {
@@ -113,7 +121,8 @@ class Vault {
 
   /// 保存新接入的设备并完成首次同步。
   Future<void> adopt(LocalConfig c) async {
-    await secure.write(_configKey, jsonEncode(c.toJson()));
+    final json = Uint8List.fromList(utf8.encode(jsonEncode(c.toJson())));
+    await secure.write(_configKey, b64(crypto.aeadSeal(localKey!, json, _configAad)));
     _attach(c);
     cache = SyncCache();
     _envKeys.clear();
@@ -125,6 +134,12 @@ class Vault {
   Future<void> wipe() async {
     await secure.delete(_configKey);
     await files.delete(_cacheKey);
+    lock();
+  }
+
+  /// 清除内存中的全部密钥和状态；本机保存的数据不变，解锁后可再 [load]。
+  void lock() {
+    localKey = null;
     config = null;
     api = null;
     signKey = null;
