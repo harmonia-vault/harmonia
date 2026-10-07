@@ -6,6 +6,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import '../app/controller.dart';
 import '../core/crypto.dart';
+import 'device_review.dart';
 import 'lock.dart';
 import 'recovery_actions.dart';
 import 'theme.dart';
@@ -278,6 +279,7 @@ class _RotationPageState extends State<RotationPage> {
   bool _changePassword = false;
   bool _started = false;
   bool _done = false;
+  bool _reviewing = false;
 
   Future<void> _submit() async {
     final pw = _changePassword ? _password.text : null;
@@ -291,18 +293,24 @@ class _RotationPageState extends State<RotationPage> {
     if (ok && mounted) setState(() => _done = true);
   }
 
+  /// 恢复完成：账号中还有其他设备时，先检查是否需要移除。
+  void _finishForced() {
+    if (otherDevices(widget.c).isEmpty) return widget.c.finishRotation();
+    setState(() => _reviewing = true);
+  }
+
   @override
-  Widget build(BuildContext context) => _done
-      ? RecoveryDoneView(
-          c: widget.c,
-          code: _code,
-          title: '恢复码已更换',
-          subtitle: '新恢复码已经生效，旧恢复码已作废。',
-          onDone: widget.forced ? widget.c.finishRotation : () => Navigator.pop(context),
-        )
-      : _started
-          ? _codeStep()
-          : _introStep();
+  Widget build(BuildContext context) {
+    if (_reviewing) return DeviceReviewView(c: widget.c, onDone: widget.c.finishRotation);
+    if (!_done) return _started ? _codeStep() : _introStep();
+    return RecoveryDoneView(
+      c: widget.c,
+      code: _code,
+      title: '恢复码已更换',
+      subtitle: '新恢复码已经生效，旧恢复码已作废。',
+      onDone: widget.forced ? _finishForced : () => Navigator.pop(context),
+    );
+  }
 
   /// 开始前的说明：新恢复码在核对提交前不会生效。
   Widget _introStep() => AuthScaffold(

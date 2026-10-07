@@ -129,6 +129,13 @@ step "J8 恢复：新手机用恢复码恢复，必须轮换；旧恢复码失�
 expect_eq "$(manager phone3 recover --server "$SERVER" --email "$EMAIL" --code "$RECOVERY" --name "恢复手机")" "rotation-required" "恢复后需要轮换"
 NEWCODE=$(manager phone3 rotate)
 expect_eq "$(manager phone3 var-get OpenAI OPENAI_API_KEY)" "sk-second" "恢复后能读取数据"
+
+step "J8 恢复后移除旧手机：旧手机在移除前仍然有效，移除后失效"
+expect_eq "$(manager phone var-get OpenAI OPENAI_API_KEY)" "sk-second" "恢复后旧手机仍可读取"
+manager phone3 revoke 主手机 >/dev/null
+manager phone3 revoke 第二台手机 >/dev/null
+if manager phone sync >/dev/null 2>&1; then fail "移除后主手机应当失效"; fi
+if manager phone2 sync >/dev/null 2>&1; then fail "移除后第二台手机应当失效"; fi
 if manager phone4 recover --server "$SERVER" --email "$EMAIL" --code "$RECOVERY" >/dev/null 2>&1; then fail "旧恢复码应已失效"; fi
 expect_eq "$(manager phone4 recover --server "$SERVER" --email "$EMAIL" --code "$NEWCODE")" "rotation-required" "新恢复码可用"
 
