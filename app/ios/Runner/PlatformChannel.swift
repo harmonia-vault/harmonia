@@ -4,7 +4,7 @@ import UniformTypeIdentifiers
 import WebKit
 
 // harmonia/platform 通道：设备名、HTML 转 PDF、通过系统“存储到文件”保存、
-// 敏感内容复制（1 分钟后过期）、用浏览器打开网页。
+// 通过分享面板把文件交给其他 App、敏感内容复制（1 分钟后过期）、用浏览器打开网页。
 final class PlatformChannel: NSObject, WKNavigationDelegate, UIDocumentPickerDelegate {
   private static let a4 = CGRect(x: 0, y: 0, width: 595.2, height: 841.8)
 
@@ -27,6 +27,8 @@ final class PlatformChannel: NSObject, WKNavigationDelegate, UIDocumentPickerDel
         name: args["name"] as? String ?? "file",
         bytes: (args["bytes"] as? FlutterStandardTypedData)?.data ?? Data(),
         result)
+    case "shareFile":
+      shareFile(path: args["path"] as? String ?? "", result)
     case "copySensitive":
       // 只留在本机，不同步到其他 Apple 设备；1 分钟后由系统清除。
       UIPasteboard.general.setItems(
@@ -109,6 +111,21 @@ final class PlatformChannel: NSObject, WKNavigationDelegate, UIDocumentPickerDel
 
   func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
     finishSave(false)
+  }
+
+  // ---- 分享文件：弹出系统分享面板，由用户选择接收的 App（新版本的 IPA 交给签名工具） ----
+
+  private func shareFile(path: String, _ result: @escaping FlutterResult) {
+    guard FileManager.default.fileExists(atPath: path), let top = topController else {
+      return result(FlutterError(code: "share_failed", message: nil, details: nil))
+    }
+    let sheet = UIActivityViewController(activityItems: [URL(fileURLWithPath: path)], applicationActivities: nil)
+    // 完成或取消后才返回：调用方在这之后删除文件。
+    sheet.completionWithItemsHandler = { _, completed, _, _ in result(completed) }
+    // iPad 上以 iPhone 兼容模式运行时也需要一个弹出位置。
+    sheet.popoverPresentationController?.sourceView = top.view
+    sheet.popoverPresentationController?.sourceRect = CGRect(x: top.view.bounds.midX, y: top.view.bounds.midY, width: 0, height: 0)
+    top.present(sheet, animated: true)
   }
 
   private func finishSave(_ saved: Bool) {

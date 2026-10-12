@@ -155,7 +155,7 @@ ExecStart=/home/me/.local/bin/harmonia exec -- /usr/bin/node /srv/agent/index.js
 ## 升级
 
 - **App（Android）**：在“设置 → 检查更新”中升级，也会每天自动检查一次。安装包经过签名校验，数据保留。
-- **App（iPhone）**：“设置 → 检查更新”会提示新版本并给出下载页；下载新的 IPA，用安装时的签名工具和同一个 Apple ID 装上即可，数据保留。
+- **App（iPhone）**：“设置 → 检查更新”会提示新版本。点“下载并导入签名工具”，在弹出的面板里选择安装时使用的签名工具（轻松签、全能签、万能签等），再用它和同一个 Apple ID（或证书）签名安装即可，数据保留。也可以点“打开下载页”自己下载。
 - **命令行**：`harmonia update`。后台服务每天检查一次，有新版本时 `harmonia status` 会提示。
 - **服务端**：在你的 Fork 中点击 Sync fork。
 
