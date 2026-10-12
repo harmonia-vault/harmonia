@@ -12,7 +12,6 @@ import 'app/controller.dart';
 import 'app/identity.dart';
 import 'app/licenses.dart';
 import 'app/platform.dart';
-import 'app/screen_lock.dart';
 import 'app/updater.dart';
 import 'core/crypto.dart';
 import 'core/account.dart';
@@ -79,26 +78,18 @@ class _HarmoniaAppState extends State<HarmoniaApp> with WidgetsBindingObserver {
   Stage? _shownStage;
   final _seenPairings = <String>{};
   bool _reviewing = false;
-  int _lifecycleVersion = 0;
-  bool _obscured = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     widget.c.addListener(_onChange);
-    ScreenLock.listen(() {
-      _lifecycleVersion++;
-      setState(() => _obscured = true);
-      widget.c.onScreenLocked();
-    });
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     widget.c.removeListener(_onChange);
-    ScreenLock.stop();
     super.dispose();
   }
 
@@ -137,25 +128,11 @@ class _HarmoniaAppState extends State<HarmoniaApp> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     switch (state) {
       case AppLifecycleState.resumed:
-        _resume();
-      case AppLifecycleState.inactive:
-        setState(() => _obscured = true);
+        widget.c.onLifecycle(foreground: true);
       case AppLifecycleState.paused:
       case AppLifecycleState.hidden:
-        _lifecycleVersion++;
         widget.c.onLifecycle(foreground: false);
       default:
-    }
-  }
-
-  Future<void> _resume() async {
-    final version = ++_lifecycleVersion;
-    final state = await ScreenLock.check();
-    if (!mounted || version != _lifecycleVersion) return;
-    if (state.wasLocked || state.locked) widget.c.onScreenLocked();
-    if (!state.locked) {
-      widget.c.onLifecycle(foreground: true);
-      setState(() => _obscured = false);
     }
   }
 
@@ -178,15 +155,7 @@ class _HarmoniaAppState extends State<HarmoniaApp> with WidgetsBindingObserver {
       preview: widget.c.glassOpacityPreview,
       child: AppScope(
         identity: widget.c.identity,
-        child: Stack(
-          children: [
-            LiquidGlassWidgets.wrap(brightnessResolver: Theme.maybeBrightnessOf, child: child!),
-            if (_obscured)
-              Positioned.fill(
-                child: AbsorbPointer(child: ColoredBox(color: Theme.of(context).scaffoldBackgroundColor)),
-              ),
-          ],
-        ),
+        child: LiquidGlassWidgets.wrap(brightnessResolver: Theme.maybeBrightnessOf, child: child!),
       ),
     ),
     locale: const Locale('zh', 'CN'),

@@ -105,7 +105,7 @@ class _NavBar extends StatelessWidget {
     if (usesGlass(context)) {
       const icons = [CupertinoIcons.square_stack_3d_up, CupertinoIcons.device_laptop, CupertinoIcons.gear_alt];
       // 保留库的完整交互，仅压低常规高度；大字号为文字增加空间。
-      final barHeight = 52 + (MediaQuery.textScalerOf(context).scale(11) - 11).clamp(0, double.infinity) * 1.5;
+      final barHeight = 60 + (MediaQuery.textScalerOf(context).scale(11) - 11).clamp(0, double.infinity) * 1.5;
       return _NavSafeArea(
         child: GlassTabBar.bottom(
           tabs: [

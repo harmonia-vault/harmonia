@@ -29,7 +29,7 @@ class DelayedApi extends ApiClient {
 }
 
 void main() {
-  test('锁屏后到达的同步响应不会恢复会话缓存', () async {
+  test('锁定后到达的同步响应不会恢复会话缓存', () async {
     final api = DelayedApi();
     final vault = Vault(await HCrypto.init(), MemoryStore(), MemoryStore())..api = api;
     final syncing = vault.sync();
@@ -42,13 +42,17 @@ void main() {
     expect(vault.localKey, isNull);
   });
 
-  test('短暂切后台保留会话，锁屏立即清除密钥，亮屏不会自动恢复会话', () async {
+  test('短暂切后台再返回保留会话，手动锁定仍须重新解锁', () async {
     final s = await DebugSession.create(prepareGlass: () async {});
     addTearDown(s.dispose);
     s.c.onLifecycle(foreground: false);
     expect(s.c.stage, Stage.home);
     expect(s.vault.localKey, isNotNull);
-    s.c.onScreenLocked();
+    s.c.onLifecycle(foreground: true);
+    expect(s.c.stage, Stage.home);
+    expect(s.vault.localKey, isNotNull);
+    s.c.onLifecycle(foreground: false);
+    s.c.lockNow();
     expect(s.c.stage, Stage.locked);
     expect(s.vault.localKey, isNull);
     expect(s.c.foreground, isFalse);
@@ -58,15 +62,16 @@ void main() {
     expect(s.c.stage, Stage.home);
   });
 
-  test('解锁读取期间锁屏，迟到的完成不能切回首页', () async {
+  test('解锁读取期间锁定，迟到的完成不能切回首页', () async {
     final s = await DebugSession.create(prepareGlass: () async {});
     addTearDown(s.dispose);
     s.c.lockNow();
     final unlocking = s.c.unlock(Uint8List(32));
-    s.c.onScreenLocked();
+    s.c.lockNow();
     await unlocking;
     expect(s.c.stage, Stage.locked);
     expect(s.vault.localKey, isNull);
+    s.c.onLifecycle(foreground: false);
     await s.c.unlock(Uint8List(32));
     expect(s.vault.localKey, isNull);
   });
@@ -83,7 +88,7 @@ void main() {
   });
 
   for (final delayedConfig in [true, false]) {
-    test('锁屏阻止迟到的${delayedConfig ? '配置' : '缓存'}读取重新装入密钥', () async {
+    test('锁定阻止迟到的${delayedConfig ? '配置' : '缓存'}读取重新装入密钥', () async {
       final crypto = await HCrypto.init();
       final secure = DelayedStore(), files = DelayedStore();
       final key = crypto.random(32);

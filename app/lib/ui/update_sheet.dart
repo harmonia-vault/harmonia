@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 
 import 'theme.dart';
 import 'glass.dart';
-import 'glass_motion.dart';
 import 'widgets.dart';
 
 /// 用户在面板上的选择；直接关闭或点“以后再说”时为 null。
@@ -37,7 +36,7 @@ Future<UpdateChoice?> showUpdateSheet(
   showDragHandle: !usesGlass(context),
   backgroundColor: usesGlass(context) ? Colors.transparent : context.palette.paper,
   barrierColor: usesGlass(context) ? Colors.black.withValues(alpha: 0.24) : null,
-  sheetAnimationStyle: glassSheetAnimationStyle(context),
+  sheetAnimationStyle: MediaQuery.disableAnimationsOf(context) ? AnimationStyle.noAnimation : null,
   builder: (c) {
     final content = _UpdateSheet(
       version: version,
@@ -50,32 +49,26 @@ Future<UpdateChoice?> showUpdateSheet(
     if (!usesGlass(c)) return content;
     return Padding(
       padding: EdgeInsets.fromLTRB(12, 12, 12, MediaQuery.paddingOf(c).bottom + 12),
-      child: GlassPopupTransition(
-        animation: ModalRoute.of(c)!.animation!,
-        beginScale: 0.94,
-        verticalOffset: 0,
-        alignment: Alignment.bottomCenter,
-        child: AppSurface(
-          color: c.palette.paper,
-          radius: 36,
-          tintAlpha: 0.94,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                child: Container(
-                  width: 32,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: c.palette.mute.withValues(alpha: 0.4),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
+      child: AppSurface(
+        color: c.palette.paper,
+        radius: 36,
+        tintAlpha: 0.94,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              child: Container(
+                width: 32,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: c.palette.mute.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(2),
                 ),
               ),
-              Flexible(child: content),
-            ],
-          ),
+            ),
+            Flexible(child: content),
+          ],
         ),
       ),
     );

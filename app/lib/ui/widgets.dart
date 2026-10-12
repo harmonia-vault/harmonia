@@ -9,7 +9,6 @@ import 'theme.dart';
 import 'app_scope.dart';
 import 'glass_overlays.dart';
 import 'glass.dart';
-import 'glass_motion.dart';
 
 /// 把异常转成给用户看的一句话。
 String errorText(Object e) {
@@ -25,7 +24,13 @@ void toast(BuildContext context, String msg) {
     ..hideCurrentSnackBar()
     ..showSnackBar(
       glass
-          ? GlassSnackBar(
+          ? SnackBar(
+              behavior: SnackBarBehavior.floating,
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              padding: EdgeInsets.zero,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              clipBehavior: Clip.none,
               content: AppSurface(
                 color: context.palette.card,
                 radius: 24,
@@ -37,7 +42,7 @@ void toast(BuildContext context, String msg) {
               ),
             )
           : SnackBar(content: Text(msg)),
-      snackBarAnimationStyle: notificationAnimationStyle(context),
+      snackBarAnimationStyle: MediaQuery.disableAnimationsOf(context) ? AnimationStyle.noAnimation : null,
     );
 }
 
@@ -50,7 +55,7 @@ Future<bool> runBusy(
 }) async {
   final nav = Navigator.of(context);
   // 只移除这个进度弹窗本身：操作期间页面栈可能因阶段切换而被清空。
-  final route = AppDialogRoute<void>(
+  final route = appDialogRoute<void>(
     context: context,
     barrierDismissible: false,
     builder: (context) => PopScope(

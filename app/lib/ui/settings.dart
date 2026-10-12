@@ -281,7 +281,7 @@ class _SettingsTabState extends State<SettingsTab> {
                 ListTile(
                   leading: const Icon(Icons.pin_outlined),
                   title: const Text('修改 App PIN'),
-                  subtitle: const Text('锁屏或离开 App 超过 5分钟后，需输入 App PIN'),
+                  subtitle: const Text('离开 App 超过 5 分钟后，需输入 App PIN'),
                   onTap: _changePin,
                 ),
                 if (_bioAvailable || _bioEnabled) ...[

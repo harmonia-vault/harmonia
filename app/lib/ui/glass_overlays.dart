@@ -6,7 +6,7 @@ import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'glass.dart';
 import 'theme.dart';
 
-export 'glass_motion.dart' show showAppDialog, AppDialogRoute;
+export 'app_dialog.dart' show showAppDialog, appDialogRoute;
 
 class _GlassDialog extends StatelessWidget {
   const _GlassDialog({this.title, this.content, this.actions});
@@ -109,30 +109,12 @@ class _GlassDialog extends StatelessWidget {
                               foregroundColor: p.ink,
                             ),
                           ),
-                          child: LayoutBuilder(
-                            builder: (context, constraints) {
-                              final stacked =
-                                  constraints.maxWidth / actions!.length < 120 ||
-                                  MediaQuery.textScalerOf(context).scale(14) > 20;
-                              return stacked
-                                  ? Column(
-                                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                                      children: [
-                                        for (final (i, action) in actions!.indexed) ...[
-                                          if (i > 0) const SizedBox(height: 8),
-                                          action,
-                                        ],
-                                      ],
-                                    )
-                                  : Row(
-                                      children: [
-                                        for (final (i, action) in actions!.indexed) ...[
-                                          if (i > 0) const SizedBox(width: 10),
-                                          Expanded(child: action),
-                                        ],
-                                      ],
-                                    );
-                            },
+                          child: OverflowBar(
+                            spacing: 10,
+                            overflowSpacing: 8,
+                            alignment: MainAxisAlignment.end,
+                            overflowAlignment: OverflowBarAlignment.end,
+                            children: actions!,
                           ),
                         ),
                       ),

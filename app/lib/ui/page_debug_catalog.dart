@@ -41,10 +41,10 @@ Map<String, List<DebugPageEntry>> debugPages() => {
   '首页与管理': [
     DebugPageEntry('首页、底栏交互动效与系统间距', (s) => s.vault.paired ? HomePage(c: s.c) : SignInPage(c: s.c)),
     DebugPageEntry('玻璃透明度与折射对照', (s) => GlassDebugPage(c: s.c)),
-    DebugPageEntry('通知与下载进度', (_) => const FeedbackDebugPage()),
+    DebugPageEntry('通知默认动效与下载进度', (_) => const FeedbackDebugPage()),
     DebugPageEntry('环境列表与行尾间距', (s) => EnvironmentsTab(c: s.c)),
     DebugPageEntry('设备列表与行尾间距', (s) => s.vault.paired ? DevicesTab(c: s.c) : SignInPage(c: s.c)),
-    DebugPageEntry('设置、玻璃滑块与输入弹窗', (s) => s.vault.paired ? SettingsTab(c: s.c) : SignInPage(c: s.c)),
+    DebugPageEntry('设置、玻璃滑块刻度与输入弹窗', (s) => s.vault.paired ? SettingsTab(c: s.c) : SignInPage(c: s.c)),
     DebugPageEntry('关于、应用图标与开源许可', (_) => const AboutPage()),
     DebugPageEntry('环境详情、复制间距与菜单', (s) => _environment(s, edit: false)),
     DebugPageEntry('添加变量', (s) => _environment(s, edit: true)),
@@ -120,7 +120,7 @@ Map<String, List<DebugPageEntry>> debugPages() => {
     ),
   ],
   '恢复与安全': [
-    DebugPageEntry('锁屏立即锁定与后台计时', (s) => LockDebugPage(c: s.c), followStage: false),
+    DebugPageEntry('后台计时与 App 锁定', (s) => LockDebugPage(c: s.c), followStage: false),
     DebugPageEntry('App 锁屏', (s) => LockPage(c: s.c), stage: Stage.locked),
     DebugPageEntry(
       '首次保存恢复码',

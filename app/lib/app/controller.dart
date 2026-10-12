@@ -227,16 +227,6 @@ class AppController extends ChangeNotifier {
 
   bool get _lockable => vault.paired && {Stage.home, Stage.rotation}.contains(stage);
 
-  /// 锁屏不等后台超时；也使正在进行的认证失效。
-  void onScreenLocked() {
-    _foreground = false;
-    if (_lockable || stage == Stage.locked) {
-      lockNow();
-    } else {
-      lockGeneration++;
-    }
-  }
-
   /// 忘记 PIN：清除本机数据和本机密钥，回到登录页。
   Future<void> forgetDevice() async {
     _stopPush();
