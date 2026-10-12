@@ -16,7 +16,7 @@ Harmonia 是一个自托管的环境变量同步工具：在手机上集中管�
 | 组件 | 说明 |
 | --- | --- |
 | 服务端（`server/`） | Cloudflare Workers + Durable Objects，发布在 [harmonia-worker](https://github.com/harmonia-vault/harmonia-worker) 供 Fork 部署 |
-| Android App（`app/`） | 管理环境与变量、批准和移除设备、恢复账号 |
+| App（`app/`） | Android 与 iPhone，管理环境与变量、批准和移除设备、恢复账号 |
 | 命令行（`cli/`） | macOS 与 Linux，在电脑、服务器上同步并注入变量 |
 
 ## 快速开始
@@ -27,10 +27,23 @@ Harmonia 是一个自托管的环境变量同步工具：在手机上集中管�
 
 ### 2. 安装 App 并创建账号
 
-1. 从 [Releases](https://github.com/harmonia-vault/harmonia/releases/latest) 下载 `harmonia-<版本>.apk` 安装。
+1. 从 [Releases](https://github.com/harmonia-vault/harmonia/releases/latest) 下载安装包：Android 下载 `harmonia-<版本>.apk` 直接安装；iPhone 见下面的[在 iPhone 上安装](#在-iphone-上安装)。
 2. 打开 App，填写服务器地址，用邮箱注册（服务端开启了邮箱验证时，还要输入邮件中的验证码）。
 3. App 会生成**恢复码**：请抄在纸上或存进密码管理器。丢失所有手机时，只有它能找回数据。
 4. 新建环境（例如“OpenAI”），添加变量（例如 `OPENAI_API_KEY`）。
+
+#### 在 iPhone 上安装
+
+Harmonia 没有上架 App Store。Releases 里的 `harmonia-<版本>.ipa` 没有签名，需要你自己签名后安装（iOS 16 及以上）：
+
+1. 下载 `harmonia-<版本>.ipa`。
+2. 用 AltStore、SideStore 这类自签工具，或者自己的 Apple 开发者证书签名并安装。
+
+需要知道的几件事：
+
+- 用免费 Apple ID 签名的 App 7 天后过期，要在过期前重新签名（上述工具可以自动续签）。过期后 App 打不开，重新签名后数据还在。
+- 换一个 Apple ID 或证书签名，系统会把它当成另一个 App，原来的数据读不到，需要按新手机重新接入（由管理设备批准，或用恢复码恢复）。
+- 卸载后重装、从备份恢复、换机迁移之后，同样需要重新接入。
 
 ### 3. 在电脑上接入
 
@@ -108,7 +121,8 @@ ExecStart=/home/me/.local/bin/harmonia exec -- /usr/bin/node /srv/agent/index.js
 
 ## 升级
 
-- **App**：在“设置 → 检查更新”中升级，也会每天自动检查一次。安装包经过签名校验，数据保留。
+- **App（Android）**：在“设置 → 检查更新”中升级，也会每天自动检查一次。安装包经过签名校验，数据保留。
+- **App（iPhone）**：“设置 → 检查更新”会提示新版本并给出下载页；下载新的 IPA，用安装时的签名工具和同一个 Apple ID 装上即可，数据保留。
 - **命令行**：`harmonia update`。后台服务每天检查一次，有新版本时 `harmonia status` 会提示。
 - **服务端**：在你的 Fork 中点击 Sync fork。
 

@@ -13,13 +13,14 @@ import 'widgets.dart';
 
 IconData platformIcon(String p) => switch (p) {
       'android' => Icons.phone_android,
+      'ios' => Icons.phone_iphone,
       'darwin' => Icons.laptop_mac_outlined,
       'linux' => Icons.computer_outlined,
       _ => Icons.devices_other_outlined,
     };
 
 String platformName(String p) =>
-    {'android': 'Android 手机', 'darwin': 'macOS', 'linux': 'Linux'}[p] ?? p;
+    {'android': 'Android 手机', 'ios': 'iPhone', 'darwin': 'macOS', 'linux': 'Linux'}[p] ?? p;
 
 class DevicesTab extends StatefulWidget {
   const DevicesTab({super.key, required this.c});
@@ -240,7 +241,8 @@ class _DevicePageState extends State<DevicePage> {
     if (me) return;
     final ok = await confirmDialog(context,
         title: '移除“${d.name}”？',
-        body: '这台设备将立即失去访问权限，联网后会自动清除本机保存的变量。已经被复制或正在运行的程序中的变量无法收回，必要时请在服务商处更换相应的密钥。',
+        body: '这台设备将立即失去访问权限，联网后会自动清除本机保存的变量。\n'
+            '已经被复制或正在运行的程序中的变量无法收回，必要时请在服务商处更换相应的密钥。',
         ok: '移除',
         danger: true);
     if (!ok || !mounted) return;

@@ -1,5 +1,5 @@
 // App 锁页面、敏感操作前的身份确认，以及 PIN 输入框和对话框。
-// 验证通过 = 用指纹或 App PIN 解开了本机数据密钥（docs/protocol.md 2.5）。
+// 验证通过 = 用生物识别或 App PIN 解开了本机数据密钥（docs/protocol.md 2.5）。
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -12,9 +12,21 @@ import 'widgets.dart';
 
 late Identity identity;
 
-const bioInvalidatedText = '手机指纹有变化，指纹解锁已关闭，可以在设置中重新开启';
+String get bioInvalidatedText => '手机${identity.bio('有变化')}，${identity.bio('解锁')}已关闭，可以在设置中重新开启';
 
-/// 敏感操作前确认身份：开启了指纹时先用指纹，取消或失败时改输 PIN。返回解开的本机数据密钥。
+/// 等当前页面真正显示到屏幕上。弹系统验证之前调用：iOS 在面容 ID 出现时会暂停 App 的绘制，
+/// 弹得太早，屏幕会停在页面画出来之前的那一帧，看起来是空白。
+Future<void> pagePainted() async {
+  for (var i = 0; i < 2; i++) {
+    WidgetsBinding.instance.scheduleFrame();
+    await WidgetsBinding.instance.endOfFrame;
+  }
+  await Future<void>.delayed(const Duration(milliseconds: 120));
+}
+
+IconData get bioIcon => identity.bioIsFace ? Icons.face_unlock_outlined : Icons.fingerprint;
+
+/// 敏感操作前确认身份：开启了生物识别时先用它，取消或失败时改输 PIN。返回解开的本机数据密钥。
 Future<Uint8List?> verifyIdentity(BuildContext context, String reason) async {
   final key = await identity.unlockWithBio(reason);
   if (key != null) return key;
@@ -165,7 +177,9 @@ class _LockPageState extends State<LockPage> {
     final bio = await identity.bioEnabled();
     if (!mounted) return;
     setState(() => _bio = bio);
-    if (bio) await _useBio();
+    if (!bio) return;
+    await pagePainted();
+    if (mounted) await _useBio();
   }
 
   Future<void> _useBio() async {
@@ -214,8 +228,8 @@ class _LockPageState extends State<LockPage> {
   Future<void> _forgot() async {
     final ok = await confirmDialog(context,
         title: '清除本机数据？',
-        body: '${_bio ? '如果只是忘记了 PIN，可以先用指纹解锁，再到“设置”中修改 PIN。\n\n' : ''}'
-            '清除后，账号和云端数据不受影响，但这台手机需要重新登录，并由管理设备批准或用恢复码恢复。'
+        body: '${_bio ? '如果只是忘记了 PIN，可以先用${identity.bio('解锁')}，再到“设置”中修改 PIN。\n' : ''}'
+            '清除后，账号和云端数据不受影响，但这台手机需要重新登录，并由管理设备批准或用恢复码恢复。\n'
             '这台手机原来的设备记录需要在管理设备上移除。',
         ok: '清除本机数据',
         danger: true);
@@ -254,8 +268,8 @@ class _LockPageState extends State<LockPage> {
                 const SizedBox(height: Space.sm),
                 TextButton.icon(
                   onPressed: _busy ? null : _useBio,
-                  icon: const Icon(Icons.fingerprint),
-                  label: const Text('用指纹解锁'),
+                  icon: Icon(bioIcon),
+                  label: Text('用${identity.bio('解锁')}'),
                 ),
               ],
               const SizedBox(height: Space.md),

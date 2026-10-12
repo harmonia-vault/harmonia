@@ -68,7 +68,7 @@ class EnvironmentsTab extends StatelessWidget {
                 EmptyState(
                   icon: Icons.inventory_2_outlined,
                   title: '还没有环境',
-                  body: '环境是一组变量，例如“OpenAI”或“生产环境”。创建环境后添加变量，再授权给电脑使用。',
+                  body: '环境是一组变量，例如“OpenAI”或“生产环境”。\n创建环境后添加变量，再授权给电脑使用。',
                 ),
               ])
             : ListView.separated(
@@ -145,7 +145,7 @@ class _EnvironmentPageState extends State<EnvironmentPage> {
     } else if (action == 'delete') {
       final ok = await confirmDialog(context,
           title: '删除环境“${env.name}”？',
-          body: '其中的全部变量会被删除，所有已授权的电脑在下次同步时都会移除这些变量。此操作无法撤销。',
+          body: '其中的全部变量会被删除，所有已授权的电脑在下次同步时都会移除这些变量。\n此操作无法撤销。',
           ok: '删除',
           danger: true);
       if (!ok || !mounted) return;
@@ -345,7 +345,7 @@ class _VariableEditPageState extends State<VariableEditPage> {
               validator: (v) => (v ?? '').length > 65536 ? '值不能超过 64 KB' : null,
             ),
             const SizedBox(height: Space.md),
-            const Banner2('值在本机加密后才会上传。保存需要联网，成功后会同步到所有获授权的电脑。'),
+            const Banner2('值在本机加密后才会上传。\n保存需要联网，成功后会同步到所有获授权的电脑。'),
             const SizedBox(height: Space.xl),
             FilledButton(onPressed: _save, child: const Text('保存')),
           ]),

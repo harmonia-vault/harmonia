@@ -16,7 +16,7 @@
 
 ## 2. 密码学
 
-全部使用 libsodium 兼容的标准构件。App 本机密钥保护另外使用 Android Keystore，见 2.5。
+全部使用 libsodium 兼容的标准构件。App 本机密钥保护另外使用 Android Keystore，iOS 上使用 Secure Enclave 和钥匙串，见 2.5。
 
 | 用途 | 构件 |
 | --- | --- |
@@ -76,7 +76,9 @@ fp = SHA-256(C(["harmonia.pairing", pairingId, signPub, boxPub, rootPub]))
 
 ### 2.5 App 本机密钥保护
 
-只用于 Android App 的本机存储，不经过网络，其他端不需要实现。除 2 节的构件外，这里额外使用 Android Keystore 中不可导出的密钥。
+只用于 App 的本机存储，不经过网络，其他端不需要实现。除 2 节的构件外，这里额外使用系统中不可导出的密钥：Android 上是 Android Keystore，iOS 上是 Secure Enclave 和钥匙串。DEK、本机配置和 PIN 槽的格式两个平台相同，区别只在 `kek` 的算法和生物识别槽。
+
+**Android：**
 
 ```
 DEK  = 32 字节随机数，登录后设置 App PIN 时生成
@@ -103,6 +105,33 @@ PIN 槽（必有）：
 - **指纹槽作废**：Keystore 报告密钥永久失效时，删除指纹槽和 K_bio，只保留 PIN 槽。
 - **清除**：退出登录、本机被撤销、选择“忘记 PIN”时，删除本机配置、两个槽、K_hw 和 K_bio。
 - 以上密文仍然写入 `flutter_secure_storage`。
+
+**iOS（v0.2.0）：**
+
+```
+PIN 槽（必有）：
+  pk   = Argon2id(PIN, salt)                  // 同 Android
+  P    = HashToP256(pk)                       // 见下
+  kek  = SHA-256(ECDH(K_se, P))               // K_se：Secure Enclave 中的 P-256 私钥，不可导出，仅限本机，不要求用户验证；
+                                              // ECDH 的结果取共享点的 x 坐标（32 字节）
+  槽   = XChaCha20-Poly1305(kek, DEK, AAD = C(["harmonia.local-slot", "pin"]))
+
+HashToP256(pk)：
+  i 从 0 开始递增（1 字节）：x = SHA-256(pk ‖ i)
+  取第一个能让 0x02 ‖ x 成为合法 P-256 压缩点的 i，P 就是这个点
+
+面容 ID / 触控 ID 槽（可选）：
+  DEK 保存为一条钥匙串条目：仅限本机，要求手机已设置锁屏密码；
+  访问控制为“当前已录入的生物识别”（biometryCurrentSet），每次读取都由系统验证面容或指纹，不接受锁屏密码；
+  新增或删除面容、指纹，或关闭锁屏密码后，系统使这条条目失效
+```
+
+- 上面“规则”中的各条同样适用，其中 K_hw 对应 K_se，K_bio 对应生物识别钥匙串条目，“Keystore 报告密钥永久失效”对应读取时系统报告条目不存在。
+- **K_se 必须参与每一次 PIN 尝试。** Secure Enclave 只支持 P-256 的签名和密钥协商，没有 HMAC，所以用 ECDH 代替：P 由哈希得到，没有人知道它相对基点的离散对数，只凭 K_se 的公钥算不出 `K_se·P`，每试一个 PIN 都必须调用一次 Secure Enclave。这就是 2HashDH（RFC 9497 中 OPRF 所依据的伪随机函数）去掉盲化后的形式。K_se 的公钥不保存，也不使用。
+- HashToP256 用逐次尝试而不是 RFC 9380 的映射，是为了只依赖系统库的压缩点解码。尝试次数会随 pk 变化，这不影响安全：pk 只在本机内存中出现，攻击者要得到 kek 仍然必须调用 Secure Enclave。P-256 的余因子为 1，曲线上的点都在素数阶群内，不需要另外检查子群。
+- 钥匙串条目（`flutter_secure_storage` 写入的内容、K_se 的引用、生物识别条目）全部设为仅限本机，不同步到 iCloud 钥匙串，不随备份迁移到其他设备。
+- **卸载后的残留**：iOS 的钥匙串在 App 卸载后不会清除。App 启动时如果数据目录中没有安装标记，先执行一次“清除”，再写入标记。
+- **模拟器**：模拟器没有 Secure Enclave，仅在模拟器构建中把 K_se 换成保存在钥匙串里的普通 P-256 私钥；真机构建不包含这条路径。
 
 ## 3. HTTP API
 
@@ -165,7 +194,7 @@ PIN 槽（必有）：
 | `PUT /account/password` | device（管理设备） | `{kdfSalt, authKey}` |
 | `POST /auth/challenge` | 请求头 `X-Harmonia-Account` | `{deviceId}` → `{nonce, expiresAt}`，nonce 只能使用一次，2 分钟内有效 |
 | `POST /auth/device-session` | 请求头 `X-Harmonia-Account` | `{deviceId, nonce, signature}` → `{token, expiresAt}` |
-| `POST /pairings` | password | `{name, platform, signPub, boxPub, rootPub, canManage}` → `{id, secret, expiresAt}`，10 分钟内有效。`canManage` 表示发起方的客户端具备管理功能（目前只有 App 为 true）。服务端记录发起方 IP；该 IP 被阻止时返回 `pairing_blocked` |
+| `POST /pairings` | password | `{name, platform, signPub, boxPub, rootPub, canManage}` → `{id, secret, expiresAt}`，10 分钟内有效。`platform` 是 `android`、`ios`、`darwin`、`linux` 之一，只用于显示。`canManage` 表示发起方的客户端具备管理功能（目前只有 App 为 true）。服务端记录发起方 IP；该 IP 被阻止时返回 `pairing_blocked` |
 | `GET /pairings/{id}/events` | 请求头 `X-Harmonia-Account` 和 `X-Pairing-Secret` | 发起方的等待连接（WebSocket），见 3.5.1 |
 | `GET /pairings/{id}/status` | 请求头 `X-Harmonia-Account` 和 `X-Pairing-Secret` | `{status}`：`pending` / `approved` / `rejected` / `expired` / `cancelled`。只在等待连接意外断开后查询一次 |
 | `GET /pairings` | device（管理设备） | 列出发起方仍在等待的请求，每项带 `ip` 和 `canManage` |

@@ -1,4 +1,4 @@
-// Harmonia（和弦）Android App 入口。
+// Harmonia（和弦）App 入口（Android 与 iOS）。
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -9,9 +9,12 @@ import 'package:path_provider/path_provider.dart';
 
 import 'app/controller.dart';
 import 'app/identity.dart';
+import 'app/licenses.dart';
+import 'app/platform.dart';
 import 'app/updater.dart';
 import 'core/crypto.dart';
 import 'core/keyring.dart';
+import 'core/phrases.dart';
 import 'core/store.dart';
 import 'ui/auth_pages.dart';
 import 'ui/home.dart';
@@ -20,10 +23,14 @@ import 'ui/pairing.dart';
 import 'ui/pin_setup.dart';
 import 'ui/recovery_pages.dart';
 import 'ui/theme.dart';
+import 'ui/widgets.dart';
 
-/// 安全存储：Android Keystore 包装加密。设备密钥另外用本机数据密钥加密（见 core/keyring.dart）。
+/// 安全存储：Android 上由 Keystore 包装加密，iOS 上是仅限本机的钥匙串条目。
+/// 设备密钥另外用本机数据密钥加密（见 core/keyring.dart）。
 class SecureStore implements LocalStore {
-  final _s = const FlutterSecureStorage();
+  final _s = const FlutterSecureStorage(
+    iOptions: IOSOptions(accessibility: KeychainAccessibility.unlocked_this_device),
+  );
   @override
   Future<String?> read(String key) => _s.read(key: key);
   @override
@@ -34,28 +41,24 @@ class SecureStore implements LocalStore {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  registerLicenses();
   final crypto = await HCrypto.init();
   updaterCrypto = crypto;
+  phraseBreaker = PhraseBreaker.fromJson(await rootBundle.loadString('assets/budoux/zh-hans.json'));
   final secure = SecureStore();
   identity = Identity(Keyring(crypto, secure, KeystoreKeys()));
+  await identity.loadBioName();
   final dir = Directory('${(await getApplicationSupportDirectory()).path}/harmonia');
   final controller = AppController(
     crypto: crypto,
     secure: secure,
     files: FileStore(dir),
-    deviceName: await _deviceName(),
+    deviceName: await hostDeviceName(),
+    platform: hostPlatform,
     identity: identity,
   );
   runApp(HarmoniaApp(c: controller));
   await controller.start();
-}
-
-Future<String> _deviceName() async {
-  try {
-    final model = await const MethodChannel('harmonia/platform').invokeMethod<String>('deviceName');
-    if (model != null && model.isNotEmpty) return model;
-  } catch (_) {}
-  return 'Android 手机';
 }
 
 class HarmoniaApp extends StatefulWidget {

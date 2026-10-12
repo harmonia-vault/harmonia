@@ -38,7 +38,7 @@ class _RecoveryCodeConfirmState extends State<RecoveryCodeConfirm> {
         CopyRecoveryCode(code: widget.code),
         const SizedBox(height: Space.lg),
         const Banner2(
-          '请把恢复码抄在纸上或存进密码管理器，妥善保管；提交成功后还可以下载 PDF 打印。丢失所有手机时，只能用它找回数据；它不会再次显示，服务器也没有副本。',
+          '请把恢复码抄在纸上或存进密码管理器，妥善保管；提交成功后还可以下载 PDF 打印。\n丢失所有手机时，只能用它找回数据；它不会再次显示，服务器也没有副本。',
           warn: true,
         ),
         const SizedBox(height: Space.md),
@@ -103,7 +103,7 @@ class SetupPage extends StatelessWidget {
         )
       : AuthScaffold(
           title: '保存恢复码',
-          subtitle: '这是账号的第一台手机。Harmonia 会在本机生成加密密钥，并给你一个恢复码。',
+          subtitle: '这是账号的第一台手机。\nHarmonia 会在本机生成加密密钥，并给你一个恢复码。',
           onBack: c.cancelToSignIn,
           children: [
             RecoveryCodeConfirm(
@@ -121,7 +121,7 @@ class UnpairedPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AuthScaffold(
         title: '这台手机还没有授权',
-        subtitle: '账号 ${c.session?.email ?? ''} 已在其他设备上使用。请选择一种方式让这台手机获得访问权限。',
+        subtitle: '账号 ${c.session?.email ?? ''} 已在其他设备上使用。\n请选择一种方式让这台手机获得访问权限。',
         onBack: c.cancelToSignIn,
         children: [
           if (c.notice != null) ...[Banner2(c.notice!, warn: true), const SizedBox(height: Space.lg)],
@@ -135,7 +135,7 @@ class UnpairedPage extends StatelessWidget {
           _Choice(
             icon: Icons.key_outlined,
             title: '用恢复码恢复',
-            body: '旧手机已经丢失或无法使用时选择。恢复后需要更换新的恢复码。',
+            body: '旧手机已经丢失或无法使用时选择。\n恢复后需要更换新的恢复码。',
             onTap: () => Navigator.push(context,
                 MaterialPageRoute(builder: (_) => RecoverPage(c: c, email: c.session?.email ?? ''))),
           ),
@@ -230,7 +230,7 @@ class _RecoverPageState extends State<RecoverPage> {
   @override
   Widget build(BuildContext context) => AuthScaffold(
         title: '用恢复码恢复',
-        subtitle: '输入注册邮箱和恢复码。恢复后这台手机会成为管理设备，并需要立即更换新的恢复码。',
+        subtitle: '输入注册邮箱和恢复码。\n恢复后这台手机会成为管理设备，并需要立即更换新的恢复码。',
         onBack: () => Navigator.pop(context),
         children: [
           TextField(
@@ -315,10 +315,10 @@ class _RotationPageState extends State<RotationPage> {
   /// 开始前的说明：新恢复码在核对提交前不会生效。
   Widget _introStep() => AuthScaffold(
         title: '更换恢复码',
-        subtitle: widget.forced ? '恢复还差最后一步：换一个新的恢复码。保存并核对新恢复码后，恢复才算完成。' : '开始前请先了解：',
+        subtitle: widget.forced ? '恢复还差最后一步：换一个新的恢复码。\n保存并核对新恢复码后，恢复才算完成。' : '开始前请先了解：',
         onBack: widget.forced ? null : () => Navigator.pop(context),
         children: [
-          const _Point(Icons.edit_note_outlined, '准备好纸笔或密码管理器。新恢复码只显示这一次，服务器也没有副本。'),
+          const _Point(Icons.edit_note_outlined, '准备好纸笔或密码管理器。\n新恢复码只显示这一次，服务器也没有副本。'),
           const _Point(Icons.fact_check_outlined, '抄好后需要完整输入一遍，核对无误才能提交。'),
           const _Point(Icons.key_outlined, '提交成功后旧恢复码才作废；在此之前旧恢复码仍然有效。'),
           if (widget.forced) ...[
@@ -342,7 +342,7 @@ class _RotationPageState extends State<RotationPage> {
         canPop: false,
         child: AuthScaffold(
           title: '保存新恢复码',
-          subtitle: '新恢复码还没有生效，旧恢复码仍然可用。保存并核对后提交，才会替换旧恢复码。',
+          subtitle: '新恢复码还没有生效，旧恢复码仍然可用。\n保存并核对后提交，才会替换旧恢复码。',
           onBack: () => setState(() => _started = false),
           children: [
             RecoveryCodeConfirm(
@@ -383,7 +383,7 @@ class _Point extends StatelessWidget {
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Icon(icon, size: 24, color: context.palette.mute),
           const SizedBox(width: Space.md),
-          Expanded(child: Text(text, style: const TextStyle(height: 1.5))),
+          Expanded(child: Text(tidy(text), style: const TextStyle(height: 1.5))),
         ]),
       );
 }

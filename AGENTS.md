@@ -1,6 +1,6 @@
 # 开发规则
 
-本仓库是 Harmonia 的唯一开发仓库：`server/`（Cloudflare Workers）、`cli/`（Go，Linux/macOS）、`app/`（Flutter，Android）。
+本仓库是 Harmonia 的唯一开发仓库：`server/`（Cloudflare Workers）、`cli/`（Go，Linux/macOS）、`app/`（Flutter，Android 与 iOS）。
 
 ## 事实来源
 

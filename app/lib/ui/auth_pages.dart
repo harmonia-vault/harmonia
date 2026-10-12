@@ -28,7 +28,7 @@ class _ConnectPageState extends State<ConnectPage> {
   @override
   Widget build(BuildContext context) => AuthScaffold(
         title: '连接服务器',
-        subtitle: '输入你部署的 Harmonia 服务地址。环境变量在手机上加密后才会上传，服务器只保存密文。',
+        subtitle: '输入你部署的 Harmonia 服务地址。\n环境变量在手机上加密后才会上传，服务器只保存密文。',
         children: [
           TextField(
             autofillHints: null,
@@ -68,14 +68,16 @@ class _SignInPageState extends State<SignInPage> {
   @override
   void initState() {
     super.initState();
-    // 实例上还没有任何账号时，默认显示注册。
+    // 服务器上还没有任何账号时默认显示注册；已有账号时默认显示登录，开放注册的服务器仍可以点“注册新账号”。
     final inst = c.instance;
-    if (inst != null && inst.registrationOpen && c.prefs.email == null) _register = true;
+    if (inst != null && inst.firstAccount && c.prefs.email == null) _register = true;
   }
 
   Future<void> _submit() async {
     if (!_form.currentState!.validate()) return;
     final email = _email.text.trim(), password = _password.text;
+    // 先收起键盘：否则下一页换成数字键盘时，页面会被顶上去一截，标题被遮住。
+    FocusManager.instance.primaryFocus?.unfocus();
     await runBusy(context, () async {
       try {
         if (_register) {
@@ -174,7 +176,7 @@ class _SignInPageState extends State<SignInPage> {
                 const SizedBox(height: Space.md),
                 Banner2(
                   inst?.emailVerification ?? true
-                      ? '注册后需要输入邮件中的验证码。密码只用于登录，不能用来解密数据；数据由手机上的密钥和恢复码保护。'
+                      ? '注册后需要输入邮件中的验证码。\n密码只用于登录，不能用来解密数据；数据由手机上的密钥和恢复码保护。'
                       : '密码只用于登录，不能用来解密数据；数据由手机上的密钥和恢复码保护。',
                 ),
               ],
@@ -275,7 +277,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
     final c = widget.c;
     return AuthScaffold(
       title: '找回密码',
-      subtitle: '通过邮件验证码设置新密码。保险库中的数据和已授权的设备不受影响。',
+      subtitle: '通过邮件验证码设置新密码。\n保险库中的数据和已授权的设备不受影响。',
       onBack: () => Navigator.pop(context),
       children: [
         AutofillGroup(
@@ -363,7 +365,7 @@ class _AccountResetPageState extends State<AccountResetPage> {
       subtitle: '只有在密码、恢复码和所有管理设备都丢失时才需要重置。',
       onBack: () => Navigator.pop(context),
       children: [
-        const Banner2('重置会永久删除这个账号的全部环境、变量和已授权设备，无法撤销，也无法找回数据。之后可以用同一个邮箱重新注册。',
+        const Banner2('重置会永久删除这个账号的全部环境、变量和已授权设备，无法撤销，也无法找回数据。\n之后可以用同一个邮箱重新注册。',
             warn: true),
         const SizedBox(height: Space.lg),
         TextField(

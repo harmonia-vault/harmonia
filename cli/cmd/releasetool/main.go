@@ -86,6 +86,7 @@ func manifest(args []string) error {
 		"cli-linux-arm64":  "harmonia-linux-arm64",
 		"cli-linux-amd64":  "harmonia-linux-amd64",
 		"android":          "harmonia-" + *version + ".apk",
+		"ios":              "harmonia-" + *version + ".ipa",
 	}
 	assets := map[string]asset{}
 	for key, name := range files {
