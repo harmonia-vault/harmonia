@@ -10,6 +10,7 @@ import 'environments.dart';
 import 'settings.dart';
 import 'theme.dart';
 import 'glass.dart';
+import 'glass_nav_bar.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key, required this.c});
@@ -105,7 +106,7 @@ class _NavBar extends StatelessWidget {
     if (usesGlass(context)) {
       const icons = [CupertinoIcons.square_stack_3d_up, CupertinoIcons.device_laptop, CupertinoIcons.gear_alt];
       return _NavSafeArea(
-        child: GlassTabBar.bottom(
+        child: AppGlassNavBar(
           tabs: [
             for (var i = 0; i < items.length; i++)
               GlassTab(
@@ -117,25 +118,8 @@ class _NavBar extends StatelessWidget {
                 label: items[i].label,
               ),
           ],
-          showIndicator: !MediaQuery.disableAnimationsOf(context),
           selectedIndex: selected,
-          onTabSelected: onSelect,
-          horizontalPadding: 24,
-          verticalPadding: 4,
-          barHeight: 64,
-          barBorderRadius: 32,
-          settings: glassSettings(context),
-          quality: glassQuality(context),
-          selectedIconColor: p.accent,
-          selectedLabelColor: p.accent,
-          unselectedIconColor: p.ink,
-          unselectedLabelColor: p.ink,
-          indicatorColor: p.ink.withValues(alpha: 0.06),
-          indicatorExpansion: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          iconLabelSpacing: 3,
-          interactionBehavior: MediaQuery.disableAnimationsOf(context)
-              ? GlassInteractionBehavior.none
-              : GlassInteractionBehavior.full,
+          onSelected: onSelect,
         ),
       );
     }

@@ -37,7 +37,7 @@ class DebugPageEntry {
 
 Map<String, List<DebugPageEntry>> debugPages() => {
   '首页与管理': [
-    DebugPageEntry('首页、Android / iOS 底部间距', (s) => s.vault.paired ? HomePage(c: s.c) : SignInPage(c: s.c)),
+    DebugPageEntry('首页、紧凑底栏与系统底部间距', (s) => s.vault.paired ? HomePage(c: s.c) : SignInPage(c: s.c)),
     DebugPageEntry('玻璃折射对照', (_) => const GlassDebugPage()),
     DebugPageEntry('通知与下载进度', (_) => const FeedbackDebugPage()),
     DebugPageEntry('环境列表与行尾间距', (s) => EnvironmentsTab(c: s.c)),
