@@ -8,6 +8,7 @@ import type { Mailer } from "../core/email";
 import { checkWaiters, pairingLeft } from "../core/pairing";
 import { VERSION } from "../core/protocol";
 import { route, type Backend } from "../core/router";
+import { ApiError } from "../core/util";
 
 export interface Env {
   ACCOUNT: DurableObjectNamespace<Account>;
@@ -20,6 +21,27 @@ export interface Env {
   LIMITER?: RateLimit;
   /** 仅本地开发：把验证码打印到日志而不是发送邮件。 */
   DEV_MAIL_LOG?: string;
+}
+
+/**
+ * Durable Object 之间的调用只带得过错误的文字，带不过状态码和错误码：目录里“邮箱已经注册”
+ * 之类的业务错误如果直接抛出，到入口就成了“服务器内部错误”。所以由 carry 把它装进返回值，
+ * 入口再用 unpack 还原成原来的错误。
+ */
+type Carried<T> = { value: T } | { error: { status: number; code: string; message: string; extra: Record<string, string | number> } };
+
+function carry<T>(fn: () => T): Carried<T> {
+  try {
+    return { value: fn() };
+  } catch (e) {
+    if (!(e instanceof ApiError)) throw e;
+    return { error: { status: e.status, code: e.code, message: e.message, extra: e.extra } };
+  }
+}
+
+function unpack<T>(r: Carried<T>): T {
+  if ("error" in r) throw new ApiError(r.error.status, r.error.code, r.error.message, r.error.extra);
+  return r.value;
 }
 
 /** 配对发起方等待连接的标签；另加 `pairing:<配对 ID>` 用于按请求查找。 */
@@ -173,10 +195,10 @@ export class Directory extends DurableObject<Env> {
     return this.core.firstCompleted();
   }
   async reserve(email: string, allow: boolean) {
-    return this.core.reserve(email, allow);
+    return carry(() => this.core.reserve(email, allow));
   }
   async activate(email: string, accountId: string, allow: boolean) {
-    this.core.activate(email, accountId, allow);
+    return carry(() => this.core.activate(email, accountId, allow));
   }
   async lookup(email: string) {
     return this.core.lookup(email);
@@ -194,8 +216,8 @@ function backend(env: Env): Backend {
   return {
     directory: {
       firstCompleted: () => dir.firstCompleted(),
-      reserve: (email, allow) => dir.reserve(email, allow),
-      activate: (email, id, allow) => dir.activate(email, id, allow),
+      reserve: async (email, allow) => unpack(await dir.reserve(email, allow)),
+      activate: async (email, id, allow) => unpack(await dir.activate(email, id, allow)),
       lookup: (email) => dir.lookup(email),
       remove: (email, id, reset) => dir.remove(email, id, reset),
       limit: (bucket, ip, max, windowMs) => dir.limit(bucket, ip, max, windowMs),
