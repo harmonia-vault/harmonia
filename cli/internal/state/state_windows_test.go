@@ -19,6 +19,17 @@ func open(t *testing.T) *Dir {
 	return d
 }
 
+// sddlName 返回账号在访问控制列表的文字形式里的写法：系统给一些内置账号起了缩写
+// （例如内置管理员写作 LA），其余账号写完整的标识。
+func sddlName(t *testing.T, sid *windows.SID) string {
+	t.Helper()
+	sd, err := windows.SecurityDescriptorFromString("D:(A;;FA;;;" + sid.String() + ")")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.TrimSuffix(strings.TrimPrefix(sd.String(), "D:(A;;FA;;;"), ")")
+}
+
 // 数据目录只允许本人、系统和管理员访问，并且不继承上级目录的权限。
 func TestDirIsRestricted(t *testing.T) {
 	d := open(t)
@@ -31,8 +42,9 @@ func TestDirIsRestricted(t *testing.T) {
 		t.Fatal(err)
 	}
 	// 三项的先后由系统决定，只核对内容。
+	me := sddlName(t, user.User.Sid)
 	got := sd.String()
-	for _, who := range []string{"SY", "BA", user.User.Sid.String()} {
+	for _, who := range []string{"SY", "BA", me} {
 		if !strings.Contains(got, "(A;OICI;FA;;;"+who+")") {
 			t.Fatalf("访问控制列表缺少 %s：%s", who, got)
 		}
@@ -48,7 +60,7 @@ func TestDirIsRestricted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := sd.String(); strings.Count(got, "(A;") != 3 || !strings.Contains(got, user.User.Sid.String()) {
+	if got := sd.String(); strings.Count(got, "(A;") != 3 || !strings.Contains(got, ";;;"+me+")") {
 		t.Fatalf("文件的访问控制列表：%s", got)
 	}
 }
