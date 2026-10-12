@@ -179,28 +179,65 @@ class _LockPageState extends State<LockPage> {
   final _pin = TextEditingController();
   bool _busy = false;
   bool _bio = false;
+  bool _ready = false, _autoAttempted = false;
   String? _error;
 
   @override
   void initState() {
     super.initState();
+    widget.c.addListener(_onController);
     WidgetsBinding.instance.addPostFrameCallback((_) => _start());
+  }
+
+  @override
+  void dispose() {
+    widget.c.removeListener(_onController);
+    _pin.dispose();
+    super.dispose();
+  }
+
+  void _onController() {
+    if (!widget.c.foreground) _autoAttempted = false;
+    _autoUnlock();
   }
 
   Future<void> _start() async {
     final bio = await widget.c.identity.bioEnabled();
     if (!mounted) return;
-    setState(() => _bio = bio);
-    if (!bio) return;
+    setState(() {
+      _bio = bio;
+      _ready = true;
+    });
+    await _autoUnlock();
+  }
+
+  Future<void> _autoUnlock() async {
+    if (!_ready ||
+        !_bio ||
+        _busy ||
+        _autoAttempted ||
+        !widget.c.foreground ||
+        WidgetsBinding.instance.lifecycleState == AppLifecycleState.inactive) {
+      return;
+    }
+    _autoAttempted = true;
     await pagePainted();
-    if (mounted) await _useBio();
+    if (mounted && widget.c.foreground) await _useBio();
+  }
+
+  bool _acceptResult(int generation, Uint8List? key) {
+    if (mounted && widget.c.foreground && generation == widget.c.lockGeneration) return true;
+    key?.fillRange(0, key.length, 0);
+    if (mounted) setState(() => _busy = false);
+    return false;
   }
 
   Future<void> _useBio() async {
-    if (_busy) return;
+    if (_busy || !widget.c.foreground) return;
+    final generation = widget.c.lockGeneration;
     setState(() => _busy = true);
     final key = await widget.c.identity.unlockWithBio('解锁 Harmonia');
-    if (!mounted) return;
+    if (!_acceptResult(generation, key)) return;
     if (key != null) return _done(key);
     final bio = await widget.c.identity.bioEnabled();
     if (!mounted) return;
@@ -211,10 +248,11 @@ class _LockPageState extends State<LockPage> {
   }
 
   Future<void> _submit() async {
-    if (_pin.text.isEmpty || _busy) return;
+    if (_pin.text.isEmpty || _busy || !widget.c.foreground) return;
+    final generation = widget.c.lockGeneration;
     setState(() => _busy = true);
     final r = await widget.c.identity.keyring.unlock(_pin.text);
-    if (!mounted) return;
+    if (!_acceptResult(generation, r.key)) return;
     if (r.ok) return _done(r.key!);
     _pin.clear();
     setState(() {
@@ -230,6 +268,7 @@ class _LockPageState extends State<LockPage> {
     }
     try {
       await widget.c.unlock(key);
+      if (mounted && widget.c.stage == Stage.locked) setState(() => _busy = false);
     } catch (_) {
       if (!mounted) return;
       setState(() {

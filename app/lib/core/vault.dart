@@ -31,26 +31,26 @@ class LocalConfig {
   final String server, accountId, email, rootPub, deviceId, deviceName, signSeed, boxSeed;
 
   Map<String, dynamic> toJson() => {
-        'server': server,
-        'accountId': accountId,
-        'email': email,
-        'rootPub': rootPub,
-        'deviceId': deviceId,
-        'deviceName': deviceName,
-        'signSeed': signSeed,
-        'boxSeed': boxSeed,
-      };
+    'server': server,
+    'accountId': accountId,
+    'email': email,
+    'rootPub': rootPub,
+    'deviceId': deviceId,
+    'deviceName': deviceName,
+    'signSeed': signSeed,
+    'boxSeed': boxSeed,
+  };
 
   factory LocalConfig.fromJson(Map<String, dynamic> j) => LocalConfig(
-        server: j['server'] as String,
-        accountId: j['accountId'] as String,
-        email: j['email'] as String,
-        rootPub: j['rootPub'] as String,
-        deviceId: j['deviceId'] as String,
-        deviceName: j['deviceName'] as String,
-        signSeed: j['signSeed'] as String,
-        boxSeed: j['boxSeed'] as String,
-      );
+    server: j['server'] as String,
+    accountId: j['accountId'] as String,
+    email: j['email'] as String,
+    rootPub: j['rootPub'] as String,
+    deviceId: j['deviceId'] as String,
+    deviceName: j['deviceName'] as String,
+    signSeed: j['signSeed'] as String,
+    boxSeed: j['boxSeed'] as String,
+  );
 }
 
 /// 一次恢复码轮换的结果；网络中断时可凭 [key] 查询。
@@ -81,6 +81,7 @@ class Vault with VaultDevices {
 
   /// 本机数据密钥：由 App PIN 或指纹解开后设置，锁定时清除。
   Uint8List? localKey;
+  int _lockGeneration = 0;
 
   static const _configKey = 'account';
   static const _cacheKey = 'cache';
@@ -99,12 +100,14 @@ class Vault with VaultDevices {
 
   /// 用 [localKey] 解开本机保存的状态。返回是否已接入账号。
   Future<bool> load() async {
+    final generation = _lockGeneration;
     final raw = await secure.read(_configKey);
-    if (raw == null) return false;
+    if (raw == null || generation != _lockGeneration || localKey == null) return false;
     final json = utf8.decode(crypto.aeadOpen(localKey!, unb64(raw), _configAad));
     final c = LocalConfig.fromJson((jsonDecode(json) as Map).cast<String, dynamic>());
     _attach(c);
     final cached = await files.read(_cacheKey);
+    if (generation != _lockGeneration) return false;
     if (cached != null) {
       try {
         cache = SyncCache.fromJson((jsonDecode(cached) as Map).cast<String, dynamic>());
@@ -146,6 +149,7 @@ class Vault with VaultDevices {
 
   /// 清除内存中的全部密钥和状态；本机保存的数据不变，解锁后可再 [load]。
   void lock() {
+    _lockGeneration++;
     localKey = null;
     config = null;
     api = null;
@@ -160,14 +164,17 @@ class Vault with VaultDevices {
 
   @override
   Future<void> sync({bool full = false}) async {
+    final generation = _lockGeneration;
     final since = full ? 0 : cache.seq;
     Map<String, dynamic> res;
     try {
       res = await api!.device('GET', '/api/v1/sync?since=$since');
     } on RevokedException {
+      if (generation != _lockGeneration) return;
       await wipe();
       rethrow;
     }
+    if (generation != _lockGeneration) return;
     if ((res['seq'] as int) < since) return sync(full: true);
     final next = since == 0 ? SyncCache() : cache;
     if (since == 0) next.variables = {};
@@ -190,8 +197,7 @@ class Vault with VaultDevices {
       if (v['deleted'] == true) {
         m.remove(v['name']);
       } else {
-        m[v['name'] as String] =
-            CachedVariable(v['value'] as String, int.parse(v['keyVersion'] as String));
+        m[v['name'] as String] = CachedVariable(v['value'] as String, int.parse(v['keyVersion'] as String));
       }
     }
     cache = next;
@@ -205,8 +211,7 @@ class Vault with VaultDevices {
     _envKeys.clear();
     for (final e in cache.envelopes) {
       final sealed = unb64(e.sealed);
-      if (!crypto.verify(rootPub, envelopeMsg(e.envId, e.keyVersion, config!.deviceId, sealed),
-          unb64(e.sig))) {
+      if (!crypto.verify(rootPub, envelopeMsg(e.envId, e.keyVersion, config!.deviceId, sealed), unb64(e.sig))) {
         throw VaultException('服务器下发的环境密钥签名无效，已停止。请确认服务器地址是否正确。');
       }
       _envKeys[e.envId] = crypto.open(boxKey!, sealed);
@@ -225,8 +230,8 @@ class Vault with VaultDevices {
   }
 
   @override
-  Environment environment(String id) => cache.environments.firstWhere((e) => e.id == id,
-      orElse: () => throw VaultException('环境不存在，可能已被删除。'));
+  Environment environment(String id) =>
+      cache.environments.firstWhere((e) => e.id == id, orElse: () => throw VaultException('环境不存在，可能已被删除。'));
 
   /// 解密一个环境的全部变量。
   Map<String, String> values(String envId) {
@@ -234,8 +239,7 @@ class Vault with VaultDevices {
     if (key == null) throw VaultException('这台设备没有这个环境的密钥。');
     final out = <String, String>{};
     for (final entry in (cache.variables[envId] ?? {}).entries) {
-      out[entry.key] =
-          crypto.decryptValue(key, envId, entry.value.keyVersion, entry.key, entry.value.value);
+      out[entry.key] = crypto.decryptValue(key, envId, entry.value.keyVersion, entry.key, entry.value.value);
     }
     return out;
   }
@@ -251,18 +255,15 @@ class Vault with VaultDevices {
 
   /// 校验设备证书后返回它的加密公钥。
   @override
-  Uint8List _verifiedBoxPub(String deviceId, String kind, String signPub, String boxPub,
-      String cert) {
-    if (!crypto.verify(unb64(config!.rootPub), deviceCertMsg(deviceId, kind, signPub, boxPub),
-        unb64(cert))) {
+  Uint8List _verifiedBoxPub(String deviceId, String kind, String signPub, String boxPub, String cert) {
+    if (!crypto.verify(unb64(config!.rootPub), deviceCertMsg(deviceId, kind, signPub, boxPub), unb64(cert))) {
       throw VaultException('设备“$deviceId”的证书无效，已拒绝为它发放密钥。');
     }
     return unb64(boxPub);
   }
 
   @override
-  Map<String, dynamic> _envelope(
-      String envId, int keyVersion, String recipient, Uint8List boxPub, Uint8List envKey) {
+  Map<String, dynamic> _envelope(String envId, int keyVersion, String recipient, Uint8List boxPub, Uint8List envKey) {
     final sealed = crypto.seal(envKey, boxPub);
     return {
       'envId': envId,
@@ -279,13 +280,11 @@ class Vault with VaultDevices {
     final key = crypto.random(32);
     final envelopes = <Map<String, dynamic>>[];
     for (final d in devices.where((d) => d.isManager)) {
-      envelopes.add(_envelope(
-          id, 1, d.id, _verifiedBoxPub(d.id, d.kind, d.signPub, d.boxPub, d.cert), key));
+      envelopes.add(_envelope(id, 1, d.id, _verifiedBoxPub(d.id, d.kind, d.signPub, d.boxPub, d.cert), key));
     }
     final rec = cache.manager!['recovery'] as Map;
     envelopes.add(_envelope(id, 1, 'recovery', unb64(rec['boxPub'] as String), key));
-    await api!.device('POST', '/api/v1/environments',
-        body: {'id': id, 'name': name.trim(), 'envelopes': envelopes});
+    await api!.device('POST', '/api/v1/environments', body: {'id': id, 'name': name.trim(), 'envelopes': envelopes});
     await sync();
   }
 
@@ -304,15 +303,21 @@ class Vault with VaultDevices {
     final key = _envKeys[envId];
     if (key == null) throw VaultException('这台设备没有这个环境的密钥。');
     final ct = crypto.encryptValue(key, envId, env.keyVersion, name, value);
-    await api!.device('PUT', '/api/v1/environments/$envId/variables/$name',
-        body: {'value': ct, 'keyVersion': '${env.keyVersion}'},
-        headers: {'idempotency-key': crypto.newId()});
+    await api!.device(
+      'PUT',
+      '/api/v1/environments/$envId/variables/$name',
+      body: {'value': ct, 'keyVersion': '${env.keyVersion}'},
+      headers: {'idempotency-key': crypto.newId()},
+    );
     await sync();
   }
 
   Future<void> deleteVariable(String envId, String name) async {
-    await api!.device('DELETE', '/api/v1/environments/$envId/variables/$name',
-        headers: {'idempotency-key': crypto.newId()});
+    await api!.device(
+      'DELETE',
+      '/api/v1/environments/$envId/variables/$name',
+      headers: {'idempotency-key': crypto.newId()},
+    );
     await sync();
   }
 
@@ -336,8 +341,7 @@ class Vault with VaultDevices {
   Future<void> changePassword(String newPassword) async {
     final salt = crypto.random(16);
     final authKey = await passwordKeyInIsolate(newPassword, salt);
-    await api!.device('PUT', '/api/v1/account/password',
-        body: {'kdfSalt': b64(salt), 'authKey': b64(authKey)});
+    await api!.device('PUT', '/api/v1/account/password', body: {'kdfSalt': b64(salt), 'authKey': b64(authKey)});
   }
 
   // ---- 恢复码轮换 ----
@@ -365,10 +369,7 @@ class Vault with VaultDevices {
     };
     if (newPassword != null) {
       final salt = crypto.random(16);
-      body['password'] = {
-        'kdfSalt': b64(salt),
-        'authKey': b64(await passwordKeyInIsolate(newPassword, salt)),
-      };
+      body['password'] = {'kdfSalt': b64(salt), 'authKey': b64(await passwordKeyInIsolate(newPassword, salt))};
     }
     await api!.device('POST', '/api/v1/recovery/rotate', body: body);
     await sync();

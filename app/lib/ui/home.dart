@@ -10,7 +10,6 @@ import 'environments.dart';
 import 'settings.dart';
 import 'theme.dart';
 import 'glass.dart';
-import 'glass_nav_bar.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key, required this.c});
@@ -105,8 +104,10 @@ class _NavBar extends StatelessWidget {
     final p = context.palette;
     if (usesGlass(context)) {
       const icons = [CupertinoIcons.square_stack_3d_up, CupertinoIcons.device_laptop, CupertinoIcons.gear_alt];
+      // 保留库的完整交互，仅压低常规高度；大字号为文字增加空间。
+      final barHeight = 52 + (MediaQuery.textScalerOf(context).scale(11) - 11).clamp(0, double.infinity) * 1.5;
       return _NavSafeArea(
-        child: AppGlassNavBar(
+        child: GlassTabBar.bottom(
           tabs: [
             for (var i = 0; i < items.length; i++)
               GlassTab(
@@ -118,8 +119,26 @@ class _NavBar extends StatelessWidget {
                 label: items[i].label,
               ),
           ],
+          showIndicator: !MediaQuery.disableAnimationsOf(context),
           selectedIndex: selected,
-          onSelected: onSelect,
+          onTabSelected: onSelect,
+          horizontalPadding: 24,
+          verticalPadding: 4,
+          barHeight: barHeight,
+          barBorderRadius: barHeight / 2,
+          indicatorBorderRadius: 999,
+          settings: glassSettings(context),
+          quality: glassQuality(context),
+          selectedIconColor: p.accent,
+          selectedLabelColor: p.accent,
+          unselectedIconColor: p.ink,
+          unselectedLabelColor: p.ink,
+          indicatorColor: p.ink.withValues(alpha: 0.06),
+          indicatorExpansion: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          iconLabelSpacing: 3,
+          interactionBehavior: MediaQuery.disableAnimationsOf(context)
+              ? GlassInteractionBehavior.none
+              : GlassInteractionBehavior.full,
         ),
       );
     }

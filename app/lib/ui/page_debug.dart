@@ -75,7 +75,7 @@ class _PageDebugState extends State<PageDebug> {
   void _changed() {
     if (!mounted) return;
     final stage = _session!.c.stage;
-    if (_pageActive && stage != _lastStage) {
+    if (_pageActive && _followStage && stage != _lastStage) {
       _lastStage = stage;
       final generation = ++_navigationGeneration;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -94,7 +94,10 @@ class _PageDebugState extends State<PageDebug> {
     _navigator.currentState?.popUntil((route) => route.isFirst);
   }
 
-  void _push(Widget Function() page) {
+  bool _followStage = true;
+
+  void _push(Widget Function() page, {bool followStage = true}) {
+    _followStage = followStage;
     _pageActive = true;
     _lastStage = _session!.c.stage;
     final openingStage = _lastStage;
@@ -104,7 +107,8 @@ class _PageDebugState extends State<PageDebug> {
           MaterialPageRoute<void>(
             builder: (_) => AnimatedBuilder(
               animation: _session!.c,
-              builder: (_, _) => _session!.c.stage == openingStage && generation == _navigationGeneration
+              builder: (_, _) =>
+                  (!followStage || _session!.c.stage == openingStage) && generation == _navigationGeneration
                   ? page()
                   : const SizedBox.shrink(),
             ),
@@ -129,7 +133,7 @@ class _PageDebugState extends State<PageDebug> {
     }
     if (!mounted) return;
     _session!.c.stage = entry.stage;
-    _push(() => entry.page(_session!));
+    _push(() => entry.page(_session!), followStage: entry.followStage);
   }
 
   void _reset(DebugScenario scenario) {
@@ -169,37 +173,40 @@ class _PageDebugState extends State<PageDebug> {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      builder: (innerContext, child) => AppScope(
-        identity: session.c.identity,
-        simulated: true,
-        child: MediaQuery(
-          data: MediaQuery.of(innerContext).copyWith(
-            textScaler: TextScaler.linear(_large ? 1.6 : 1),
-            highContrast: _contrast,
-            disableAnimations: _reduceMotion,
-          ),
-          child: GlassRenderingScope(
-            quality: _glassQuality,
-            child: LiquidGlassWidgets.wrap(
-              brightnessResolver: Theme.maybeBrightnessOf,
-              child: Scaffold(
-                appBar: AppBar(
-                  title: const Text('页面调试 · 模拟数据', style: TextStyle(fontSize: 16)),
-                  leading: IconButton(
-                    tooltip: '退出调试',
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                  actions: [
-                    IconButton(tooltip: '返回目录', icon: const Icon(Icons.grid_view), onPressed: _catalog),
-                    IconButton(
-                      tooltip: '重置示例',
-                      icon: const Icon(Icons.restart_alt),
-                      onPressed: () => _reset(DebugScenario.normal),
+      builder: (innerContext, child) => GlassOpacityPreview(
+        preview: session.c.glassOpacityPreview,
+        child: AppScope(
+          identity: session.c.identity,
+          simulated: true,
+          child: MediaQuery(
+            data: MediaQuery.of(innerContext).copyWith(
+              textScaler: TextScaler.linear(_large ? 1.6 : 1),
+              highContrast: _contrast,
+              disableAnimations: _reduceMotion,
+            ),
+            child: GlassRenderingScope(
+              quality: _glassQuality,
+              child: LiquidGlassWidgets.wrap(
+                brightnessResolver: Theme.maybeBrightnessOf,
+                child: Scaffold(
+                  appBar: AppBar(
+                    title: const Text('页面调试 · 模拟数据', style: TextStyle(fontSize: 16)),
+                    leading: IconButton(
+                      tooltip: '退出调试',
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(context),
                     ),
-                  ],
+                    actions: [
+                      IconButton(tooltip: '返回目录', icon: const Icon(Icons.grid_view), onPressed: _catalog),
+                      IconButton(
+                        tooltip: '重置示例',
+                        icon: const Icon(Icons.restart_alt),
+                        onPressed: () => _reset(DebugScenario.normal),
+                      ),
+                    ],
+                  ),
+                  body: child,
                 ),
-                body: child,
               ),
             ),
           ),
@@ -238,7 +245,11 @@ class _PageDebugState extends State<PageDebug> {
             ),
           ),
           if (session.c.appearance.liquidGlass)
-            GlassTransparencyControl(value: session.c.appearance.glassOpacity, onChanged: session.c.setGlassOpacity),
+            GlassTransparencyControl(
+              value: session.c.appearance.glassOpacity,
+              onChanged: session.c.setGlassOpacity,
+              onPreview: session.c.previewGlassOpacity,
+            ),
           SwitchListTile(title: const Text('大字号'), value: _large, onChanged: (v) => setState(() => _large = v)),
           SwitchListTile(title: const Text('高对比度'), value: _contrast, onChanged: (v) => setState(() => _contrast = v)),
           SwitchListTile(

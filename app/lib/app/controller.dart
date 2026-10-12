@@ -113,6 +113,8 @@ class AppController extends ChangeNotifier {
   DateTime? _backgroundAt;
   Timer? _lockTimer;
   bool _foreground = true;
+  bool get foreground => _foreground;
+  int lockGeneration = 0;
   int _pushGeneration = 0;
 
   static const _prefsKey = 'prefs';
@@ -126,8 +128,20 @@ class AppController extends ChangeNotifier {
 
   void refresh() => notifyListeners();
 
+  // 预览独立通知外观层，不触发账号状态、路由或配对提示。
+  final glassOpacityPreview = ValueNotifier<double?>(null);
+  bool _disposed = false;
+
+  void previewGlassOpacity(double? value) {
+    if (_disposed) return;
+    if (value != null && (!value.isFinite || value < 0 || value > 1)) throw ArgumentError.value(value, 'value');
+    glassOpacityPreview.value = value;
+  }
+
   @override
   void dispose() {
+    _disposed = true;
+    glassOpacityPreview.dispose();
     _stopPush();
     _lockTimer?.cancel();
     pendingPairing?.cancel();
@@ -188,20 +202,36 @@ class AppController extends ChangeNotifier {
 
   /// 用解开的本机数据密钥解锁。
   Future<void> unlock(Uint8List key) async {
+    if (!_foreground) return;
+    final generation = lockGeneration;
     vault.localKey = key;
-    await vault.load();
+    final loaded = await vault.load();
+    if (generation != lockGeneration || !_foreground || !loaded) return;
     _go(_afterUnlock());
     _onUnlocked();
   }
 
   /// 锁定：清除内存中的全部密钥，解锁后重新解开。
   void lockNow() {
+    lockGeneration++;
+    _lockTimer?.cancel();
+    _lockTimer = null;
     _stopPush();
     vault.lock();
     _go(Stage.locked);
   }
 
   bool get _lockable => vault.paired && {Stage.home, Stage.rotation}.contains(stage);
+
+  /// 锁屏不等后台超时；也使正在进行的认证失效。
+  void onScreenLocked() {
+    _foreground = false;
+    if (_lockable || stage == Stage.locked) {
+      lockNow();
+    } else {
+      lockGeneration++;
+    }
+  }
 
   /// 忘记 PIN：清除本机数据和本机密钥，回到登录页。
   Future<void> forgetDevice() async {
@@ -241,17 +271,19 @@ class AppController extends ChangeNotifier {
   void onLifecycle({required bool foreground}) {
     if (!foreground) {
       _foreground = false;
-      _backgroundAt = DateTime.now();
+      _backgroundAt ??= DateTime.now();
       _stopPush();
       // 在后台满 5 分钟就清除内存中的密钥；进程被冻结时，回到前台再按离开时长判断。
-      _lockTimer?.cancel();
-      _lockTimer = Timer(lockTimeout, () {
+      _lockTimer ??= Timer(lockTimeout, () {
+        _lockTimer = null;
         if (!_foreground && _lockable) lockNow();
       });
+      notifyListeners();
       return;
     }
     _foreground = true;
     _lockTimer?.cancel();
+    _lockTimer = null;
     final away = _backgroundAt == null ? Duration.zero : DateTime.now().difference(_backgroundAt!);
     _backgroundAt = null;
     if (away >= lockTimeout && _lockable) {
@@ -259,6 +291,7 @@ class AppController extends ChangeNotifier {
       return;
     }
     if (stage == Stage.home || stage == Stage.rotation) _onUnlocked(); // 补上后台期间错过的变更和配对请求
+    notifyListeners();
   }
 
   // ---- 已接入后的同步与推送 ----
@@ -269,14 +302,19 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> syncNow() async {
+    final generation = lockGeneration;
     try {
       await vault.sync();
+      if (_disposed || generation != lockGeneration) return;
       online = true;
       if (vault.isManager) {
-        pairings = await vault.pendingPairings();
+        final pending = await vault.pendingPairings();
+        if (_disposed || generation != lockGeneration) return;
+        pairings = pending;
       }
       if (vault.cache.rotationRequired && stage == Stage.home) stage = Stage.rotation;
     } on RevokedException {
+      if (_disposed || generation != lockGeneration) return;
       await _handleRevoked();
       return;
     } on ApiException catch (e) {
@@ -284,7 +322,7 @@ class AppController extends ChangeNotifier {
     } catch (_) {
       online = false;
     }
-    notifyListeners();
+    if (!_disposed && generation == lockGeneration) notifyListeners();
   }
 
   /// 统一处理操作中出现的“设备已移除”。

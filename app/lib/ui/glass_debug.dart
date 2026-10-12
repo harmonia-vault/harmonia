@@ -2,7 +2,9 @@
 import 'package:flutter/material.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
+import '../app/controller.dart';
 import 'glass.dart';
+import 'glass_transparency.dart';
 import 'theme.dart';
 
 class GlassDebugOptions extends StatelessWidget {
@@ -43,11 +45,12 @@ class GlassDebugOptions extends StatelessWidget {
 }
 
 class GlassDebugPage extends StatelessWidget {
-  const GlassDebugPage({super.key});
+  const GlassDebugPage({super.key, required this.c});
+  final AppController c;
 
   @override
   Widget build(BuildContext context) => AppPage(
-    appBar: const AppBarSurface(title: Text('玻璃折射对照')),
+    appBar: const AppBarSurface(title: Text('玻璃透明度与折射对照')),
     body: (context) => Stack(
       children: [
         ListView.builder(
@@ -66,6 +69,20 @@ class GlassDebugPage extends StatelessWidget {
               radius: 32,
               color: context.palette.card,
               child: const SizedBox(width: 240, height: 120, child: Center(child: Text('上下滑动，观察背景折射'))),
+            ),
+          ),
+        ),
+        Align(
+          alignment: Alignment.bottomCenter,
+          child: SafeArea(
+            top: false,
+            child: Card(
+              margin: const EdgeInsets.all(16),
+              child: GlassTransparencyControl(
+                value: c.appearance.glassOpacity,
+                onChanged: c.setGlassOpacity,
+                onPreview: c.previewGlassOpacity,
+              ),
             ),
           ),
         ),

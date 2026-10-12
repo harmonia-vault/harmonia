@@ -2,11 +2,13 @@
 import 'dart:ui' as ui;
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
 import 'theme.dart';
+import 'glass_material.dart';
 
 abstract final class GlassResources {
   static bool _ready = false;
@@ -40,24 +42,36 @@ GlassQuality glassQuality(BuildContext context) => GlassRenderingScope.qualityOf
 bool usesGlass(BuildContext context) =>
     (Theme.of(context).extension<AppearanceTheme>()?.liquidGlass ?? false) && !MediaQuery.highContrastOf(context);
 
-LiquidGlassSettings glassSettings(BuildContext context, {Color? color}) {
-  final dark = Theme.of(context).brightness == Brightness.dark;
-  final opacity = Theme.of(context).extension<AppearanceTheme>()?.glassOpacity ?? 0.5;
-  // 中点沿用既有材质；两段插值让其余位置连续变化。
-  final low = dark ? 0.24 : 0.14;
-  final middle = dark ? 0.52 : 0.38;
-  final high = dark ? 0.80 : 0.74;
-  final alpha = opacity <= 0.5 ? low + (middle - low) * opacity * 2 : middle + (high - middle) * (opacity - 0.5) * 2;
-  return LiquidGlassSettings(
-    glassColor: (color ?? context.palette.card).withValues(alpha: alpha),
-    thickness: 22,
-    blur: 12,
-    refractiveIndex: 1.12,
-    chromaticAberration: 0.002,
-    saturation: 1.1,
-    lightIntensity: dark ? 0.4 : 0.65,
+/// 位于导航器上方，拖动直接更新所有玻璃表面；不写存储、不重建路由。
+class GlassOpacityPreview extends StatelessWidget {
+  const GlassOpacityPreview({super.key, required this.preview, required this.child});
+  final ValueListenable<double?> preview;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<double?>(
+    valueListenable: preview,
+    child: child,
+    builder: (context, value, child) {
+      final theme = Theme.of(context);
+      final appearance = theme.extension<AppearanceTheme>()!;
+      return Theme(
+        data: theme.copyWith(
+          extensions: [
+            ...theme.extensions.values.where((extension) => extension is! AppearanceTheme),
+            appearance.copyWith(glassOpacity: value ?? appearance.glassOpacity),
+          ],
+        ),
+        child: child!,
+      );
+    },
   );
 }
+
+LiquidGlassSettings glassSettings(BuildContext context) => glassMaterial(
+  dark: Theme.of(context).brightness == Brightness.dark,
+  opacity: Theme.of(context).extension<AppearanceTheme>()?.glassOpacity ?? 0.5,
+);
 
 class AppSurface extends StatelessWidget {
   const AppSurface({super.key, required this.child, required this.color, this.radius = 0, this.tintAlpha});
@@ -89,7 +103,7 @@ class AppSurface extends StatelessWidget {
                         useOwnLayer: true,
                         quality: glassQuality(context),
                         shape: LiquidRoundedSuperellipse(borderRadius: radius),
-                        settings: glassSettings(context, color: color),
+                        settings: glassSettings(context),
                       )
                     : ColoredBox(color: color),
               ),

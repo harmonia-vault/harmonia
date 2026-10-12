@@ -9,9 +9,10 @@ import 'theme.dart';
 import 'widgets.dart';
 
 class GlassTransparencyControl extends StatefulWidget {
-  const GlassTransparencyControl({super.key, required this.value, required this.onChanged});
+  const GlassTransparencyControl({super.key, required this.value, required this.onChanged, required this.onPreview});
   final double value;
   final Future<void> Function(double) onChanged;
+  final ValueChanged<double?> onPreview;
 
   @override
   State<GlassTransparencyControl> createState() => _GlassTransparencyControlState();
@@ -28,18 +29,21 @@ class _GlassTransparencyControlState extends State<GlassTransparencyControl> {
     _dragging = false;
     if (opacity == widget.value) {
       setState(() => _draft = null);
+      widget.onPreview(null);
       return;
     }
     setState(() {
       _draft = opacity;
       _saving = true;
     });
+    widget.onPreview(opacity);
     try {
       await widget.onChanged(opacity);
     } catch (_) {
       if (mounted) toast(context, '透明度未能保存，请重试。');
     } finally {
       if (mounted) {
+        widget.onPreview(null);
         setState(() {
           _draft = null;
           _saving = false;
@@ -52,9 +56,28 @@ class _GlassTransparencyControlState extends State<GlassTransparencyControl> {
     final opacity = value.clamp(0.0, 1.0);
     if (_dragging) {
       setState(() => _draft = opacity);
+      widget.onPreview(opacity);
     } else {
       _save(opacity);
     }
+  }
+
+  void _cancelPreview() {
+    setState(() {
+      _dragging = false;
+      _draft = null;
+    });
+    widget.onPreview(null);
+  }
+
+  @override
+  void dispose() {
+    if (_draft != null || _dragging) {
+      final clear = widget.onPreview;
+      // 页面退出可能发生在构建中，下一帧清理临时外观。
+      WidgetsBinding.instance.addPostFrameCallback((_) => clear(null));
+    }
+    super.dispose();
   }
 
   @override
@@ -73,6 +96,7 @@ class _GlassTransparencyControlState extends State<GlassTransparencyControl> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
@@ -112,43 +136,35 @@ class _GlassTransparencyControlState extends State<GlassTransparencyControl> {
                     child: IgnorePointer(
                       ignoring: _saving,
                       child: glass
-                          ? AppSurface(
-                              color: p.card,
-                              radius: 28,
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                                child: LayoutBuilder(
-                                  builder: (context, constraints) => GestureDetector(
-                                    behavior: HitTestBehavior.opaque,
-                                    onTapUp: (event) => _save(
-                                      ((event.localPosition.dx - 16) / (constraints.maxWidth - 32)).clamp(0, 1),
-                                    ),
-                                    child: Listener(
-                                      onPointerCancel: (_) => setState(() {
-                                        _dragging = false;
-                                        _draft = null;
-                                      }),
-                                      child: TickerMode(
-                                        enabled: !MediaQuery.disableAnimationsOf(context),
-                                        child: GlassSlider(
-                                          value: _opacity,
-                                          min: 0,
-                                          max: 1,
+                          ? Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                              child: LayoutBuilder(
+                                builder: (context, constraints) => GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onTapUp: (event) =>
+                                      _save(((event.localPosition.dx - 16) / (constraints.maxWidth - 32)).clamp(0, 1)),
+                                  child: Listener(
+                                    onPointerCancel: (_) => _cancelPreview(),
+                                    child: TickerMode(
+                                      enabled: !MediaQuery.disableAnimationsOf(context),
+                                      child: GlassSlider(
+                                        value: _opacity,
+                                        min: 0,
+                                        max: 1,
 
-                                          onChangeStart: (_) => _dragging = true,
-                                          onChanged: _change,
-                                          onChangeEnd: (_) => _save(_opacity),
-                                          activeColor: p.accent,
-                                          inactiveColor: p.mute.withValues(alpha: 0.35),
-                                          thumbColor: p.card,
-                                          thumbRadius: 16,
-                                          useOwnLayer: true,
-                                          settings: glassSettings(context),
-                                          quality: glassQuality(context),
-                                          interactionBehavior: MediaQuery.disableAnimationsOf(context)
-                                              ? GlassInteractionBehavior.none
-                                              : GlassInteractionBehavior.full,
-                                        ),
+                                        onChangeStart: (_) => _dragging = true,
+                                        onChanged: _change,
+                                        onChangeEnd: (_) => _save(_opacity),
+                                        activeColor: p.accent,
+                                        inactiveColor: p.mute.withValues(alpha: 0.35),
+                                        thumbColor: p.card,
+                                        thumbRadius: 16,
+                                        useOwnLayer: true,
+                                        settings: glassSettings(context),
+                                        quality: glassQuality(context),
+                                        interactionBehavior: MediaQuery.disableAnimationsOf(context)
+                                            ? GlassInteractionBehavior.none
+                                            : GlassInteractionBehavior.full,
                                       ),
                                     ),
                                   ),

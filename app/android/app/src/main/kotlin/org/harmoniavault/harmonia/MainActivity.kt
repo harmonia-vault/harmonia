@@ -24,6 +24,24 @@ import java.io.File
 // HTML 转 PDF、通过系统“保存到”保存文件、敏感内容复制（1 分钟后清空剪贴板）；
 // 本机密钥保护见 LocalKeys。
 class MainActivity : FlutterFragmentActivity() {
+    private var screenLock: ScreenLock? = null
+
+    override fun onPause() {
+        screenLock?.check()
+        super.onPause()
+    }
+
+    override fun onResume() {
+        screenLock?.check()
+        super.onResume()
+    }
+
+    override fun onDestroy() {
+        screenLock?.close()
+        screenLock = null
+        super.onDestroy()
+    }
+
     private val handler = Handler(Looper.getMainLooper())
     private val clearClipboard = Runnable {
         val clipboard = getSystemService(ClipboardManager::class.java)
@@ -53,6 +71,8 @@ class MainActivity : FlutterFragmentActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        screenLock?.close()
+        screenLock = ScreenLock(this, flutterEngine.dartExecutor.binaryMessenger)
         val keys = LocalKeys(this)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "harmonia/keys").setMethodCallHandler(keys::handle)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "harmonia/platform").setMethodCallHandler { call, result ->

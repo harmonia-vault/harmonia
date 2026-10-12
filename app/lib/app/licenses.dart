@@ -10,14 +10,18 @@ void registerLicenses() {
     final apache = await rootBundle.loadString('assets/licenses/apache-2.0.txt');
     // 中文分词模型（assets/budoux/zh-hans.json）。
     yield LicenseEntryWithLineBreaks(['BudouX'], 'Copyright 2021 Google LLC\n\n$apache');
-    yield LicenseEntryWithLineBreaks(
-      ['liquid_glass_renderer', 'motor'],
-      await rootBundle.loadString('assets/licenses/liquid-glass-third-party.txt'),
-    );
+    yield LicenseEntryWithLineBreaks([
+      'liquid_glass_renderer',
+      'motor',
+    ], await rootBundle.loadString('assets/licenses/liquid-glass-third-party.txt'));
+    yield LicenseEntryWithLineBreaks([
+      'ios27-design-system',
+    ], await rootBundle.loadString('assets/licenses/ios27-design-system.txt'));
     if (Platform.isAndroid) {
       yield LicenseEntryWithLineBreaks(['AndroidX'], 'Copyright The Android Open Source Project\n\n$apache');
-      yield LicenseEntryWithLineBreaks(
-          ['Kotlin'], 'Copyright JetBrains s.r.o. and Kotlin Programming Language contributors\n\n$apache');
+      yield LicenseEntryWithLineBreaks([
+        'Kotlin',
+      ], 'Copyright JetBrains s.r.o. and Kotlin Programming Language contributors\n\n$apache');
     }
   });
 }
