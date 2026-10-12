@@ -71,6 +71,17 @@ void main() {
     expect(s.vault.localKey, isNull);
   });
 
+  test('解锁读取期间切后台，未完成的解锁不保留密钥', () async {
+    final s = await DebugSession.create(prepareGlass: () async {});
+    addTearDown(s.dispose);
+    s.c.lockNow();
+    final unlocking = s.c.unlock(Uint8List(32));
+    s.c.onLifecycle(foreground: false);
+    await unlocking;
+    expect(s.c.stage, Stage.locked);
+    expect(s.vault.localKey, isNull);
+  });
+
   for (final delayedConfig in [true, false]) {
     test('锁屏阻止迟到的${delayedConfig ? '配置' : '缓存'}读取重新装入密钥', () async {
       final crypto = await HCrypto.init();

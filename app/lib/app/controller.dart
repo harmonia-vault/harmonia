@@ -206,7 +206,11 @@ class AppController extends ChangeNotifier {
     final generation = lockGeneration;
     vault.localKey = key;
     final loaded = await vault.load();
-    if (generation != lockGeneration || !_foreground || !loaded) return;
+    if (generation != lockGeneration) return;
+    if (!_foreground || !loaded) {
+      vault.lock();
+      return;
+    }
     _go(_afterUnlock());
     _onUnlocked();
   }
