@@ -11,10 +11,10 @@ class DebugAccount extends AccountService {
   DebugAccount(super.crypto, this.vault)
     : super(clientFactory: (base) => ApiClient(base, client: DebugNetworkClient()));
   final DebugVault vault;
-  bool _registered = false;
+  bool _initialized = true;
   bool requireCode = false;
   void reset() {
-    _registered = false;
+    _initialized = true;
     requireCode = false;
   }
 
@@ -27,7 +27,7 @@ class DebugAccount extends AccountService {
     email.trim(),
     'debug-token',
     'debug-account',
-    !_registered,
+    _initialized,
     'debug-root',
   );
 
@@ -40,7 +40,7 @@ class DebugAccount extends AccountService {
   @override
   Future<String?> register(String server, String email, String password) async {
     vault.check();
-    _registered = true;
+    _initialized = false;
     vault.password = password;
     return 'debug-verification';
   }
@@ -98,7 +98,7 @@ class DebugAccount extends AccountService {
     vault.check();
     _code(code);
     await vault.wipe();
-    _registered = false;
+    _initialized = false;
   }
 
   @override
@@ -106,6 +106,7 @@ class DebugAccount extends AccountService {
   @override
   Future<LocalConfig> completeSetup(PasswordSession s, SetupDraft d, String deviceName) async {
     vault.check();
+    _initialized = true;
     return vault.sampleConfig;
   }
 

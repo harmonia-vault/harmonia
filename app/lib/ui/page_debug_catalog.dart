@@ -85,7 +85,12 @@ Map<String, List<DebugPageEntry>> debugPages() => {
         s.prepareAccount();
       },
     ),
-    DebugPageEntry('未授权手机', (s) => UnpairedPage(c: s.c), stage: Stage.unpaired),
+    DebugPageEntry(
+      '未授权手机',
+      (s) => UnpairedPage(c: s.c),
+      stage: Stage.unpaired,
+      prepare: (s) async => s.prepareAccount(),
+    ),
     DebugPageEntry(
       '等待批准',
       (s) => PairingWaitPage(c: s.c),
@@ -121,8 +126,12 @@ Map<String, List<DebugPageEntry>> debugPages() => {
     DebugPageEntry('用恢复码恢复', (s) => RecoverPage(c: s.c, email: 'demo@example.invalid')),
     DebugPageEntry('找回密码', (s) => ForgotPasswordPage(c: s.c, email: 'demo@example.invalid')),
     DebugPageEntry('重置账号', (s) => AccountResetPage(c: s.c, email: 'demo@example.invalid')),
-    DebugPageEntry('更换恢复码', (s) => RotationPage(c: s.c)),
-    DebugPageEntry('强制更换恢复码', (s) => RotationPage(c: s.c, forced: true), stage: Stage.rotation),
+    DebugPageEntry('更换恢复码', (s) => s.vault.paired ? RotationPage(c: s.c) : SignInPage(c: s.c)),
+    DebugPageEntry(
+      '强制更换恢复码',
+      (s) => s.vault.paired ? RotationPage(c: s.c, forced: true) : SignInPage(c: s.c),
+      stage: Stage.rotation,
+    ),
     DebugPageEntry(
       '恢复后检查设备',
       (s) => s.vault.paired ? DeviceReviewView(c: s.c, onDone: s.c.finishRotation) : SignInPage(c: s.c),
@@ -131,13 +140,15 @@ Map<String, List<DebugPageEntry>> debugPages() => {
     DebugPageEntry(
       '恢复完成与模拟 PDF',
       stage: Stage.rotation,
-      (s) => RecoveryDoneView(
-        c: s.c,
-        code: Uint8List(16),
-        title: '恢复码已生效',
-        subtitle: '示例恢复流程已经完成。',
-        onDone: s.c.finishRotation,
-      ),
+      (s) => !s.vault.paired
+          ? SignInPage(c: s.c)
+          : RecoveryDoneView(
+              c: s.c,
+              code: Uint8List(16),
+              title: '恢复码已生效',
+              subtitle: '示例恢复流程已经完成。',
+              onDone: s.c.finishRotation,
+            ),
     ),
   ],
   '弹窗与弹层': [

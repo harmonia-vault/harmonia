@@ -25,6 +25,8 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     expect(c.stage, Stage.home);
     expect(c.vault.paired, isTrue);
+    final nextLogin = await c.account.login(c.server, 'new@example.invalid', 'new-password');
+    expect(nextLogin.initialized, isTrue);
     expect((await c.identity.keyring.unlock('654321')).key, Uint8List(32));
   });
 
