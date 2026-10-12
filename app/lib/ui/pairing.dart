@@ -1,6 +1,5 @@
 // 添加设备（扫码 / 核对码 → 核对 → 选择权限 → 批准），以及收到配对请求时弹出的批准页。
 import 'package:flutter/material.dart';
-import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../app/controller.dart';
 import '../core/api.dart';
@@ -9,6 +8,7 @@ import '../core/models.dart';
 import '../core/vault.dart';
 import 'devices.dart' show GrantEditor, expiryFrom, platformIcon, platformName;
 import 'lock.dart';
+import 'scanner.dart';
 import 'theme.dart';
 import 'widgets.dart';
 
@@ -20,14 +20,7 @@ class AddDevicePage extends StatefulWidget {
 }
 
 class _AddDevicePageState extends State<AddDevicePage> {
-  final _scanner = MobileScannerController(formats: [BarcodeFormat.qrCode]);
   bool _handling = false;
-
-  @override
-  void dispose() {
-    _scanner.dispose();
-    super.dispose();
-  }
 
   Future<void> _found(Future<PairingRequest> Function() lookup, {required bool scanned}) async {
     if (_handling) return;
@@ -77,24 +70,9 @@ class _AddDevicePageState extends State<AddDevicePage> {
       children: [
         const Text('扫描电脑终端或另一台手机上显示的二维码。'),
         const SizedBox(height: Space.md),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(18),
-          child: AspectRatio(
-            aspectRatio: 1,
-            child: MobileScanner(
-              controller: _scanner,
-              errorBuilder: (context, error) => Container(
-                color: context.palette.card,
-                alignment: Alignment.center,
-                padding: const EdgeInsets.all(Space.xl),
-                child: const Text('无法打开相机。请在系统设置中允许 Harmonia 使用相机，或改用核对码。', textAlign: TextAlign.center),
-              ),
-              onDetect: (capture) {
-                final raw = capture.barcodes.firstOrNull?.rawValue;
-                if (raw != null) _found(() => widget.c.vault.pairingFromQr(raw), scanned: true);
-              },
-            ),
-          ),
+        QrScannerView(
+          onCode: (raw) => _found(() => widget.c.vault.pairingFromQr(raw), scanned: true),
+          blocked: '无法打开相机。请在系统设置中允许 Harmonia 使用相机，或改用核对码。',
         ),
         const SizedBox(height: Space.lg),
         OutlinedButton.icon(

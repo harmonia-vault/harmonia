@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../app/controller.dart';
 import '../core/api.dart';
 import 'recovery_pages.dart';
+import 'scanner.dart';
 import 'theme.dart';
 import 'widgets.dart';
 
@@ -25,10 +26,17 @@ class _ConnectPageState extends State<ConnectPage> {
     await runBusy(context, () => widget.c.connect(_url.text));
   }
 
+  Future<void> _scan() async {
+    final server = await Navigator.push<String>(context, MaterialPageRoute(builder: (_) => const ScanServerPage()));
+    if (server == null || !mounted) return;
+    _url.text = server;
+    await _connect();
+  }
+
   @override
   Widget build(BuildContext context) => AuthScaffold(
         title: '连接服务器',
-        subtitle: '输入你部署的 Harmonia 服务地址。\n环境变量在手机上加密后才会上传，服务器只保存密文。',
+        subtitle: '输入你部署的 Harmonia 服务地址，或者扫描服务器首页上的二维码。\n环境变量在手机上加密后才会上传，服务器只保存密文。',
         children: [
           TextField(
             autofillHints: null,
@@ -44,6 +52,12 @@ class _ConnectPageState extends State<ConnectPage> {
           ),
           const SizedBox(height: Space.xl),
           FilledButton(onPressed: _connect, child: const Text('连接')),
+          const SizedBox(height: Space.sm),
+          OutlinedButton.icon(
+            onPressed: _scan,
+            icon: const Icon(Icons.qr_code_scanner),
+            label: const Text('扫码填写'),
+          ),
         ],
       );
 }
