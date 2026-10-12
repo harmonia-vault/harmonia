@@ -126,7 +126,7 @@ export function dataRoutes(app: Hono, deps: Deps) {
     sql.run(`UPDATE devices SET last_seen_at = ? WHERE id = ?`, deps.now(), d.id);
     const out: Record<string, unknown> = {
       seq,
-      self: { id: d.id, kind: d.kind, name: d.name, rotationRequired: !!d.rotation_required },
+      self: { id: d.id, kind: d.kind, name: d.name, rotationRequired: !!d.rotation_required, systemVars: !!d.system_vars },
       environments: envs.map((e) => ({
         id: e.id,
         name: e.name,
@@ -167,6 +167,7 @@ export function dataRoutes(app: Hono, deps: Deps) {
           cert: x.cert,
           createdAt: x.created_at,
           lastSeenAt: x.last_seen_at,
+          systemVars: !!x.system_vars,
           grants: grants
             .filter((g) => g.device_id === x.id)
             .map((g) => ({ envId: g.env_id, role: g.role, expiresAt: g.expires_at, active: g.active === 1, position: g.position })),
