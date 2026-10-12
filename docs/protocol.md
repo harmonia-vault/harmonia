@@ -137,6 +137,7 @@ HashToP256(pk)：
 
 - 基础路径为 `/api/v1`。请求和响应都是 JSON，只允许 HTTPS（本地开发时允许 `http://localhost`、`http://127.0.0.1`）。
 - 错误响应：`{"error": "<code>", "message": "<中文说明>"}`。被限流时另带 `retryAfter`（秒），并设置 `Retry-After` 响应头；`code_required` 另带 `flow`。
+- 根路径 `GET /`（以及 `HEAD /`）不属于 API，返回给浏览器看的实例首页（HTML），内容见设计文档 5.5。它同样只允许 HTTPS、受入口总量限制，不访问任何账号数据。首页上有服务器地址的二维码，内容就是地址本身（例如 `https://vault.example.com`，没有末尾的 `/`）；App 的“连接服务器”页扫它来填地址，只接受以 `https://` 开头（本地开发时也接受 `http://`）的内容。
 
 ### 3.0 账号与寻址
 

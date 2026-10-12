@@ -15,6 +15,15 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: 核对服务端版本号
+        if: github.ref_type == 'tag'
+        run: |
+          WANT="${GITHUB_REF_NAME#v}"
+          HAVE="$(jq -r .version server/package.json)"
+          if [ "$HAVE" != "$WANT" ]; then
+            echo "::error::server/package.json 的版本号是 $HAVE，与标签 $GITHUB_REF_NAME 不一致，没有发布。"
+            exit 1
+          fi
       - name: 推送到 harmonia-worker
         env:
           DEPLOY_KEY: ${{ secrets.SERVER_DEPLOY_KEY }}

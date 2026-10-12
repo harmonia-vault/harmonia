@@ -28,7 +28,7 @@ Harmonia 是一个自托管的环境变量同步工具：在手机上集中管�
 ### 2. 安装 App 并创建账号
 
 1. 从 [Releases](https://github.com/harmonia-vault/harmonia/releases/latest) 下载安装包：Android 下载 `harmonia-<版本>.apk` 直接安装；iPhone 见下面的[在 iPhone 上安装](#在-iphone-上安装)。
-2. 打开 App，填写服务器地址，用邮箱注册（服务端开启了邮箱验证时，还要输入邮件中的验证码）。
+2. 打开 App，填写服务器地址（也可以在电脑浏览器里打开服务器地址，用 App 的“扫码填写”扫页面上的二维码），用邮箱注册（服务端开启了邮箱验证时，还要输入邮件中的验证码）。
 3. App 会生成**恢复码**：请抄在纸上或存进密码管理器。丢失所有手机时，只有它能找回数据。
 4. 新建环境（例如“OpenAI”），添加变量（例如 `OPENAI_API_KEY`）。
 

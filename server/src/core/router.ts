@@ -2,6 +2,7 @@
 import { errorResponse } from "./app";
 import { ACCOUNT_HEADER, normalizeEmail, VERIFY_HEADER } from "./auth";
 import type { Entry } from "./directory";
+import { homePage } from "./home";
 import { network } from "./net";
 import { PROTOCOL } from "./protocol";
 import { ApiError, bad, notFound, obj, rateLimited } from "./util";
@@ -78,6 +79,8 @@ export async function route(req: Request, backend: Backend, clientIp: string): P
     if (backend.entryLimit && !(await backend.entryLimit(network(clientIp)))) {
       throw rateLimited("请求太频繁，请稍后再试。", 60_000);
     }
+
+    if (path === "/" && (req.method === "GET" || req.method === "HEAD")) return homePage(url.origin);
 
     if (path === "/api/v1/instance") {
       const firstCompleted = await directory.firstCompleted();
