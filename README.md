@@ -17,7 +17,7 @@ Harmonia 是一个自托管的环境变量同步工具：在手机上集中管�
 | --- | --- |
 | 服务端（`server/`） | Cloudflare Workers + Durable Objects，发布在 [harmonia-worker](https://github.com/harmonia-vault/harmonia-worker) 供 Fork 部署 |
 | App（`app/`） | Android 与 iPhone，管理环境与变量、批准和移除设备、恢复账号 |
-| 命令行（`cli/`） | macOS 与 Linux，在电脑、服务器上同步并注入变量 |
+| 命令行（`cli/`） | macOS、Linux 与 Windows，在电脑、服务器上同步并注入变量 |
 
 ## 快速开始
 
@@ -47,9 +47,19 @@ Harmonia 没有上架 App Store。Releases 里的 `harmonia-<版本>.ipa` 没有
 
 ### 3. 在电脑上接入
 
+macOS、Linux：
+
 ```bash
 curl -fsSL https://github.com/harmonia-vault/harmonia/releases/download/update-feed/install.sh | sh
 ```
+
+Windows（在 PowerShell 里运行，不需要管理员权限，见下面的“Windows”一节）：
+
+```powershell
+irm https://github.com/harmonia-vault/harmonia/releases/download/update-feed/install.ps1 | iex
+```
+
+然后：
 
 ```bash
 harmonia login https://你的服务器地址
@@ -60,6 +70,25 @@ harmonia login https://你的服务器地址
 终端会显示二维码。在 App 中打开“设备 → 添加设备”扫码，选择这台电脑可以访问的环境和权限，批准。授权的环境默认已启用。
 
 之后在手机上修改变量，同步完成后，电脑终端按一次空回车即可使用新值；直接执行的第一条命令可能仍使用旧值。在 App 的“设备详情”里可以开关某个环境、拖动调整顺序。
+
+### Windows
+
+Windows 10（1809 及以上）、Windows 11 都可以用，系统自带的 Windows PowerShell 和 PowerShell 7 都能运行安装命令。程序装在 `%LOCALAPPDATA%\Programs\Harmonia`，安装后新开一个终端即可使用 `harmonia`。
+
+Windows 上没有 Shell 集成，变量写入的是系统的**用户环境变量**（“系统属性 → 环境变量”里的用户变量）：
+
+- 安装时会询问是否开启，之后用 `harmonia shell install`、`harmonia shell uninstall` 开关。
+- 开启后，**新启动**的程序都能读到变量，包括 cmd、PowerShell 和图形界面程序。已经打开的终端和程序不会变，变量同步后要新开终端；想在当前终端马上用到最新值，用 `harmonia exec -- <命令>`。
+- 已有的同名用户变量会先记下原值，变量删除、环境停用、退出登录或卸载之后恢复。
+- `Path`、`TEMP` 这类系统自身使用的变量默认不写入，`harmonia status` 会列出。确实需要时，在 App 里这台电脑的“设备详情”中打开“写入系统变量”，或运行 `harmonia shell system-vars on`。
+- 值以明文保存在当前用户的注册表里，这台电脑上你启动的所有程序都能读到。
+- 不要直接删除程序文件来卸载：请用 `harmonia uninstall`，它会把写入的用户环境变量恢复原状。
+
+后台服务是一个名为“Harmonia”的计划任务，登录 Windows 后自动在后台运行，没有窗口。
+
+程序没有做代码签名。用上面的命令安装不会被拦截；如果是从 Releases 页面用浏览器下载 `harmonia-windows-amd64.exe`（ARM 电脑下载 `arm64`），运行时 Windows 可能提示“已保护你的电脑”，可以先用 `Get-FileHash` 算出 SHA-256，与同一个 Release 里 `manifest.json` 中的值核对后再运行。
+
+在 WSL 里使用时，请在 WSL 内安装 Linux 版，它和 Windows 版是两台各自独立的设备。
 
 ## 常用命令
 
@@ -83,6 +112,8 @@ harmonia uninstall                    完全卸载
 ## 在 AI Agent 和常驻服务中使用
 
 shell 启动文件只对终端生效。systemd、launchd、cron 启动的程序不会读取它，可以用下面的方式：
+
+Windows 上开启“写入用户环境变量”后，登录之后新启动的程序都能直接读到变量；需要保证拿到最新值的程序，同样可以用 `harmonia exec` 启动。
 
 **直接包一层 `harmonia exec`**（推荐）：
 
@@ -137,6 +168,12 @@ ExecStart=/home/me/.local/bin/harmonia exec -- /usr/bin/node /srv/agent/index.js
 
 ```bash
 curl -fsSL https://github.com/harmonia-vault/harmonia/releases/download/update-feed/install.sh | HARMONIA_CHANNEL=beta sh
+```
+
+Windows：
+
+```powershell
+$env:HARMONIA_CHANNEL = 'beta'; irm https://github.com/harmonia-vault/harmonia/releases/download/update-feed/install.ps1 | iex
 ```
 
 从测试版切回正式版时不会降级，正式版发布更高的版本后再自动升级。

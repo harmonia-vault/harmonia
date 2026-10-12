@@ -226,14 +226,14 @@ func ImportCandidates() map[string]string {
 		SSH_AUTH_SOCK SSH_CLIENT SSH_CONNECTION SSH_TTY XPC_FLAGS XPC_SERVICE_NAME __CF_USER_TEXT_ENCODING
 		COMMAND_MODE HOSTNAME MAIL OSTYPE TZ HISTFILE HISTSIZE SAVEHIST PS1 PS2 PROMPT RPROMPT ZDOTDIR
 		XDG_RUNTIME_DIR XDG_SESSION_ID XDG_SESSION_TYPE XDG_DATA_DIRS XDG_CONFIG_DIRS DBUS_SESSION_BUS_ADDRESS
-		MOTD_SHOWN HARMONIA_HOME`) {
+		MOTD_SHOWN HARMONIA_HOME WT_SESSION WT_PROFILE_ID`) {
 		skip[n] = true
 	}
 	out := map[string]string{}
 	for _, kv := range os.Environ() {
 		name, value, ok := strings.Cut(kv, "=")
 		if !ok || skip[name] || strings.HasPrefix(name, "LC_") || strings.HasPrefix(name, "MISE_") ||
-			strings.HasPrefix(name, "__") || ValidateName(name) != nil {
+			strings.HasPrefix(name, "__") || ValidateName(name) != nil || systemVariable(name) {
 			continue
 		}
 		out[name] = value

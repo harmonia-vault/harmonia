@@ -27,6 +27,11 @@ description = "CLI 静态检查"
 dir = "cli"
 run = "go vet ./..."
 
+[tasks.check-cli-windows]
+description = "CLI 的 Windows 部分静态检查（交叉编译，不需要 Windows）"
+dir = "cli"
+run = "GOOS=windows go vet ./..."
+
 [tasks.fmt-cli]
 description = "格式化 CLI 代码"
 dir = "cli"

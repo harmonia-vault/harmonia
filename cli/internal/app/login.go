@@ -159,5 +159,5 @@ func (a *App) Logout(ctx context.Context) (online bool, err error) {
 		return online, err
 	}
 	defer unlock()
-	return online, a.Dir.Wipe()
+	return online, a.wipe()
 }

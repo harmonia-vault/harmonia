@@ -1,3 +1,5 @@
+//go:build !windows
+
 package shell
 
 import (
@@ -138,7 +140,8 @@ func TestPromptRefresh(t *testing.T) {
 			if got := s.run(`sh -c 'printf "%s|%s|%s\n" "$RESTORE" "${LOCAL-unset}" "${EMPTY-unset}"'`); got != "use typeset foo|unset|unset" {
 				t.Fatalf("未恢复导出属性：%q", got)
 			}
-			if err := (&state.Dir{Path: dir}).Wipe(); err != nil {
+			// 退出登录或设备被移除时，变量文件被清空。
+			if err := state.WriteAtomic(env, []byte(state.EnvFileHeader+"\n")); err != nil {
 				t.Fatal(err)
 			}
 			s.run("")

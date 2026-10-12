@@ -93,6 +93,11 @@ Future<void> main(List<String> argv) async {
         for (final a in args.sublist(1)) byEnv[envId(a.split(':')[0])]!.copyWith(active: !a.endsWith(':off')),
       ]);
       print('ok');
+    case 'system-vars':
+      // 修改某台设备的“写入系统变量”开关：system-vars <设备名> on|off。
+      final v = await loaded();
+      await v.setSystemVars(device(args[0]).id, args[1] == 'on');
+      print('ok');
     case 'revoke':
       final v = await loaded();
       await v.revokeDevice(device(args[0]).id);
@@ -101,7 +106,7 @@ Future<void> main(List<String> argv) async {
       final v = await loaded();
       for (final d in v.devices) {
         final grants = d.grants.map((g) => '${v.environment(g.envId).name}:${g.role}${g.active ? '' : ':off'}');
-        print('${d.name}\t${d.kind}\t${grants.join(',')}');
+        print('${d.name}\t${d.kind}\t${grants.join(',')}\t${d.systemVars ? 'system-vars' : ''}');
       }
     case 'pair':
       // 作为新的管理设备发起配对，等待管理设备批准。

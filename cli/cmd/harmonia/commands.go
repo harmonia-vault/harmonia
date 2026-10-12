@@ -10,7 +10,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/mdp/qrterminal/v3"
@@ -90,8 +89,8 @@ func cmdLogin(ctx context.Context, args []string) error {
 	}
 	fmt.Printf("\n已接入账号，这台设备可以访问 %d 个环境，授权的环境默认已启用。\n", n)
 	next := [][]string{{"harmonia env list", "查看环境和变量来源"}}
-	if !shellInstalledAny(a.Dir) {
-		next = append(next, []string{"harmonia shell install", "在终端中自动加载和更新变量"})
+	if !shellInstalledAny(a) {
+		next = append(next, []string{"harmonia shell install", shellInstallHint})
 	}
 	if s := service.Check(); s.Supported && !s.Installed {
 		next = append(next, []string{"harmonia service install", "安装后台服务，实时同步"})
@@ -136,8 +135,8 @@ func cmdEnv(ctx context.Context, args []string) error {
 			return err
 		}
 		fmt.Printf("已启用环境“%s”。\n", env.Name)
-		if !shellInstalledAny(a.Dir) {
-			fmt.Println("提示：运行 harmonia shell install 启用终端变量。")
+		if !shellInstalledAny(a) {
+			fmt.Println(shellOffNotice)
 		}
 	case "deactivate":
 		env, err := a.Deactivate(ctx, f.args[1])
@@ -348,9 +347,9 @@ func cmdExec(ctx context.Context, args []string) error {
 	}
 	bin, err := exec.LookPath(cmdArgs[0])
 	if err != nil {
-		return fmt.Errorf("找不到命令 %s", cmdArgs[0])
+		return fmt.Errorf("找不到命令 %s%s", cmdArgs[0], notFoundHint)
 	}
-	return syscall.Exec(bin, cmdArgs, env)
+	return replaceProcess(bin, cmdArgs, env)
 }
 
 func cmdExport(ctx context.Context, args []string) error {
@@ -382,5 +381,10 @@ func cmdExport(ctx context.Context, args []string) error {
 }
 
 func cmdDaemon(ctx context.Context, args []string) error {
+	ctx, done, err := background(ctx, args)
+	if err != nil {
+		return err
+	}
+	defer done()
 	return daemon.Run(ctx, daemon.Hooks{Daily: dailyUpdateCheck})
 }

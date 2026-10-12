@@ -105,6 +105,18 @@ extension VaultDevices on Vault {
     await sync();
   }
 
+  /// 修改某台设备的“写入系统变量”开关（docs/protocol.md 3.2）。
+  Future<void> setSystemVars(String id, bool on) async {
+    try {
+      await api!.device('PATCH', '/api/v1/devices/$id', body: {'systemVars': on});
+    } on ApiException catch (e) {
+      // 较旧的服务端把这个请求当成改名，因为没有名字而拒绝。
+      if (e.status != 400) rethrow;
+      throw ApiException(e.status, e.code, '服务器还不支持这个开关，请先把服务端更新到最新版本。');
+    }
+    await sync();
+  }
+
   /// 按顺序设置某台设备各环境的激活状态，排在前面的环境提供同名变量（docs/protocol.md 3.2）。
   Future<void> setActivation(String deviceId, List<Grant> ordered) async {
     await api!.device('PUT', '/api/v1/devices/$deviceId/activation', body: {

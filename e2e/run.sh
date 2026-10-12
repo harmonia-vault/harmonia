@@ -43,6 +43,8 @@ sleep 1
 manager phone verify --server "$SERVER" --email "$EMAIL" --flow "$(printf %s "$REG" | cut -f2)" --code "$(mail_code verification)" >/dev/null
 RECOVERY=$(manager phone setup --server "$SERVER" --email "$EMAIL" --password "$PASSWORD" --name "主手机")
 [[ "$RECOVERY" =~ ^[0-9A-HJKMNP-TV-Z]{4}(-[0-9A-HJKMNP-TV-Z]{1,4}){6}$ ]] || fail "恢复码格式：$RECOVERY"
+DUP=$(manager other register --server "$SERVER" --email "$EMAIL" --password "$PASSWORD" 2>&1 || true)
+[[ "$DUP" == *"这个邮箱已经注册"* ]] || fail "重复注册应当提示邮箱已经注册，实际：$DUP"
 manager phone env-create OpenAI >/dev/null
 manager phone env-create Other >/dev/null
 manager phone var-set OpenAI OPENAI_API_KEY "sk-first 'quoted' \$(no)" >/dev/null
@@ -145,6 +147,15 @@ cli env list | grep -q "OPENAI_API_KEY  使用“OpenAI”中的值，同时出�
 expect_eq "$(manager phone devices | grep e2e-laptop | cut -f3)" "OpenAI:rw,Other:ro" "手机看到电脑上的顺序"
 cli env deactivate Other >/dev/null
 expect_eq "$(manager phone devices | grep e2e-laptop | cut -f3)" "OpenAI:rw,Other:ro:off" "手机看到电脑停用的环境"
+
+step "“写入系统变量”开关：手机修改后随同步下发到电脑"
+manager phone system-vars e2e-laptop on >/dev/null
+expect_eq "$(manager phone devices | grep e2e-laptop | cut -f4)" "system-vars" "手机看到开关已打开"
+cli sync >/dev/null
+grep -q '"systemVars": true' "$TMP/cli/cache.json" || fail "电脑没有收到写入系统变量开关"
+manager phone system-vars e2e-laptop off >/dev/null
+cli sync >/dev/null
+grep -q '"systemVars": false' "$TMP/cli/cache.json" || fail "电脑没有收到关闭后的开关"
 
 step "J7 降为只读后写入被拒绝；未授权环境不可见"
 manager phone grants e2e-laptop OpenAI:ro >/dev/null
