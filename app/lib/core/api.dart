@@ -44,6 +44,15 @@ String normalizeServer(String raw) {
   return '${u.scheme}://${u.authority}$path';
 }
 
+/// 服务器首页上的二维码，内容就是服务器地址。必须带 http(s)://，免得把别的二维码当成地址。
+String serverFromQr(String raw) {
+  final s = raw.trim();
+  if (!s.startsWith('https://') && !s.startsWith('http://')) {
+    throw ApiException(0, 'invalid', '这不是 Harmonia 服务器的二维码。请扫描服务器首页上的二维码，或返回手动填写地址。');
+  }
+  return normalizeServer(s);
+}
+
 class ApiClient {
   ApiClient(this.base, {http.Client? client}) : _http = client ?? http.Client();
 
