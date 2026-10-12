@@ -85,7 +85,11 @@ export async function route(req: Request, backend: Backend, clientIp: string): P
         product: "harmonia",
         version: config.version,
         protocol: PROTOCOL,
-        registration: { open: config.allowRegistration || !firstCompleted, emailVerification: config.requireVerification },
+        registration: {
+          open: config.allowRegistration || !firstCompleted,
+          first: !firstCompleted,
+          emailVerification: config.requireVerification,
+        },
       });
     }
 

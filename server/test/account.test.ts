@@ -27,14 +27,16 @@ describe("注册与登录", () => {
 
   it("关闭注册时只允许第一个账号，开启后可以多账号且相互隔离", async () => {
     const s = new TestServer();
-    expect((await s.ok("GET", "/api/v1/instance")).registration.open).toBe(true);
+    expect((await s.ok("GET", "/api/v1/instance")).registration).toMatchObject({ open: true, first: true });
     const a = await TestAccount.create(s);
-    expect((await s.ok("GET", "/api/v1/instance")).registration.open).toBe(false);
+    expect((await s.ok("GET", "/api/v1/instance")).registration).toMatchObject({ open: false, first: false });
     const denied = await s.call("POST", "/api/v1/register", {
       body: { email: "second@example.com", kdfSalt: b64(rand(16)), authKey: b64(rand(32)) },
     });
     expect(denied.status).toBe(403);
     s.config.allowRegistration = true;
+    // 开放注册后可以注册，但已经有账号，客户端应默认显示登录。
+    expect((await s.ok("GET", "/api/v1/instance")).registration).toMatchObject({ open: true, first: false });
     const b = await TestAccount.create(s);
     expect(b.accountId).not.toBe(a.accountId);
     const envA = await a.createEnv(s, [a.phone.id]);

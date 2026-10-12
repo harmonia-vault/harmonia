@@ -144,7 +144,7 @@ PIN 槽（必有）：
 
 | 方法与路径 | 说明 |
 | --- | --- |
-| `GET /instance` | `{product:"harmonia", version, protocol:1, registration:{open, emailVerification}}` |
+| `GET /instance` | `{product:"harmonia", version, protocol:1, registration:{open, first, emailVerification}}`。`open` 表示现在可以注册（开放注册，或者还没有任何账号）；`first` 表示还没有任何账号完成注册，客户端只在这时默认显示注册，其余情况默认显示登录 |
 | `POST /register` | `{email, kdfSalt, authKey}` → `{accountId, verificationRequired, flow?}`（需要验证邮箱时带 `flow`）。邮箱已被注册时返回 `conflict`，注册未开放时返回 `forbidden` |
 | `POST /register/verify` | `{email, flow, code}` → `{ok}` |
 | `POST /register/resend` | `{email}` → `{flow}` |
