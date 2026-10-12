@@ -1,5 +1,5 @@
 // 应用内更新：读取更新源（GitHub Releases 的 update-feed）中对应渠道、带 minisign 签名的清单。
-// Android 上下载并校验 APK，交给系统安装器；iOS 上只提示新版本并给出下载页，由用户自行签名安装。
+// 安装包下载后先按清单校验。Android 上交给系统安装器；iOS 上交给用户选择的签名工具，由它签名安装。
 import 'dart:convert';
 import 'dart:io';
 
@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../core/crypto.dart';
 import 'platform.dart';
+import '../ui/update_sheet.dart';
 import '../ui/widgets.dart';
 
 const appVersion = String.fromEnvironment('APP_VERSION', defaultValue: '0.1.0');
@@ -157,11 +158,13 @@ Future<void> checkForUpdate(BuildContext context, {required bool manual, require
     return;
   }
   if (Platform.isIOS) return _offerIpa(context, info);
-  final go = await confirmDialog(context,
-      title: '发现新版本 ${info.version}',
-      body: '${info.notes.isEmpty ? '' : '${info.notes}\n\n'}下载后会打开系统安装界面，数据会保留。',
-      ok: '下载并安装');
-  if (!go || !context.mounted) return;
+  final choice = await showUpdateSheet(context,
+      version: info.version,
+      current: appVersion,
+      notes: info.notes,
+      hint: '下载后会打开系统安装界面，数据会保留。',
+      primary: '下载并安装');
+  if (choice == null || !context.mounted) return;
   if (await _channel.invokeMethod<bool>('canInstall') != true) {
     if (!context.mounted) return;
     final ok = await confirmDialog(context,
@@ -170,48 +173,46 @@ Future<void> checkForUpdate(BuildContext context, {required bool manual, require
     return;
   }
   if (!context.mounted) return;
+  final file = await _download(context, info, 'apk');
+  if (file != null) await _channel.invokeMethod('install', {'path': file.path});
+}
+
+/// 下载安装包并按清单核对大小和 SHA-256，保存到缓存目录；失败时提示并返回 null。
+/// 目录里之前留下的安装包先清掉。
+Future<File?> _download(BuildContext context, UpdateInfo info, String extension) async {
   late File file;
-  final update = info;
   final ok = await runBusy(context, () async {
-    final res = await http.get(Uri.parse(update.url)).timeout(const Duration(minutes: 5));
+    final res = await http.get(Uri.parse(info.url)).timeout(const Duration(minutes: 5));
     final bytes = res.bodyBytes;
-    if (res.statusCode != 200 || bytes.length != update.size || b64(sha256(bytes)) != _hexToB64(update.sha256)) {
+    if (res.statusCode != 200 || bytes.length != info.size || b64(sha256(bytes)) != _hexToB64(info.sha256)) {
       throw Exception('下载的安装包校验失败，请稍后重试。');
     }
     final dir = Directory('${(await getApplicationCacheDirectory()).path}/updates');
+    if (await dir.exists()) await dir.delete(recursive: true);
     await dir.create(recursive: true);
-    file = File('${dir.path}/harmonia-${update.version}.apk');
+    file = File('${dir.path}/harmonia-${info.version}.$extension');
     await file.writeAsBytes(bytes, flush: true);
   });
-  if (ok) await _channel.invokeMethod('install', {'path': file.path});
+  return ok ? file : null;
 }
 
-/// iOS 不能在 App 内安装：给出下载页和下载链接，由用户用安装时的签名工具装上新版本。
-Future<void> _offerIpa(BuildContext context, UpdateInfo info) => showDialog<void>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: Text('发现新版本 ${info.version}'),
-        content: Text('${info.notes.isEmpty ? '' : '${info.notes}\n\n'}'
-            '请用安装 Harmonia 时使用的签名工具安装新版本的 IPA，数据会保留。'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(c), child: const Text('以后再说')),
-          TextButton(
-            onPressed: () async {
-              await Clipboard.setData(ClipboardData(text: info.url));
-              if (c.mounted) toast(c, '已复制下载链接');
-            },
-            child: const Text('复制下载链接'),
-          ),
-          FilledButton(
-            onPressed: () {
-              Navigator.pop(c);
-              openUrl('$_releases/tag/v${info.version}');
-            },
-            child: const Text('打开下载页'),
-          ),
-        ],
-      ),
-    );
+/// iOS 不能在 App 内安装：下载并校验新的 IPA，再通过系统分享面板交给用户安装 Harmonia 时用的签名工具。
+Future<void> _offerIpa(BuildContext context, UpdateInfo info) async {
+  final choice = await showUpdateSheet(context,
+      version: info.version,
+      current: appVersion,
+      notes: info.notes,
+      hint: '下载后会弹出分享面板，请在里面选择安装 Harmonia 时使用的签名工具，用它签名安装，数据会保留。',
+      primary: '下载并导入签名工具',
+      secondary: '打开下载页');
+  if (choice == UpdateChoice.secondary) return openUrl('$_releases/tag/v${info.version}');
+  if (choice == null || !context.mounted) return;
+  final file = await _download(context, info, 'ipa');
+  if (file == null) return;
+  // 取消时马上删掉。交出去之后先留着：有的 App 在面板关闭后才读取文件，下次下载前会清掉。
+  final handedOver = await shareFile(file.path);
+  if (!handedOver && await file.exists()) await file.delete();
+}
 
 String _hexToB64(String hex) {
   final out = Uint8List(hex.length ~/ 2);

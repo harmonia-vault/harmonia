@@ -28,5 +28,9 @@ Future<bool> saveFile(String name, String mime, Uint8List bytes) async =>
 /// 复制敏感内容：1 分钟后自动清空剪贴板；Android 上在剪贴板预览中隐藏，iOS 上不同步到其他设备。
 Future<void> copySensitive(String text) => _channel.invokeMethod('copySensitive', {'text': text});
 
+/// 弹出系统分享面板，把文件交给用户选择的 App（iOS 上用来把新版本的 IPA 交给签名工具）。
+/// 用户取消时返回 false。
+Future<bool> shareFile(String path) async => await _channel.invokeMethod<bool>('shareFile', {'path': path}) ?? false;
+
 /// 用系统浏览器打开网页（iOS 上用来打开新版本的下载页）。
 Future<void> openUrl(String url) => _channel.invokeMethod('openUrl', {'url': url});
