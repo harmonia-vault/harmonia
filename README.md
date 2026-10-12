@@ -53,6 +53,8 @@ macOS、Linux：
 curl -fsSL https://github.com/harmonia-vault/harmonia/releases/download/update-feed/install.sh | sh
 ```
 
+系统里没有 `curl` 时（例如刚装好的 Ubuntu 桌面版），把 `curl -fsSL` 换成 `wget -qO-`。
+
 Windows（在 PowerShell 里运行，不需要管理员权限，见下面的“Windows”一节）：
 
 ```powershell
