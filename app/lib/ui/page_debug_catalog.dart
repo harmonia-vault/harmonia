@@ -44,7 +44,7 @@ Map<String, List<DebugPageEntry>> debugPages() => {
     DebugPageEntry('通知默认动效与下载进度', (_) => const FeedbackDebugPage()),
     DebugPageEntry('环境列表与行尾间距', (s) => EnvironmentsTab(c: s.c)),
     DebugPageEntry('设备列表与行尾间距', (s) => s.vault.paired ? DevicesTab(c: s.c) : SignInPage(c: s.c)),
-    DebugPageEntry('设置、玻璃滑块刻度与输入弹窗', (s) => s.vault.paired ? SettingsTab(c: s.c) : SignInPage(c: s.c)),
+    DebugPageEntry('设置、白色滑块与输入弹窗', (s) => s.vault.paired ? SettingsTab(c: s.c) : SignInPage(c: s.c)),
     DebugPageEntry('关于、应用图标与开源许可', (_) => const AboutPage()),
     DebugPageEntry('环境详情、复制间距与菜单', (s) => _environment(s, edit: false)),
     DebugPageEntry('添加变量', (s) => _environment(s, edit: true)),
@@ -291,14 +291,17 @@ class _DebugOverlayState extends State<DebugOverlay> {
     appBar: const AppBarSurface(title: Text('弹窗预览')),
     body: (c) => ListView(
       children: [
-        const Padding(padding: EdgeInsets.all(16), child: Banner2('可在目录切换明暗、大字号、高对比度和减少动态效果；输入错误 PIN 可查看错误提示。')),
+        const Padding(
+          padding: EdgeInsets.all(16),
+          child: Banner2('可在目录切换明暗、大字号、高对比度和减少动态效果；重复打开与关闭，检查玻璃和边缘随动画一起出现。输入错误 PIN 可查看错误提示。'),
+        ),
         FilledButton(onPressed: () => widget.show(c), child: const Text('重新打开弹窗')),
         for (var i = 0; i < 8; i++)
           Container(
             height: 72,
             color: i.isEven ? context.palette.sage : context.palette.yellow,
             alignment: Alignment.center,
-            child: Text('合成背景 ${i + 1} · 检查弹窗文字遮盖', style: TextStyle(color: Palette.light.ink)),
+            child: Text('合成背景 ${i + 1} · 检查弹窗折射与文字可读性', style: TextStyle(color: Palette.light.ink)),
           ),
       ],
     ),

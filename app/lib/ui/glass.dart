@@ -68,9 +68,10 @@ class GlassOpacityPreview extends StatelessWidget {
   );
 }
 
-LiquidGlassSettings glassSettings(BuildContext context) => glassMaterial(
+LiquidGlassSettings glassSettings(BuildContext context, {bool readable = false}) => glassMaterial(
   dark: Theme.of(context).brightness == Brightness.dark,
-  opacity: Theme.of(context).extension<AppearanceTheme>()?.glassOpacity ?? 0.5,
+  // 正文弹层至少使用上游 regular 默认材质；不再盖一层近乎不透明的面板。
+  opacity: (Theme.of(context).extension<AppearanceTheme>()?.glassOpacity ?? 0.5).clamp(readable ? 0.5 : 0.0, 1.0),
 );
 
 class AppSurface extends StatelessWidget {

@@ -1,5 +1,6 @@
 // 发现新版本时的底部面板：版本、更新内容、接下来怎么做，以及一到两个操作。Android 与 iOS 共用。
 import 'package:flutter/material.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
 import 'theme.dart';
 import 'glass.dart';
@@ -35,7 +36,7 @@ Future<UpdateChoice?> showUpdateSheet(
   useSafeArea: true,
   showDragHandle: !usesGlass(context),
   backgroundColor: usesGlass(context) ? Colors.transparent : context.palette.paper,
-  barrierColor: usesGlass(context) ? Colors.black.withValues(alpha: 0.24) : null,
+  barrierColor: usesGlass(context) ? Colors.black54 : null,
   sheetAnimationStyle: MediaQuery.disableAnimationsOf(context) ? AnimationStyle.noAnimation : null,
   builder: (c) {
     final content = _UpdateSheet(
@@ -49,10 +50,12 @@ Future<UpdateChoice?> showUpdateSheet(
     if (!usesGlass(c)) return content;
     return Padding(
       padding: EdgeInsets.fromLTRB(12, 12, 12, MediaQuery.paddingOf(c).bottom + 12),
-      child: AppSurface(
-        color: c.palette.paper,
-        radius: 36,
-        tintAlpha: 0.94,
+      child: GlassCard(
+        useOwnLayer: true,
+        quality: glassQuality(c),
+        settings: glassSettings(c, readable: true),
+        shape: const LiquidRoundedSuperellipse(borderRadius: 36),
+        padding: EdgeInsets.zero,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -197,13 +200,13 @@ class _UpdateSheet extends StatelessWidget {
                         style: TextStyle(color: p.ink, fontSize: 24, fontWeight: FontWeight.w700),
                       ),
                       const SizedBox(height: 6),
-                      Text('Harmonia $version · 当前 $current', style: TextStyle(color: p.mute, fontSize: 13)),
+                      Text('Harmonia $version · 当前 $current', style: TextStyle(color: p.ink, fontSize: 13)),
                     ],
                   ),
                 ),
                 IconButton.filledTonal(
                   tooltip: '以后再说',
-                  style: IconButton.styleFrom(backgroundColor: p.ink.withValues(alpha: 0.06), foregroundColor: p.mute),
+                  style: IconButton.styleFrom(backgroundColor: p.ink.withValues(alpha: 0.06), foregroundColor: p.ink),
                   icon: const Icon(Icons.close, size: 20),
                   onPressed: () => Navigator.pop(context),
                 ),
@@ -217,7 +220,7 @@ class _UpdateSheet extends StatelessWidget {
                   children: [
                     for (final (i, n) in notes.indexed) ...[if (i > 0) const SizedBox(height: 14), _NoteLine(n)],
                     if (notes.isNotEmpty) const SizedBox(height: 20),
-                    Text(tidy(hint), style: TextStyle(color: p.mute, fontSize: 13, height: 1.5)),
+                    Text(tidy(hint), style: TextStyle(color: p.ink, fontSize: 13, height: 1.5)),
                   ],
                 ),
               ),

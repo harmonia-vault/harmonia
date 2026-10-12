@@ -169,13 +169,15 @@ class _GlassTransparencyControlState extends State<GlassTransparencyControl> {
                               onChangeEnd: _end,
                               activeColor: p.accent,
                               inactiveColor: p.mute.withValues(alpha: 0.35),
-                              thumbColor: p.card,
+                              // 保留上游白色滑块与 defaultStyle 的接触阴影，深色模式同样清晰。
+                              thumbColor: Colors.white,
                             )
                           : SliderTheme(
                               data: SliderTheme.of(context).copyWith(
                                 trackHeight: 4,
                                 trackShape: const RectangularSliderTrackShape(),
                                 thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 12),
+                                thumbColor: Colors.white,
                                 overlayShape: SliderComponentShape.noOverlay,
                               ),
                               child: Slider(

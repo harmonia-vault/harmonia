@@ -1,6 +1,6 @@
-// 复用 Flutter 标准对话框路由与动效，只适配主题、安全区和焦点循环。
-import 'package:flutter/cupertino.dart';
+// 路由交给 Flutter，玻璃转场复用组件库，避免 Opacity 隔断背景采样。
 import 'package:flutter/material.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
 import 'glass.dart';
 
@@ -12,10 +12,10 @@ RawDialogRoute<T> appDialogRoute<T>({
 }) {
   final reduceMotion = MediaQuery.disableAnimationsOf(context);
   if (usesGlass(context) && !reduceMotion) {
-    return _AppCupertinoDialogRoute<T>(
-      context: context,
+    return _AppGlassDialogRoute<T>(
       barrierDismissible: barrierDismissible,
-      builder: (context) => SafeArea(
+      barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+      pageBuilder: (context, _, _) => SafeArea(
         child: themes?.wrap(Builder(builder: builder)) ?? Builder(builder: builder),
       ),
     );
@@ -30,11 +30,18 @@ RawDialogRoute<T> appDialogRoute<T>({
   );
 }
 
-class _AppCupertinoDialogRoute<T> extends CupertinoDialogRoute<T> {
-  _AppCupertinoDialogRoute({required super.context, required super.builder, super.barrierDismissible});
+class _AppGlassDialogRoute<T> extends RawDialogRoute<T> {
+  _AppGlassDialogRoute({required super.pageBuilder, super.barrierDismissible, super.barrierLabel})
+    : super(
+        barrierColor: Colors.black54,
+        traversalEdgeBehavior: TraversalEdgeBehavior.closedLoop,
+        transitionDuration: GlassDefaults.materializeDuration,
+        transitionBuilder: (context, animation, _, child) =>
+            GlassMaterializeTransition(animation: animation, child: child),
+      );
 
   @override
-  TraversalEdgeBehavior get traversalEdgeBehavior => TraversalEdgeBehavior.closedLoop;
+  Duration get reverseTransitionDuration => GlassDefaults.dematerializeDuration;
 }
 
 Future<T?> showAppDialog<T>({

@@ -8,13 +8,22 @@ import 'theme.dart';
 
 export 'app_dialog.dart' show showAppDialog, appDialogRoute;
 
-class _GlassDialog extends StatelessWidget {
+class _GlassDialog extends StatefulWidget {
   const _GlassDialog({this.title, this.content, this.actions});
   final Widget? title, content;
   final List<Widget>? actions;
 
   @override
+  State<_GlassDialog> createState() => _GlassDialogState();
+}
+
+class _GlassDialogState extends State<_GlassDialog> {
+  // 上游在转场结束时移除内容滤镜；保持输入子树身份，避免焦点和滚动位置重置。
+  final _contentKey = GlobalKey();
+
+  @override
   Widget build(BuildContext context) {
+    final title = widget.title, content = widget.content, actions = widget.actions;
     final p = context.palette;
     final theme = Theme.of(context);
     final inputBorder = OutlineInputBorder(
@@ -41,9 +50,10 @@ class _GlassDialog extends StatelessWidget {
           ),
         ),
         hintStyle: TextStyle(color: p.mute),
-        counterStyle: TextStyle(color: p.mute),
-        helperStyle: TextStyle(color: p.mute),
-        errorStyle: TextStyle(color: theme.colorScheme.error),
+        // 辅助文字位于输入底色之外，使用正文对比度；错误边框仍保留错误色。
+        counterStyle: TextStyle(color: p.ink),
+        helperStyle: TextStyle(color: p.ink),
+        errorStyle: TextStyle(color: p.ink),
         errorMaxLines: 4,
         helperMaxLines: 4,
         hintMaxLines: 3,
@@ -54,11 +64,15 @@ class _GlassDialog extends StatelessWidget {
       elevation: 0,
       insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
       constraints: const BoxConstraints(maxWidth: 360),
-      child: AppSurface(
-        color: p.card,
-        radius: 32,
-        tintAlpha: 0.94,
+      // 与上游 GlassDialog 一样直接使用 GlassCard，让材质及内容共同参与转场。
+      child: GlassCard(
+        useOwnLayer: true,
+        quality: glassQuality(context),
+        settings: glassSettings(context, readable: true),
+        shape: const LiquidRoundedSuperellipse(borderRadius: 32),
+        padding: EdgeInsets.zero,
         child: Padding(
+          key: _contentKey,
           padding: const EdgeInsets.all(24),
           child: Theme(
             data: readableTheme,
@@ -74,7 +88,7 @@ class _GlassDialog extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(vertical: 8),
                         child: DefaultTextStyle(
                           style: theme.textTheme.bodyMedium!.copyWith(color: p.ink, fontSize: 15, height: 1.5),
-                          child: content!,
+                          child: content,
                         ),
                       );
                 final panel = Column(
@@ -92,7 +106,7 @@ class _GlassDialog extends StatelessWidget {
                             height: 1.3,
                           ),
                           textAlign: TextAlign.center,
-                          child: title!,
+                          child: title,
                         ),
                       ),
                     if (body != null)
