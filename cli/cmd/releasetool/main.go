@@ -81,12 +81,14 @@ func manifest(args []string) error {
 		return fmt.Errorf("HARMONIA_RELEASE_KEY 无效：%w", err)
 	}
 	files := map[string]string{
-		"cli-darwin-arm64": "harmonia-darwin-arm64",
-		"cli-darwin-amd64": "harmonia-darwin-amd64",
-		"cli-linux-arm64":  "harmonia-linux-arm64",
-		"cli-linux-amd64":  "harmonia-linux-amd64",
-		"android":          "harmonia-" + *version + ".apk",
-		"ios":              "harmonia-" + *version + ".ipa",
+		"cli-darwin-arm64":  "harmonia-darwin-arm64",
+		"cli-darwin-amd64":  "harmonia-darwin-amd64",
+		"cli-linux-arm64":   "harmonia-linux-arm64",
+		"cli-linux-amd64":   "harmonia-linux-amd64",
+		"cli-windows-arm64": "harmonia-windows-arm64.exe",
+		"cli-windows-amd64": "harmonia-windows-amd64.exe",
+		"android":           "harmonia-" + *version + ".apk",
+		"ios":               "harmonia-" + *version + ".ipa",
 	}
 	assets := map[string]asset{}
 	for key, name := range files {

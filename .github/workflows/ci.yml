@@ -21,6 +21,20 @@ jobs:
           go test ./...
           GOOS=darwin GOARCH=arm64 go build -o /dev/null ./cmd/harmonia
 
+  cli-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: cli/go.mod
+          cache-dependency-path: cli/go.sum
+      - name: 测试
+        working-directory: cli
+        run: |
+          go vet ./...
+          go test ./...
+
   server:
     runs-on: ubuntu-latest
     steps:

@@ -2,14 +2,11 @@
 package app
 
 import (
-	"bytes"
 	"context"
 	"errors"
-	"os"
 	"time"
 
 	"github.com/harmonia-vault/harmonia/cli/internal/api"
-	"github.com/harmonia-vault/harmonia/cli/internal/shell"
 	"github.com/harmonia-vault/harmonia/cli/internal/state"
 	"github.com/harmonia-vault/harmonia/cli/internal/vault"
 )
@@ -61,7 +58,7 @@ func Load(requirePaired bool) (*App, error) {
 
 func nowMs() int64 { return time.Now().UnixMilli() }
 
-// Sync 拉取增量并更新缓存和 env.sh；设备被移除时清除本机数据。
+// Sync 拉取增量并更新缓存，再写出生效的变量；设备被移除时清除本机数据。
 func (a *App) Sync(ctx context.Context) error {
 	unlock, err := a.Dir.Lock()
 	if err != nil {
@@ -90,6 +87,7 @@ func (a *App) Sync(ctx context.Context) error {
 	if err := vault.Apply(cache, res, since, a.Config.RootPub, a.Config.DeviceID); err != nil {
 		return err
 	}
+	cache.SystemVars = res.Self.SystemVars
 	if err := a.Dir.SaveCache(cache); err != nil {
 		return err
 	}
@@ -120,10 +118,19 @@ func (a *App) HandleRevoked(err error) error {
 }
 
 func (a *App) wipeLocked() error {
-	if err := a.Dir.Wipe(); err != nil {
+	if err := a.wipe(); err != nil {
 		return err
 	}
 	return ErrRevokedLocal
+}
+
+// wipe 撤回已经写出的变量，并清除账号相关的本机数据。撤回失败也要清除密钥。
+func (a *App) wipe() error {
+	err := unpublish(a.Dir)
+	if werr := a.Dir.Wipe(); werr != nil {
+		return werr
+	}
+	return err
 }
 
 // Effective 计算当前生效的变量。
@@ -140,7 +147,8 @@ func (a *App) Effective() (map[string]string, []string, error) {
 	return vars, skipped, nil
 }
 
-// RefreshEnvFile 重新计算并写入 env.sh（例如激活环境或授权到期后）。返回是否有变化。
+// RefreshEnvFile 重新计算并写出生效的变量（例如激活环境或授权到期后）：macOS、Linux 上是 env.sh，
+// Windows 上是用户环境变量。返回是否有变化。
 func (a *App) RefreshEnvFile() (bool, error) {
 	unlock, err := a.Dir.Lock()
 	if err != nil {
@@ -163,10 +171,5 @@ func (a *App) writeEnvLocked(cache *state.Cache) (bool, error) {
 		return false, nil
 	}
 	vars, _ := vault.Merge(cache, a.Keys, vault.ActiveIDs(cache), ov, nowMs())
-	data := shell.Render(vars)
-	old, _ := os.ReadFile(a.Dir.EnvFile())
-	if bytes.Equal(old, data) {
-		return false, nil
-	}
-	return true, state.WriteAtomic(a.Dir.EnvFile(), data)
+	return publish(a.Dir, cache, vars)
 }

@@ -1,5 +1,6 @@
 // Package state 管理本机数据目录（默认 ~/.harmonia，可用 HARMONIA_HOME 覆盖）。
-// 目录权限 0700、文件 0600，写入采用临时文件 + 原子替换。
+// 目录权限 0700、文件 0600（Windows 上是只允许本人、系统和管理员访问的访问控制列表），
+// 写入采用临时文件 + 原子替换。
 package state
 
 import (
@@ -7,7 +8,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"syscall"
 
 	"github.com/harmonia-vault/harmonia/cli/internal/api"
 	hc "github.com/harmonia-vault/harmonia/cli/internal/crypto"
@@ -38,6 +38,7 @@ type CachedVar struct {
 
 type Cache struct {
 	Seq          int64                           `json:"seq"`
+	SystemVars   bool                            `json:"systemVars"`
 	Environments []api.Environment               `json:"environments"`
 	Envelopes    []api.Envelope                  `json:"envelopes"`
 	Variables    map[string]map[string]CachedVar `json:"variables"`
@@ -60,7 +61,7 @@ func Open() (*Dir, error) {
 	if err := os.MkdirAll(p, 0o700); err != nil {
 		return nil, err
 	}
-	if err := os.Chmod(p, 0o700); err != nil {
+	if err := restrict(p); err != nil {
 		return nil, err
 	}
 	return &Dir{Path: p}, nil
@@ -68,7 +69,7 @@ func Open() (*Dir, error) {
 
 func (d *Dir) File(name string) string { return filepath.Join(d.Path, name) }
 
-// EnvFile 是供 shell 读取的变量文件。
+// EnvFile 是供 shell 读取的变量文件（Windows 上不使用，变量写入用户环境变量）。
 func (d *Dir) EnvFile() string { return d.File("env.sh") }
 
 // Lock 在整个数据目录上加排他锁，返回解锁函数。
@@ -77,12 +78,12 @@ func (d *Dir) Lock() (func(), error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+	if err := lockFile(f); err != nil {
 		f.Close()
 		return nil, err
 	}
 	return func() {
-		syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+		unlockFile(f)
 		f.Close()
 	}, nil
 }
@@ -109,7 +110,7 @@ func WriteAtomic(path string, data []byte) error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	return os.Rename(tmp.Name(), path)
+	return replaceFile(tmp.Name(), path)
 }
 
 func (d *Dir) readJSON(name string, v any) error {
@@ -168,15 +169,12 @@ func (d *Dir) Overrides() (Overrides, error) {
 
 func (d *Dir) SaveOverrides(o Overrides) error { return d.writeJSON("overrides.json", o) }
 
-// Wipe 删除账号相关的全部本机数据（密钥、缓存、覆盖值、变量文件），保留服务器地址。
+// Wipe 删除账号相关的全部本机数据（密钥、缓存、覆盖值），保留服务器地址。
 func (d *Dir) Wipe() error {
 	for _, name := range []string{"keys.json", "cache.json", "overrides.json"} {
 		if err := os.Remove(d.File(name)); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
-	}
-	if err := WriteAtomic(d.EnvFile(), []byte(EnvFileHeader+"\n")); err != nil {
-		return err
 	}
 	c, err := d.Config()
 	if err != nil {

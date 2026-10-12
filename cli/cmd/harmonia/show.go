@@ -58,9 +58,12 @@ func cmdStatus(ctx context.Context, args []string) error {
 		{"本机", a.Config.DeviceName},
 		{"上次同步", ago(a.Config.LastSync)},
 		{"后台服务", serviceSummary()},
-		{"Shell 集成", shellSummary(a.Dir)},
+		{shellLabel, shellSummary(a)},
 		{"版本", fmt.Sprintf("%s（%s渠道）", version, updateChannel().Label())},
 	})
+	for _, note := range shellNotes(a) {
+		fmt.Println(note)
+	}
 	if hint := updateHint(); hint != "" {
 		fmt.Println("\n" + hint)
 	}

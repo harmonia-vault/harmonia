@@ -79,6 +79,8 @@ type Sync struct {
 		Kind             string `json:"kind"`
 		Name             string `json:"name"`
 		RotationRequired bool   `json:"rotationRequired"`
+		// SystemVars 是这台设备的“写入系统变量”开关，只有 Windows 上使用。
+		SystemVars bool `json:"systemVars"`
 	} `json:"self"`
 	Environments []Environment `json:"environments"`
 	Envelopes    []Envelope    `json:"envelopes"`

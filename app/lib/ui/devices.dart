@@ -16,11 +16,12 @@ IconData platformIcon(String p) => switch (p) {
       'ios' => Icons.phone_iphone,
       'darwin' => Icons.laptop_mac_outlined,
       'linux' => Icons.computer_outlined,
+      'windows' => Icons.desktop_windows_outlined,
       _ => Icons.devices_other_outlined,
     };
 
 String platformName(String p) =>
-    {'android': 'Android 手机', 'ios': 'iPhone', 'darwin': 'macOS', 'linux': 'Linux'}[p] ?? p;
+    {'android': 'Android 手机', 'ios': 'iPhone', 'darwin': 'macOS', 'linux': 'Linux', 'windows': 'Windows'}[p] ?? p;
 
 class DevicesTab extends StatefulWidget {
   const DevicesTab({super.key, required this.c});
@@ -253,6 +254,19 @@ class _DevicePageState extends State<DevicePage> {
     if (done) nav.pop();
   }
 
+  Future<void> _setSystemVars(DeviceInfo d, bool on) async {
+    if (on) {
+      final ok = await confirmDialog(context,
+          title: '写入系统变量？',
+          body: '开启后，账号里名为 Path、TEMP 之类的变量会写入“${d.name}”的用户环境变量。\n'
+              '写错会影响这台电脑上的所有程序。原来的值会先记下，关闭后恢复。',
+          ok: '开启');
+      if (!ok || !mounted) return;
+    }
+    await runBusy(context, () => c.guard(() => c.vault.setSystemVars(d.id, on)));
+    if (mounted) setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
     final d = _device;
@@ -300,6 +314,17 @@ class _DevicePageState extends State<DevicePage> {
           const SizedBox(height: Space.lg),
           FilledButton(onPressed: _dirty ? () => _save(d) : null, child: const Text('保存权限')),
           if (d.grants.isNotEmpty) ActivationEditor(c: c, device: d),
+          if (d.platform == 'windows') ...[
+            const SectionTitle('系统变量'),
+            Card(
+              child: SwitchListTile(
+                title: const Text('写入系统变量'),
+                subtitle: Text(tidy('Path、TEMP 这类 Windows 自身使用的变量，默认不写入这台电脑。')),
+                value: d.systemVars,
+                onChanged: (on) => _setSystemVars(d, on),
+              ),
+            ),
+          ],
         ] else
           const Padding(
             padding: EdgeInsets.only(top: Space.lg),

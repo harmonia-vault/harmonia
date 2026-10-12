@@ -80,6 +80,8 @@ class DeviceInfo {
   int get createdAt => json['createdAt'] as int;
   int get lastSeenAt => json['lastSeenAt'] as int;
   bool get isManager => kind == 'manager';
+  /// “写入系统变量”开关，只有 Windows 上的命令行使用；较旧的服务端没有这个字段。
+  bool get systemVars => json['systemVars'] as bool? ?? false;
   /// 按激活顺序排列。
   List<Grant> get grants => (json['grants'] as List).map((g) => Grant.fromJson((g as Map).cast<String, dynamic>())).toList()
     ..sort((a, b) => a.position.compareTo(b.position));

@@ -157,7 +157,7 @@ func cmdUpdate(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	tmp := filepath.Join(filepath.Dir(bin), ".harmonia-new")
+	tmp := filepath.Join(filepath.Dir(bin), newProgramName)
 	if err := os.WriteFile(tmp, data, 0o755); err != nil {
 		return fmt.Errorf("无法写入 %s：%w", filepath.Dir(bin), err)
 	}
@@ -166,11 +166,7 @@ func cmdUpdate(ctx context.Context, args []string) error {
 	if err != nil || !strings.Contains(string(out), m.Version) {
 		return errors.New("新版本自检失败，已放弃升级，当前版本保持不变")
 	}
-	_ = os.Remove(bin + ".old")
-	if err := os.Link(bin, bin+".old"); err != nil {
-		_ = copyFile(bin, bin+".old")
-	}
-	if err := os.Rename(tmp, bin); err != nil {
+	if err := swapProgram(tmp, bin); err != nil {
 		return fmt.Errorf("替换程序失败：%w", err)
 	}
 	if err := service.Restart(); err != nil {
@@ -178,12 +174,4 @@ func cmdUpdate(ctx context.Context, args []string) error {
 	}
 	fmt.Printf("已升级到 %s。旧版本保留在 %s.old。\n", m.Version, bin)
 	return nil
-}
-
-func copyFile(src, dst string) error {
-	data, err := os.ReadFile(src)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(dst, data, 0o755)
 }

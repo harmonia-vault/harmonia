@@ -1,6 +1,6 @@
 name: Release
 
-# 推送 v* 标签时发布：CLI 四个平台二进制、签名 APK、未签名 IPA、签名清单。服务端由 publish-server.yml 发布到 harmonia-worker。
+# 推送 v* 标签时发布：CLI 六个平台二进制、签名 APK、未签名 IPA、签名清单。服务端由 publish-server.yml 发布到 harmonia-worker。
 # 带“-”的版本（例如 v0.1.2-rc.1、v0.1.2-beta.1）发布为预发布，只进入测试版渠道。
 on:
   push:
@@ -23,12 +23,14 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           mkdir -p ../dist
-          for target in darwin/arm64 darwin/amd64 linux/arm64 linux/amd64; do
+          for target in darwin/arm64 darwin/amd64 linux/arm64 linux/amd64 windows/arm64 windows/amd64; do
+            ext=""
+            case "$target" in windows/*) ext=".exe" ;; esac
             GOOS=${target%/*} GOARCH=${target#*/} CGO_ENABLED=0 \
               go build -trimpath -ldflags "-s -w -X main.version=$VERSION" \
-              -o "../dist/harmonia-${target%/*}-${target#*/}" ./cmd/harmonia
+              -o "../dist/harmonia-${target%/*}-${target#*/}$ext" ./cmd/harmonia
           done
-          cp install.sh ../dist/install.sh
+          cp install.sh install.ps1 ../dist/
       - uses: actions/upload-artifact@v4
         with:
           name: cli
@@ -143,5 +145,5 @@ jobs:
           mkdir -p feed
           gh release download update-feed -D feed -p '*.json*' || true
           (cd cli && go run ./cmd/releasetool feed --version "${GITHUB_REF_NAME#v}" --dist ../dist --feed ../feed)
-          cp dist/install.sh feed/install.sh
+          cp dist/install.sh dist/install.ps1 feed/
           gh release upload update-feed feed/* --clobber

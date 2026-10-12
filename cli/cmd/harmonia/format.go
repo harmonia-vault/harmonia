@@ -4,6 +4,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"unicode/utf8"
 )
@@ -108,15 +109,14 @@ var helpGroups = []struct {
 		{"exec [--env a,b] -- <命令...>", "带上变量运行命令；--env 按列出的顺序，靠前的优先"},
 		{"export [--format sh|dotenv|json]", "输出当前生效的变量"},
 	}},
-	{"安装与维护", [][2]string{
-		{"shell install|uninstall", "在 shell 启动文件中加载变量（--shell zsh|bash 指定 shell）"},
+	{"安装与维护", slices.Concat(shellHelp, [][2]string{
 		{"service install|uninstall|status", "管理后台同步服务"},
 		{"update [--check]", "检查并升级 harmonia"},
 		{"update channel [stable|beta]", "查看或切换更新渠道（正式版 / 测试版）"},
 		{"logout", "退出账号并清除本机数据"},
-		{"uninstall", "退出账号、移除服务与 shell 集成，并删除 harmonia"},
+		{"uninstall", uninstallSummary},
 		{"version", "显示版本"},
-	}},
+	})},
 }
 
 func printHelp(out io.Writer) {
