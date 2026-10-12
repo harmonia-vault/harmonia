@@ -36,6 +36,7 @@ class _PageDebugState extends State<PageDebug> {
   int _navigationGeneration = 0;
   bool _large = false, _contrast = false, _reduceMotion = false, _pageActive = false;
   GlassQuality? _glassQuality;
+  bool _performance = false;
   Stage _lastStage = Stage.home;
 
   @override
@@ -155,6 +156,7 @@ class _PageDebugState extends State<PageDebug> {
     return MaterialApp(
       navigatorKey: _navigator,
       debugShowCheckedModeBanner: false,
+      showPerformanceOverlay: _performance,
       theme: buildTheme(
         Brightness.light,
         liquidGlass: session.c.appearance.liquidGlass,
@@ -189,6 +191,8 @@ class _PageDebugState extends State<PageDebug> {
               child: LiquidGlassWidgets.wrap(
                 brightnessResolver: Theme.maybeBrightnessOf,
                 child: Scaffold(
+                  // 内层页面与弹窗各自避让键盘，调试外壳只保留工具栏。
+                  resizeToAvoidBottomInset: false,
                   appBar: AppBar(
                     title: const Text('页面调试 · 模拟数据', style: TextStyle(fontSize: 16)),
                     leading: IconButton(
@@ -218,6 +222,12 @@ class _PageDebugState extends State<PageDebug> {
         onOpen: _open,
         options: [
           GlassDebugOptions(quality: _glassQuality, onChanged: (quality) => setState(() => _glassQuality = quality)),
+          SwitchListTile(
+            title: const Text('显示帧耗时图'),
+            subtitle: const Text('使用 Flutter 内置性能图，对照弹窗打开、关闭和滚动；仅本次调试。'),
+            value: _performance,
+            onChanged: (value) => setState(() => _performance = value),
+          ),
           SwitchListTile(
             title: const Text('液态玻璃'),
             value: session.c.appearance.liquidGlass,

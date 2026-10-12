@@ -61,6 +61,7 @@ Future<void> main() async {
     platform: hostPlatform,
     identity: identity,
     prepareGlass: GlassResources.prepare,
+    defaultLiquidGlass: await hostDefaultsToGlass(),
   );
   runApp(HarmoniaApp(c: controller));
   await controller.start();

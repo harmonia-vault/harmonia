@@ -26,6 +26,34 @@ void main() {
     expect(settings.glassOpacity, 0.5);
   });
 
+  test('系统默认开启时先准备资源，关闭的明确选择在重启后优先', () async {
+    final store = MemoryStore();
+    var prepared = 0;
+    final settings = AppearanceSettings(store, defaultLiquidGlass: true, prepareGlass: () async => prepared++);
+    await settings.load();
+    expect(settings.liquidGlass, isTrue);
+    expect(prepared, 1);
+    expect(await store.read('appearance'), isNull);
+    await settings.setLiquidGlass(false);
+    final restarted = AppearanceSettings(
+      store,
+      defaultLiquidGlass: true,
+      prepareGlass: () => throw StateError('明确关闭时不加载资源'),
+    );
+    await restarted.load();
+    expect(restarted.liquidGlass, isFalse);
+  });
+
+  test('系统默认开启但资源准备失败时不显示未准备好的玻璃', () async {
+    final settings = AppearanceSettings(
+      MemoryStore(),
+      defaultLiquidGlass: true,
+      prepareGlass: () => throw StateError('模拟资源加载失败'),
+    );
+    await expectLater(settings.load(), throwsStateError);
+    expect(settings.liquidGlass, isFalse);
+  });
+
   test('新实例恢复已保存的选择，另一台设备保持自己的选择', () async {
     final directory = await Directory.systemTemp.createTemp('harmonia-appearance-');
     addTearDown(() => directory.delete(recursive: true));

@@ -12,7 +12,7 @@ class LockDebugPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AppPage(
     appBar: const AppBarSurface(title: Text('后台计时与 App 锁定')),
-    body: (context) => Padding(
+    body: (context) => SingleChildScrollView(
       padding: pagePadding(context, const EdgeInsets.all(16)),
       child: Column(
         children: [
@@ -26,7 +26,8 @@ class LockDebugPage extends StatelessWidget {
           ),
           Text('${c.foreground ? '前台' : '后台'} · ${c.stage == Stage.locked ? 'App 已锁定' : 'App 已解锁'}'),
           const Text('切后台满 5 分钟锁定；短暂离开保留会话。示例 PIN：123456。'),
-          Expanded(
+          SizedBox(
+            height: MediaQuery.sizeOf(context).height * 0.6,
             child: c.stage == Stage.locked ? LockPage(c: c) : const Center(child: Text('当前为模拟已解锁会话')),
           ),
         ],

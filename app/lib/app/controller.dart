@@ -52,7 +52,8 @@ class AppController extends ChangeNotifier {
     required this.account,
     required this.vault,
     required Future<void> Function() prepareGlass,
-  }) : appearance = AppearanceSettings(files, prepareGlass: prepareGlass);
+    bool defaultLiquidGlass = false,
+  }) : appearance = AppearanceSettings(files, prepareGlass: prepareGlass, defaultLiquidGlass: defaultLiquidGlass);
 
   final HCrypto crypto;
   final LocalStore secure;

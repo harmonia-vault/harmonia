@@ -16,6 +16,12 @@ final class PlatformChannel: NSObject, WKNavigationDelegate, UIDocumentPickerDel
   func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     let args = call.arguments as? [String: Any] ?? [:]
     switch call.method {
+    case "defaultLiquidGlass":
+      if #available(iOS 26.0, *) {
+        result(true)
+      } else {
+        result(false)
+      }
     case "deviceName":
       // iOS 16 起，没有苹果单独批准的权限时，系统只返回“iPhone”这样的通称，拿不到用户起的名字。
       let name = UIDevice.current.name

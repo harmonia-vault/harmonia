@@ -33,53 +33,69 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     final c = widget.c;
     final pages = [EnvironmentsTab(c: c), DevicesTab(c: c), SettingsTab(c: c)];
-    return Scaffold(
-      extendBody: usesGlass(context),
-      body: Column(
-        children: [
-          if (!c.online)
-            Material(
-              color: context.palette.warnBox,
-              child: SafeArea(
-                bottom: false,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: Space.lg, vertical: Space.sm),
-                  child: Row(
-                    children: [
-                      Icon(Icons.cloud_off_outlined, size: 18, color: context.palette.onWarnBox),
-                      const SizedBox(width: Space.sm),
-                      Expanded(
-                        child: Text(
-                          '离线：显示的是上次同步的数据，修改需要联网。',
-                          style: TextStyle(color: context.palette.onWarnBox, fontSize: 13),
+    // 子页面负责键盘避让，导航外壳不能再扣一次键盘高度。
+    return GlassBackdropGroup(
+      enabled: usesGlass(context),
+      child: Scaffold(
+        resizeToAvoidBottomInset: false,
+        extendBody: usesGlass(context),
+        body: Column(
+          children: [
+            if (!c.online)
+              Material(
+                color: context.palette.warnBox,
+                child: SafeArea(
+                  bottom: false,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: Space.lg, vertical: Space.sm),
+                    child: Row(
+                      children: [
+                        Icon(Icons.cloud_off_outlined, size: 18, color: context.palette.onWarnBox),
+                        const SizedBox(width: Space.sm),
+                        Expanded(
+                          child: Text(
+                            '离线：显示的是上次同步的数据，修改需要联网。',
+                            style: TextStyle(color: context.palette.onWarnBox, fontSize: 13),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-          Expanded(
-            // 横幅已包含状态栏安全区，页面不再重复预留。
-            child: MediaQuery.removePadding(
-              context: context,
-              removeTop: !c.online,
-              child: IndexedStack(
-                index: _tab,
-                children: [for (var i = 0; i < pages.length; i++) HeroMode(enabled: i == _tab, child: pages[i])],
+            Expanded(
+              // 横幅已包含状态栏安全区，页面不再重复预留。
+              child: MediaQuery.removePadding(
+                context: context,
+                removeTop: !c.online,
+                child: IndexedStack(
+                  index: _tab,
+                  children: [
+                    for (var i = 0; i < pages.length; i++)
+                      GlassBackdropGroup(
+                        // IndexedStack 保留页面状态；隐藏页不能占用当前页的采样组。
+                        enabled: i == _tab && usesGlass(context),
+                        joinEnclosing: true,
+                        child: TickerMode(
+                          enabled: i == _tab,
+                          child: HeroMode(enabled: i == _tab, child: pages[i]),
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
-      ),
-      bottomNavigationBar: _NavBar(
-        selected: _tab,
-        onSelect: (i) => setState(() => _tab = i),
-        items: [
-          const _NavItem(Icons.inventory_2_outlined, Icons.inventory_2, '环境'),
-          _NavItem(Icons.devices_outlined, Icons.devices, '设备', badge: c.pendingPairingCount),
-          const _NavItem(Icons.settings_outlined, Icons.settings, '设置'),
-        ],
+          ],
+        ),
+        bottomNavigationBar: _NavBar(
+          selected: _tab,
+          onSelect: (i) => setState(() => _tab = i),
+          items: [
+            const _NavItem(Icons.inventory_2_outlined, Icons.inventory_2, '环境'),
+            _NavItem(Icons.devices_outlined, Icons.devices, '设备', badge: c.pendingPairingCount),
+            const _NavItem(Icons.settings_outlined, Icons.settings, '设置'),
+          ],
+        ),
       ),
     );
   }

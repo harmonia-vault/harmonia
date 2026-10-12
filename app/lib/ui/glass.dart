@@ -227,11 +227,15 @@ class AppPage extends StatelessWidget {
   final Widget? floatingActionButton;
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    extendBodyBehindAppBar: usesGlass(context) && appBar != null,
-    appBar: appBar,
-    floatingActionButton: floatingActionButton,
-    body: Builder(builder: body),
+  Widget build(BuildContext context) => GlassBackdropGroup(
+    enabled: usesGlass(context),
+    joinEnclosing: true,
+    child: Scaffold(
+      extendBodyBehindAppBar: usesGlass(context) && appBar != null,
+      appBar: appBar,
+      floatingActionButton: floatingActionButton,
+      body: Builder(builder: body),
+    ),
   );
 }
 

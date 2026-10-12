@@ -8,6 +8,12 @@ const _channel = MethodChannel('harmonia/platform');
 /// 本机在协议中的平台名。
 final hostPlatform = Platform.isIOS ? 'ios' : 'android';
 
+/// 未保存外观选择时，iOS 26 起默认使用玻璃；由系统版本检查决定。
+Future<bool> hostDefaultsToGlass() async {
+  if (!Platform.isIOS) return false;
+  return await _channel.invokeMethod<bool>('defaultLiquidGlass') ?? false;
+}
+
 /// 本机的设备名；取不到时用平台的通称。
 Future<String> hostDeviceName() async {
   try {

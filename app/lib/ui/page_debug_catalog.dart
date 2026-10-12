@@ -162,6 +162,13 @@ Map<String, List<DebugPageEntry>> debugPages() => {
   ],
   '弹窗与弹层': [
     DebugPageEntry(
+      '首页新建环境、遮罩与键盘避让',
+      (s) => DebugOverlay(
+        background: HomePage(c: s.c),
+        show: (c) => askName(c, title: '新建环境', label: '环境名称'),
+      ),
+    ),
+    DebugPageEntry(
       '新建环境弹窗',
       (s) => DebugOverlay(
         show: (c) async {
@@ -211,7 +218,7 @@ Map<String, List<DebugPageEntry>> debugPages() => {
       ),
     ),
     DebugPageEntry(
-      '更新说明与下载',
+      '检查更新、长说明与下载',
       (s) => DebugOverlay(show: (c) => checkForUpdate(c, manual: true, channel: s.c.updateChannel)),
     ),
   ],
@@ -271,7 +278,8 @@ class DebugCatalog extends StatelessWidget {
 }
 
 class DebugOverlay extends StatefulWidget {
-  const DebugOverlay({super.key, required this.show});
+  const DebugOverlay({super.key, required this.show, this.background});
+  final Widget? background;
   final Future<dynamic> Function(BuildContext) show;
   @override
   State<DebugOverlay> createState() => _DebugOverlayState();
@@ -287,23 +295,26 @@ class _DebugOverlayState extends State<DebugOverlay> {
   }
 
   @override
-  Widget build(BuildContext context) => AppPage(
-    appBar: const AppBarSurface(title: Text('弹窗预览')),
-    body: (c) => ListView(
-      children: [
-        const Padding(
-          padding: EdgeInsets.all(16),
-          child: Banner2('可在目录切换明暗、大字号、高对比度和减少动态效果；重复打开与关闭，检查玻璃和边缘随动画一起出现。输入错误 PIN 可查看错误提示。'),
+  Widget build(BuildContext context) =>
+      widget.background ??
+      AppPage(
+        appBar: const AppBarSurface(title: Text('弹窗预览')),
+        body: (c) => ListView(
+          padding: pagePadding(c, EdgeInsets.zero),
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Banner2('可在目录切换明暗、大字号、高对比度和减少动态效果；重复打开与关闭，检查玻璃和边缘随动画一起出现。输入错误 PIN 可查看错误提示。'),
+            ),
+            FilledButton(onPressed: () => widget.show(c), child: const Text('重新打开弹窗')),
+            for (var i = 0; i < 8; i++)
+              Container(
+                height: 72,
+                color: i.isEven ? context.palette.sage : context.palette.yellow,
+                alignment: Alignment.center,
+                child: Text('合成背景 ${i + 1} · 检查弹窗折射与文字可读性', style: TextStyle(color: Palette.light.ink)),
+              ),
+          ],
         ),
-        FilledButton(onPressed: () => widget.show(c), child: const Text('重新打开弹窗')),
-        for (var i = 0; i < 8; i++)
-          Container(
-            height: 72,
-            color: i.isEven ? context.palette.sage : context.palette.yellow,
-            alignment: Alignment.center,
-            child: Text('合成背景 ${i + 1} · 检查弹窗折射与文字可读性', style: TextStyle(color: Palette.light.ink)),
-          ),
-      ],
-    ),
-  );
+      );
 }

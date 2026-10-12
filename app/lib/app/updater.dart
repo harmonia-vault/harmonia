@@ -145,6 +145,8 @@ DateTime? _lastAutoCheck;
 Future<void> checkForUpdate(BuildContext context, {required bool manual, required UpdateChannel channel}) async {
   if (AppScope.isSimulated(context)) {
     if (!manual) return;
+    if (!await runBusy(context, () => Future<void>.delayed(const Duration(milliseconds: 600)))) return;
+    if (!context.mounted) return;
     final choice = await showUpdateSheet(
       context,
       version: '0.0.1',

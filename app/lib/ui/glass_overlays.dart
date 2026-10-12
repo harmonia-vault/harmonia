@@ -74,69 +74,71 @@ class _GlassDialogState extends State<_GlassDialog> {
         child: Padding(
           key: _contentKey,
           padding: const EdgeInsets.all(24),
-          child: Theme(
-            data: readableTheme,
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                // 极短视口或大字号时连标题和按钮一起滚动，避免键盘把操作挤出屏幕。
-                final scrollWhole =
-                    constraints.maxHeight < 320 ||
-                    (MediaQuery.textScalerOf(context).scale(14) > 20 && constraints.maxHeight < 460);
-                final body = content == null
-                    ? null
-                    : Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        child: DefaultTextStyle(
-                          style: theme.textTheme.bodyMedium!.copyWith(color: p.ink, fontSize: 15, height: 1.5),
-                          child: content,
-                        ),
-                      );
-                final panel = Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (title != null)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 18),
-                        child: DefaultTextStyle(
-                          style: theme.textTheme.titleLarge!.copyWith(
-                            color: p.ink,
-                            fontSize: 20,
-                            fontWeight: FontWeight.w700,
-                            height: 1.3,
+          child: RepaintBoundary(
+            child: Theme(
+              data: readableTheme,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  // 极短视口或大字号时连标题和按钮一起滚动，避免键盘把操作挤出屏幕。
+                  final scrollWhole =
+                      constraints.maxHeight < 320 ||
+                      (MediaQuery.textScalerOf(context).scale(14) > 20 && constraints.maxHeight < 460);
+                  final body = content == null
+                      ? null
+                      : Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: DefaultTextStyle(
+                            style: theme.textTheme.bodyMedium!.copyWith(color: p.ink, fontSize: 15, height: 1.5),
+                            child: content,
                           ),
-                          textAlign: TextAlign.center,
-                          child: title,
+                        );
+                  final panel = Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (title != null)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 18),
+                          child: DefaultTextStyle(
+                            style: theme.textTheme.titleLarge!.copyWith(
+                              color: p.ink,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w700,
+                              height: 1.3,
+                            ),
+                            textAlign: TextAlign.center,
+                            child: title,
+                          ),
                         ),
-                      ),
-                    if (body != null)
-                      if (scrollWhole) body else Flexible(child: SingleChildScrollView(child: body)),
-                    if (actions?.isNotEmpty ?? false) ...[
-                      const SizedBox(height: 24),
-                      FilledButtonTheme(
-                        data: FilledButtonThemeData(style: FilledButton.styleFrom(minimumSize: const Size(64, 46))),
-                        child: TextButtonTheme(
-                          data: TextButtonThemeData(
-                            style: TextButton.styleFrom(
-                              minimumSize: const Size(64, 46),
-                              backgroundColor: p.ink.withValues(alpha: 0.06),
-                              foregroundColor: p.ink,
+                      if (body != null)
+                        if (scrollWhole) body else Flexible(child: SingleChildScrollView(child: body)),
+                      if (actions?.isNotEmpty ?? false) ...[
+                        const SizedBox(height: 24),
+                        FilledButtonTheme(
+                          data: FilledButtonThemeData(style: FilledButton.styleFrom(minimumSize: const Size(64, 46))),
+                          child: TextButtonTheme(
+                            data: TextButtonThemeData(
+                              style: TextButton.styleFrom(
+                                minimumSize: const Size(64, 46),
+                                backgroundColor: p.ink.withValues(alpha: 0.06),
+                                foregroundColor: p.ink,
+                              ),
+                            ),
+                            child: OverflowBar(
+                              spacing: 10,
+                              overflowSpacing: 8,
+                              alignment: MainAxisAlignment.end,
+                              overflowAlignment: OverflowBarAlignment.end,
+                              children: actions!,
                             ),
                           ),
-                          child: OverflowBar(
-                            spacing: 10,
-                            overflowSpacing: 8,
-                            alignment: MainAxisAlignment.end,
-                            overflowAlignment: OverflowBarAlignment.end,
-                            children: actions!,
-                          ),
                         ),
-                      ),
+                      ],
                     ],
-                  ],
-                );
-                return scrollWhole ? SingleChildScrollView(child: panel) : panel;
-              },
+                  );
+                  return scrollWhole ? SingleChildScrollView(child: panel) : panel;
+                },
+              ),
             ),
           ),
         ),
@@ -146,7 +148,7 @@ class _GlassDialogState extends State<_GlassDialog> {
 }
 
 class AppAlertDialog extends AlertDialog {
-  const AppAlertDialog({super.key, super.title, super.content, super.actions});
+  const AppAlertDialog({super.key, super.title, super.content, super.actions}) : super(scrollable: true);
 
   @override
   Widget build(BuildContext context) =>

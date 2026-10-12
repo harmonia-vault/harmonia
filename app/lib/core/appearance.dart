@@ -14,10 +14,11 @@ double snapGlassOpacity(double value) {
 }
 
 class AppearanceSettings {
-  AppearanceSettings(this._store, {required this.prepareGlass});
+  AppearanceSettings(this._store, {required this.prepareGlass, this.defaultLiquidGlass = false});
 
   final LocalStore _store;
   final Future<void> Function() prepareGlass;
+  final bool defaultLiquidGlass;
   static const _key = 'appearance';
   bool _liquidGlass = false;
   AppColorMode _colorMode = AppColorMode.system;
@@ -37,7 +38,11 @@ class AppearanceSettings {
 
   Future<void> load() async {
     final raw = await _store.read(_key);
-    if (raw == null) return;
+    if (raw == null) {
+      if (defaultLiquidGlass) await prepareGlass();
+      _liquidGlass = defaultLiquidGlass;
+      return;
+    }
     final data = jsonDecode(raw);
     if (data is! Map || data['liquidGlass'] is! bool || !AppColorMode.values.any((m) => m.name == data['colorMode'])) {
       throw const FormatException('外观设置无法读取，请重新设置。');
