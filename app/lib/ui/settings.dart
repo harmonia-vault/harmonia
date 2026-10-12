@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 
 import '../app/controller.dart';
 import '../app/updater.dart';
+import 'about.dart';
+import 'devices.dart' show platformIcon;
 import 'lock.dart';
 import 'recovery_pages.dart';
 import 'theme.dart';
@@ -39,12 +41,12 @@ class _SettingsTabState extends State<SettingsTab> {
   }
 
   Future<void> _toggleBio(bool v) async {
-    final key = await verifyIdentity(context, v ? '验证身份以开启指纹解锁' : '验证身份以关闭指纹解锁');
+    final key = await verifyIdentity(context, '验证身份以${v ? '开启' : '关闭'}${identity.bio('解锁')}');
     if (key == null || !mounted) return;
     if (v) {
       var enabled = false;
       if (await runBusy(context, () async => enabled = await identity.enableBio(key)) && enabled && mounted) {
-        toast(context, '已开启指纹解锁');
+        toast(context, '已开启${identity.bio('解锁')}');
       }
     } else {
       await identity.disableBio();
@@ -122,7 +124,7 @@ class _SettingsTabState extends State<SettingsTab> {
     final ok = await confirmDialog(context,
         title: '退出登录？',
         body: last
-            ? '这是账号里唯一的管理设备。退出后，只能用恢复码在新手机上找回账号。请确认恢复码还在。'
+            ? '这是账号里唯一的管理设备。\n退出后，只能用恢复码在新手机上找回账号。\n请确认恢复码还在。'
             : '这台手机将从账号中移除，并清除本机保存的数据。',
         ok: '退出',
         danger: true);
@@ -151,7 +153,7 @@ class _SettingsTabState extends State<SettingsTab> {
               trailing: Icon(Icons.circle, size: 10, color: c.online ? p.ok : p.mute),
             ),
             const Divider(),
-            ListTile(leading: const Icon(Icons.phone_android), title: Text(cfg.deviceName), subtitle: const Text('本机')),
+            ListTile(leading: Icon(platformIcon(c.platform)), title: Text(cfg.deviceName), subtitle: const Text('本机')),
           ]),
         ),
         const SectionTitle('安全'),
@@ -166,11 +168,11 @@ class _SettingsTabState extends State<SettingsTab> {
             if (_bioAvailable || _bioEnabled) ...[
               const Divider(),
               SwitchListTile(
-                secondary: const Icon(Icons.fingerprint),
+                secondary: Icon(bioIcon),
                 value: _bioEnabled,
                 onChanged: _toggleBio,
-                title: const Text('指纹解锁'),
-                subtitle: const Text('可以用指纹代替 App PIN'),
+                title: Text(identity.bio('解锁')),
+                subtitle: Text('可以用${identity.bio('代替')} App PIN'),
               ),
             ],
             const Divider(),
@@ -204,6 +206,14 @@ class _SettingsTabState extends State<SettingsTab> {
               subtitle: Text(c.updateChannel.label),
               trailing: const Icon(Icons.chevron_right),
               onTap: _pickChannel,
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.info_outline),
+              title: const Text('关于 Harmonia'),
+              subtitle: const Text('版本信息和开源项目的版权说明'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AboutPage())),
             ),
           ]),
         ),

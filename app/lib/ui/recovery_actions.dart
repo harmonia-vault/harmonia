@@ -80,8 +80,8 @@ class _RecoveryDoneViewState extends State<RecoveryDoneView> {
           children: [
             Banner2(
               _saved
-                  ? 'PDF 已保存。打印后请删除文件，并把纸质备份放在安全的地方。'
-                  : '请下载包含这个恢复码的 PDF 并保存，保存后才能继续。PDF 只在这里提供一次。',
+                  ? 'PDF 已保存。\n打印后请删除文件，并把纸质备份放在安全的地方。'
+                  : '请下载包含这个恢复码的 PDF 并保存，保存后才能继续。\nPDF 只在这里提供一次。',
               warn: !_saved,
             ),
             const SizedBox(height: Space.lg),

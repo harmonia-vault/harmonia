@@ -1,5 +1,5 @@
-// 应用内更新：读取更新源（GitHub Releases 的 update-feed）中对应渠道、带 minisign 签名的清单，
-// 下载并校验 APK，交给系统安装器。
+// 应用内更新：读取更新源（GitHub Releases 的 update-feed）中对应渠道、带 minisign 签名的清单。
+// Android 上下载并校验 APK，交给系统安装器；iOS 上只提示新版本并给出下载页，由用户自行签名安装。
 import 'dart:convert';
 import 'dart:io';
 
@@ -9,6 +9,7 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
 import '../core/crypto.dart';
+import 'platform.dart';
 import '../ui/widgets.dart';
 
 const appVersion = String.fromEnvironment('APP_VERSION', defaultValue: '0.1.0');
@@ -16,7 +17,8 @@ const appVersion = String.fromEnvironment('APP_VERSION', defaultValue: '0.1.0');
 /// 发布签名公钥（minisign 格式），与 CLI 内置的相同。
 const releasePublicKey = 'RWSG3mCrOrJkGKAhsnHOVBP4a+qs9VJi/47Vv3BQobIJ/ZamvbuQjabm';
 
-const _feedBase = 'https://github.com/harmonia-vault/harmonia/releases/download/update-feed';
+const _releases = 'https://github.com/harmonia-vault/harmonia/releases';
+const _feedBase = '$_releases/download/update-feed';
 
 /// 更新渠道：正式版只接收正式版本；测试版接收全部版本中最新的一个（含 -rc.x、-beta.x）。
 enum UpdateChannel {
@@ -115,7 +117,7 @@ Future<UpdateInfo?> fetchUpdate(HCrypto c, UpdateChannel channel) async {
   // 正式版渠道只接受正式版本，防止测试版清单被当作正式版下发。
   if (channel == UpdateChannel.stable && isPrerelease(version)) throw Exception('更新信息异常，已拒绝。');
   if (!isNewer(version, appVersion)) return null;
-  final asset = ((m['assets'] as Map)['android'] as Map?)?.cast<String, dynamic>();
+  final asset = ((m['assets'] as Map)[hostPlatform] as Map?)?.cast<String, dynamic>();
   if (asset == null) return null;
   return UpdateInfo(version, m['notes'] as String? ?? '', asset['url'] as String, asset['sha256'] as String,
       asset['size'] as int);
@@ -154,6 +156,7 @@ Future<void> checkForUpdate(BuildContext context, {required bool manual, require
     }
     return;
   }
+  if (Platform.isIOS) return _offerIpa(context, info);
   final go = await confirmDialog(context,
       title: '发现新版本 ${info.version}',
       body: '${info.notes.isEmpty ? '' : '${info.notes}\n\n'}下载后会打开系统安装界面，数据会保留。',
@@ -182,6 +185,33 @@ Future<void> checkForUpdate(BuildContext context, {required bool manual, require
   });
   if (ok) await _channel.invokeMethod('install', {'path': file.path});
 }
+
+/// iOS 不能在 App 内安装：给出下载页和下载链接，由用户用安装时的签名工具装上新版本。
+Future<void> _offerIpa(BuildContext context, UpdateInfo info) => showDialog<void>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text('发现新版本 ${info.version}'),
+        content: Text('${info.notes.isEmpty ? '' : '${info.notes}\n\n'}'
+            '请用安装 Harmonia 时使用的签名工具安装新版本的 IPA，数据会保留。'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c), child: const Text('以后再说')),
+          TextButton(
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: info.url));
+              if (c.mounted) toast(c, '已复制下载链接');
+            },
+            child: const Text('复制下载链接'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(c);
+              openUrl('$_releases/tag/v${info.version}');
+            },
+            child: const Text('打开下载页'),
+          ),
+        ],
+      ),
+    );
 
 String _hexToB64(String hex) {
   final out = Uint8List(hex.length ~/ 2);

@@ -75,13 +75,50 @@ description = "构建 Android Release APK"
 dir = "app"
 run = "flutter build apk --release"
 
+[tasks.build-ipa]
+description = "构建未签名的 iOS IPA（自行签名后安装）"
+dir = "app"
+run = '''
+set -eu
+flutter build ios --release --no-codesign
+rm -rf build/ios/ipa
+mkdir -p build/ios/ipa/Payload
+cp -R build/ios/iphoneos/Runner.app build/ios/ipa/Payload/
+(cd build/ios/ipa && zip -qry harmonia.ipa Payload && rm -rf Payload)
+echo "已生成 app/build/ios/ipa/harmonia.ipa"
+'''
+
+[tasks.run-ios]
+description = "在 iOS 模拟器中运行 App（优先用已启动的模拟器，否则启动第一台 iPhone）"
+dir = "app"
+run = '''
+set -eu
+id=$(xcrun simctl list devices booted | grep -m1 -oE '[0-9A-F-]{36}' || true)
+if [ -z "$id" ]; then
+  id=$(xcrun simctl list devices available | grep iPhone | grep -m1 -oE '[0-9A-F-]{36}')
+  xcrun simctl boot "$id"
+fi
+open -a Simulator
+flutter run -d "$id"
+'''
+
+[tasks.test-ios]
+description = "iOS 原生部分的单元测试（PIN 槽密钥的计算），在模拟器中运行"
+dir = "app"
+run = '''
+set -eu
+flutter pub get
+id=$(xcrun simctl list devices available | grep iPhone | grep -m1 -oE '[0-9A-F-]{36}')
+xcodebuild test -quiet -workspace ios/Runner.xcworkspace -scheme Runner -destination "platform=iOS Simulator,id=$id"
+'''
+
 [tasks.dev-server]
 description = "本地运行服务端（workerd）"
 dir = "server"
 run = "pnpm dev"
 
 [tasks.app-icon]
-description = "把 design/icons 的手绘图标导出到 Android 工程"
+description = "把 design/icons 的手绘图标导出到 Android 和 iOS 工程"
 dir = "design/icons"
 run = ["bun install --frozen-lockfile", "bun export-app-icon.mjs"]
 

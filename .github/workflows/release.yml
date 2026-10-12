@@ -1,6 +1,6 @@
 name: Release
 
-# 推送 v* 标签时发布：CLI 四个平台二进制、签名 APK、签名清单。服务端由 publish-server.yml 发布到 harmonia-worker。
+# 推送 v* 标签时发布：CLI 四个平台二进制、签名 APK、未签名 IPA、签名清单。服务端由 publish-server.yml 发布到 harmonia-worker。
 # 带“-”的版本（例如 v0.1.2-rc.1、v0.1.2-beta.1）发布为预发布，只进入测试版渠道。
 on:
   push:
@@ -63,19 +63,7 @@ jobs:
         working-directory: app
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          BASE="${VERSION%%-*}"
-          IFS=. read -r MAJOR MINOR PATCH <<< "$BASE"
-          # versionCode 与版本顺序一致：基础版本 ×100 + 后缀分（alpha N → N，beta N → 20+N，rc N → 50+N，正式版 → 99）。
-          # 例如 0.1.2-beta.1 → 10221，0.1.2-rc.1 → 10251，0.1.2 → 10299。
-          PRE="${VERSION#"$BASE"}"; PRE="${PRE#-}"
-          KIND=$(echo "$PRE" | sed 's/[0-9.]*$//'); NUM=$(echo "$PRE" | sed 's/^[a-z]*\.\{0,1\}//'); NUM=${NUM:-0}
-          case "$KIND" in
-            "") SUB=99 ;;
-            rc) SUB=$((50 + NUM)) ;;
-            beta) SUB=$((20 + NUM)) ;;
-            *) SUB=$NUM ;;
-          esac
-          CODE=$(( (MAJOR * 10000 + MINOR * 100 + PATCH) * 100 + SUB ))
+          read -r BASE CODE <<< "$(bash tool/build-number.sh "$VERSION")"
           echo "versionCode=$CODE"
           flutter pub get
           flutter build apk --release --target-platform android-arm,android-arm64 \
@@ -88,9 +76,35 @@ jobs:
           name: apk
           path: dist/
 
+  # 未签名的 IPA：由使用者用自己的证书或签名工具签名后安装。
+  ipa:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.6
+          cache: true
+      - name: 构建 IPA
+        working-directory: app
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          read -r BASE CODE <<< "$(bash tool/build-number.sh "$VERSION")"
+          flutter pub get
+          flutter build ios --release --no-codesign \
+            --build-name "$BASE" --build-number "$CODE" \
+            --dart-define=APP_VERSION="$VERSION"
+          mkdir -p ../dist Payload
+          cp -R build/ios/iphoneos/Runner.app Payload/
+          zip -qry "../dist/harmonia-$VERSION.ipa" Payload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ipa
+          path: dist/
+
   release:
     runs-on: ubuntu-latest
-    needs: [cli, apk]
+    needs: [cli, apk, ipa]
     steps:
       - uses: actions/checkout@v4
         with:

@@ -7,10 +7,13 @@ import 'crypto.dart';
 import 'vault.dart';
 
 class InstanceInfo {
-  InstanceInfo(this.server, this.version, this.registrationOpen, this.emailVerification);
+  InstanceInfo(this.server, this.version, this.registrationOpen, this.firstAccount, this.emailVerification);
   final String server;
   final String version;
   final bool registrationOpen;
+
+  /// 服务器上还没有任何账号完成注册。
+  final bool firstAccount;
   final bool emailVerification;
 }
 
@@ -45,8 +48,11 @@ class PendingPairing {
 }
 
 class AccountService {
-  AccountService(this.crypto);
+  AccountService(this.crypto, {this.platform = 'android'});
   final HCrypto crypto;
+
+  /// 本机在协议中的平台名（`android` 或 `ios`），只用于显示。
+  final String platform;
 
   ApiClient _client(String server, [String? accountId]) => ApiClient(server)..accountId = accountId;
 
@@ -60,8 +66,9 @@ class AccountService {
       throw VaultException('服务器版本（${res['version']}）与 App 不兼容，请升级 App 或服务器。');
     }
     final reg = (res['registration'] as Map).cast<String, dynamic>();
+    // 还没有升级的服务器不返回 first：按已有账号处理，默认显示登录。
     return InstanceInfo(server, res['version'] as String, reg['open'] as bool,
-        reg['emailVerification'] as bool);
+        reg['first'] as bool? ?? false, reg['emailVerification'] as bool);
   }
 
   Future<Map<String, String>> _password(String password) async {
@@ -156,7 +163,7 @@ class AccountService {
       'device': {
         'id': d.deviceId,
         'name': deviceName,
-        'platform': 'android',
+        'platform': platform,
         'signPub': signPub,
         'boxPub': boxPub,
         'cert': b64(crypto.sign(root, deviceCertMsg(d.deviceId, 'manager', signPub, boxPub))),
@@ -189,7 +196,7 @@ class AccountService {
     final boxPub = b64(crypto.boxKeyFromSeed(boxSeed).pub);
     final res = await _client(s.server, s.accountId).withToken(s.token, 'POST', '/api/v1/pairings', {
       'name': deviceName,
-      'platform': 'android',
+      'platform': platform,
       'signPub': signPub,
       'boxPub': boxPub,
       'rootPub': s.rootPub,
@@ -294,7 +301,7 @@ class AccountService {
       'device': {
         'id': deviceId,
         'name': deviceName,
-        'platform': 'android',
+        'platform': platform,
         'signPub': signPub,
         'boxPub': boxPub,
         'cert': b64(crypto.sign(root, deviceCertMsg(deviceId, 'manager', signPub, boxPub))),

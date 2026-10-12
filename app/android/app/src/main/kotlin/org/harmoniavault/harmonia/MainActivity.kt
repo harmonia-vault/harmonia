@@ -58,9 +58,15 @@ class MainActivity : FlutterFragmentActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "harmonia/platform").setMethodCallHandler { call, result ->
             when (call.method) {
                 "deviceName" -> {
+                    // 优先用用户在系统设置里给这台手机起的名字；取不到时用厂商和型号。
+                    val named = Settings.Global.getString(contentResolver, "device_name")?.trim()
                     val maker = Build.MANUFACTURER.replaceFirstChar { it.uppercase() }
                     val model = Build.MODEL
-                    result.success(if (model.startsWith(maker, ignoreCase = true)) model else "$maker $model")
+                    result.success(
+                        if (!named.isNullOrEmpty()) named
+                        else if (model.startsWith(maker, ignoreCase = true)) model
+                        else "$maker $model"
+                    )
                 }
                 "canInstall" -> result.success(
                     Build.VERSION.SDK_INT < Build.VERSION_CODES.O || packageManager.canRequestPackageInstalls()

@@ -37,7 +37,7 @@ class _DeviceReviewViewState extends State<DeviceReviewView> {
     final picked = otherDevices(c).where((d) => _selected.contains(d.id)).toList();
     final ok = await confirmDialog(context,
         title: '移除 ${picked.length} 台设备？',
-        body: '${picked.map((d) => '“${d.name}”').join('、')}将立即失去访问权限，联网后会自动清除本机保存的变量。'
+        body: '${picked.map((d) => '“${d.name}”').join('、')}将立即失去访问权限，联网后会自动清除本机保存的变量。\n'
             '已经被复制或正在运行的程序中的变量无法收回，必要时请在服务商处更换相应的密钥。',
         ok: '移除',
         danger: true);
@@ -93,7 +93,7 @@ class _DeviceReviewViewState extends State<DeviceReviewView> {
     final clients = devices.where((d) => !d.isManager);
     return AuthScaffold(
       title: '检查其他设备',
-      subtitle: '恢复不会让账号中的其他设备失效。旧手机仍然可以访问全部环境，也能批准和移除设备。',
+      subtitle: '恢复不会让账号中的其他设备失效。\n旧手机仍然可以访问全部环境，也能批准和移除设备。',
       children: [
         const Banner2('已丢失或不再使用的设备，请勾选后移除；还在使用的设备不用勾选。', warn: true),
         if (managers.isNotEmpty) ...[const SectionTitle('管理设备'), ...managers.map(_tile)],

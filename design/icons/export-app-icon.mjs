@@ -1,4 +1,4 @@
-// 用法：mise run app-icon —— 把手绘「.env 同步」图标导出到 app/ 的 Android 工程。
+// 用法：mise run app-icon —— 把手绘「.env 同步」图标导出到 app/ 的 Android 和 iOS 工程。
 // iOS：单张 1024 图标 + 浅色 / 深色 / 着色三种外观（iOS 18 起系统按外观切换）。
 // Android：自适应图标（纸底背景层 + 图形前景层 + 单色主题层），以及旧式 ic_launcher。
 import "./envsync.js";
@@ -9,6 +9,7 @@ import { join } from "node:path";
 
 const MOBILE = new URL("../../app/", import.meta.url).pathname;
 const ANDROID_RES = join(MOBILE, "android/app/src/main/res");
+const IOS_ICON = join(MOBILE, "ios/Runner/Assets.xcassets/AppIcon.appiconset");
 const E = globalThis.HarmoniaEnvSync;
 
 const render = (svg, size) =>
@@ -71,3 +72,23 @@ writeFileSync(join(ANDROID_RES, "mipmap-anydpi-v26/ic_launcher.xml"), `<?xml ver
 `);
 
 console.log("Android:", Object.keys(densities).join(", "), "+ mipmap-anydpi-v26/ic_launcher.xml");
+
+// —— iOS ——
+// 深色用黑板版本；着色外观由系统上色，提供黑板版本的灰度图。
+const appearances = [
+  ["AppIcon.png", null, E.svg("sketch-light", null, "il")],
+  ["AppIcon-dark.png", "dark", E.svg("sketch-dark", null, "id")],
+  ["AppIcon-tinted.png", "tinted", E.svg("sketch-dark", null, "it", { gray: true })],
+];
+rmSync(IOS_ICON, { recursive: true, force: true });
+mkdirSync(IOS_ICON, { recursive: true });
+for (const [file, , svg] of appearances) writeFileSync(join(IOS_ICON, file), opaquePng(render(svg, 1024)));
+writeFileSync(join(IOS_ICON, "Contents.json"), JSON.stringify({
+  images: appearances.map(([filename, value]) => ({
+    ...(value ? { appearances: [{ appearance: "luminosity", value }] } : {}),
+    filename, idiom: "universal", platform: "ios", size: "1024x1024",
+  })),
+  info: { author: "xcode", version: 1 },
+}, null, 2) + "\n");
+
+console.log("iOS:", readdirSync(IOS_ICON).join(", "));

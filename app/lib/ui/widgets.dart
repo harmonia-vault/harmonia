@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../core/api.dart';
+import '../core/phrases.dart';
 import '../core/vault.dart';
 import 'theme.dart';
 
@@ -52,7 +53,7 @@ Future<bool> confirmDialog(BuildContext context,
     context: context,
     builder: (c) => AlertDialog(
       title: Text(title),
-      content: Text(body),
+      content: Text(tidy(body)),
       actions: [
         TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('取消')),
         FilledButton(
@@ -65,6 +66,12 @@ Future<bool> confirmDialog(BuildContext context,
   );
   return r ?? false;
 }
+
+/// 中文分词，由 main() 在启动时从资源里加载；没加载时文字按系统默认方式折行。
+PhraseBreaker? phraseBreaker;
+
+/// 界面上成段的中文都经过这里：折行只落在词与词之间，行尾不会只剩一两个字。
+String tidy(String text) => phraseBreaker?.glue(text) ?? text;
 
 /// 账号相关页面的统一外框：品牌标题 + 可滚动表单。
 class AuthScaffold extends StatelessWidget {
@@ -101,15 +108,7 @@ class AuthScaffold extends StatelessWidget {
               children: [
                 if (onBack == null) ...[
                   Row(children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                          color: p.yellow,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: p.ink, width: 1.4)),
-                      child: Icon(Icons.graphic_eq_rounded, color: p.ink),
-                    ),
+                    const BrandMark(),
                     const SizedBox(width: Space.md),
                     Text('和弦', style: Theme.of(context).textTheme.titleLarge),
                     const SizedBox(width: Space.sm),
@@ -118,9 +117,10 @@ class AuthScaffold extends StatelessWidget {
                   const SizedBox(height: Space.xxl),
                 ],
                 Text(title, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w600)),
+                // 副标题里每个换行是一段，段与段之间不留额外间距。
                 if (subtitle != null) ...[
                   const SizedBox(height: Space.sm),
-                  Text(subtitle!, style: TextStyle(color: p.mute, height: 1.5)),
+                  Text(tidy(subtitle!), style: TextStyle(color: p.mute, height: 1.5)),
                 ],
                 const SizedBox(height: Space.xl),
                 ...children,
@@ -129,6 +129,23 @@ class AuthScaffold extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// 品牌标记：黄底上的声波图形。
+class BrandMark extends StatelessWidget {
+  const BrandMark({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    return Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+          color: p.yellow, borderRadius: BorderRadius.circular(12), border: Border.all(color: p.ink, width: 1.4)),
+      child: Icon(Icons.graphic_eq_rounded, color: p.ink),
     );
   }
 }
@@ -154,7 +171,7 @@ class Banner2 extends StatelessWidget {
         Icon(icon ?? (warn ? Icons.warning_amber_rounded : Icons.info_outline),
             size: 20, color: warn ? p.onWarnBox : p.mute),
         const SizedBox(width: Space.sm),
-        Expanded(child: Text(text, style: TextStyle(color: warn ? p.onWarnBox : p.ink, height: 1.45))),
+        Expanded(child: Text(tidy(text), style: TextStyle(color: warn ? p.onWarnBox : p.ink, height: 1.45))),
       ]),
     );
   }
@@ -237,7 +254,7 @@ class EmptyState extends StatelessWidget {
           Text(title, style: Theme.of(context).textTheme.titleMedium, textAlign: TextAlign.center),
           if (body != null) ...[
             const SizedBox(height: Space.sm),
-            Text(body!, style: TextStyle(color: context.palette.mute, height: 1.5), textAlign: TextAlign.center),
+            Text(tidy(body!), style: TextStyle(color: context.palette.mute, height: 1.5), textAlign: TextAlign.center),
           ],
           if (action != null) ...[const SizedBox(height: Space.lg), action!],
         ]),

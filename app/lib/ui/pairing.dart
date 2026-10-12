@@ -223,7 +223,7 @@ class _ReviewPairingPageState extends State<ReviewPairingPage> {
           ),
           if (_gone) ...[
             const SizedBox(height: Space.lg),
-            const Banner2('这次请求已失效：对方已取消或离开了等待页面，也可能已在另一台管理设备上处理。需要接入时，请在那台设备上重新发起。', warn: true),
+            const Banner2('这次请求已失效：对方已取消或离开了等待页面，也可能已在另一台管理设备上处理。\n需要接入时，请在那台设备上重新发起。', warn: true),
             const SizedBox(height: Space.xl),
             FilledButton(onPressed: () => Navigator.pop(context), child: const Text('关闭')),
           ] else
@@ -262,7 +262,7 @@ class _ReviewPairingPageState extends State<ReviewPairingPage> {
             value: _manager,
             onChanged: (v) => setState(() => _manager = v),
             title: const Text('作为管理设备'),
-            subtitle: const Text('管理设备可以访问全部环境，并能批准其他设备。只给你自己的设备开启。'),
+            subtitle: const Text('管理设备可以访问全部环境，并能批准其他设备。\n只给你自己的设备开启。'),
           ),
         ),
       ],

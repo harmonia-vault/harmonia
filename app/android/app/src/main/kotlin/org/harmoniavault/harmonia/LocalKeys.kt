@@ -30,8 +30,12 @@ class LocalKeys(private val activity: FragmentActivity) {
                 "bioAvailable" -> result.success(
                     BiometricManager.from(activity).canAuthenticate(BIOMETRIC_STRONG) == BiometricManager.BIOMETRIC_SUCCESS
                 )
-                "bioEnable" -> bioEnable(call.argument<ByteArray>("key")!!, call.argument<String>("title")!!, result)
-                "bioUnlock" -> bioUnlock(call.argument<ByteArray>("slot")!!, call.argument<String>("title")!!, result)
+                "bioEnable" -> bioEnable(
+                    call.argument<ByteArray>("key")!!, call.argument<String>("title")!!, call.argument<String>("cancel")!!, result
+                )
+                "bioUnlock" -> bioUnlock(
+                    call.argument<ByteArray>("slot")!!, call.argument<String>("title")!!, call.argument<String>("cancel")!!, result
+                )
                 "deleteAll" -> {
                     for (alias in listOf(PIN, BIO)) if (ks.containsAlias(alias)) ks.deleteEntry(alias)
                     result.success(null)
@@ -76,12 +80,12 @@ class LocalKeys(private val activity: FragmentActivity) {
     }
 
     // 槽 = IV(12) ‖ 密文。
-    private fun bioEnable(key: ByteArray, title: String, result: MethodChannel.Result) {
+    private fun bioEnable(key: ByteArray, title: String, cancel: String, result: MethodChannel.Result) {
         val cipher = Cipher.getInstance(AES_GCM).apply { init(Cipher.ENCRYPT_MODE, newBioKey()) }
-        prompt(cipher, title, result) { it.iv + it.doFinal(key) }
+        prompt(cipher, title, cancel, result) { it.iv + it.doFinal(key) }
     }
 
-    private fun bioUnlock(slot: ByteArray, title: String, result: MethodChannel.Result) {
+    private fun bioUnlock(slot: ByteArray, title: String, cancel: String, result: MethodChannel.Result) {
         val key = ks.getKey(BIO, null) as SecretKey? ?: return result.error("invalidated", null, null)
         val cipher = Cipher.getInstance(AES_GCM)
         try {
@@ -91,10 +95,13 @@ class LocalKeys(private val activity: FragmentActivity) {
             ks.deleteEntry(BIO)
             return result.error("invalidated", null, null)
         }
-        prompt(cipher, title, result) { it.doFinal(slot, 12, slot.size - 12) }
+        prompt(cipher, title, cancel, result) { it.doFinal(slot, 12, slot.size - 12) }
     }
 
-    private fun prompt(cipher: Cipher, title: String, result: MethodChannel.Result, finish: (Cipher) -> ByteArray) {
+    // cancel 是取消按钮上的文字：解锁时是“改用 PIN”，开启时是“取消”或“跳过”。
+    private fun prompt(
+        cipher: Cipher, title: String, cancel: String, result: MethodChannel.Result, finish: (Cipher) -> ByteArray
+    ) {
         var replied = false
         fun reply(block: () -> Unit) {
             if (!replied) {
@@ -104,7 +111,7 @@ class LocalKeys(private val activity: FragmentActivity) {
         }
         val info = BiometricPrompt.PromptInfo.Builder()
             .setTitle(title)
-            .setNegativeButtonText("改用 PIN")
+            .setNegativeButtonText(cancel)
             .setAllowedAuthenticators(BIOMETRIC_STRONG)
             .build()
         val callback = object : BiometricPrompt.AuthenticationCallback() {

@@ -48,14 +48,18 @@ class AppController extends ChangeNotifier {
     required this.secure,
     required this.files,
     required this.deviceName,
+    required this.platform,
     required this.identity,
-  })  : account = AccountService(crypto),
+  })  : account = AccountService(crypto, platform: platform),
         vault = Vault(crypto, secure, files);
 
   final HCrypto crypto;
   final LocalStore secure;
   final LocalStore files;
   final String deviceName;
+
+  /// 本机在协议中的平台名（`android` 或 `ios`）。
+  final String platform;
   final Identity identity;
   final AccountService account;
   final Vault vault;
@@ -94,6 +98,7 @@ class AppController extends ChangeNotifier {
   int _pushGeneration = 0;
 
   static const _prefsKey = 'prefs';
+  static const _installedKey = 'installed';
   static const lockTimeout = Duration(minutes: 5);
 
   void _go(Stage s) {
@@ -108,6 +113,7 @@ class AppController extends ChangeNotifier {
   // ---- 启动 ----
 
   Future<void> start() async {
+    await _dropLeftovers();
     final raw = await files.read(_prefsKey);
     if (raw != null) prefs = Prefs.fromJson((jsonDecode(raw) as Map).cast<String, dynamic>());
     await _dropOldFormat();
@@ -125,6 +131,15 @@ class AppController extends ChangeNotifier {
     } else {
       _go(Stage.connect);
     }
+  }
+
+  /// iOS 的钥匙串在卸载后仍然保留：数据目录里没有安装标记说明是全新安装，先清除残留，
+  /// 这样卸载重装和 Android 一样视为新设备（docs/protocol.md 2.5）。
+  Future<void> _dropLeftovers() async {
+    if (platform != 'ios' || await files.read(_installedKey) != null) return;
+    await identity.keyring.wipe();
+    await vault.wipe();
+    await files.write(_installedKey, '1');
   }
 
   /// 旧版本把设备密钥直接存在安全存储里，没有 App PIN 保护。1.0 之前不做迁移：清除后重新登录。
@@ -162,7 +177,7 @@ class AppController extends ChangeNotifier {
     _stopPush();
     await identity.keyring.wipe();
     await vault.wipe();
-    notice = '已清除本机数据，请重新登录。这台手机原来的设备记录，请在管理设备上移除。';
+    notice = '已清除本机数据，请重新登录。\n这台手机原来的设备记录，请在管理设备上移除。';
     cancelToSignIn();
   }
 
@@ -298,7 +313,7 @@ class AppController extends ChangeNotifier {
     _stopPush();
     final online = await vault.logout(confirmLast: confirmLast);
     await identity.keyring.wipe();
-    notice = online ? null : '暂时无法连接服务器，本机数据已清除。请在管理设备上移除这台手机。';
+    notice = online ? null : '暂时无法连接服务器，本机数据已清除。\n请在管理设备上移除这台手机。';
     _go(Stage.signedOut);
     return online;
   }
