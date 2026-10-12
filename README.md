@@ -27,7 +27,7 @@ Harmonia 是一个自托管的环境变量同步工具：在手机上集中管�
 
 ### 2. 安装 App 并创建账号
 
-1. 从 [Releases](https://github.com/harmonia-vault/harmonia/releases/latest) 下载安装包：Android 下载 `harmonia-<版本>.apk` 直接安装；iPhone 见下面的[在 iPhone 上安装](#在-iphone-上安装)。
+1. 从 [Releases](https://github.com/harmonia-vault/harmonia/releases/latest) 下载安装包：Android 下载 `harmonia-<版本>-android-arm64.apk`（现代 ARM64 手机）直接安装，旧款仅支持 32 位的设备下载 `harmonia-<版本>-android-arm.apk`；iPhone 见下面的[在 iPhone 上安装](#在-iphone-上安装)。
 2. 打开 App，填写服务器地址（也可以在电脑浏览器里打开服务器地址，用 App 的“扫码填写”扫页面上的二维码），用邮箱注册（服务端开启了邮箱验证时，还要输入邮件中的验证码）。
 3. App 会生成**恢复码**：请抄在纸上或存进密码管理器。丢失所有手机时，只有它能找回数据。
 4. 新建环境（例如“OpenAI”），添加变量（例如 `OPENAI_API_KEY`）。
@@ -154,7 +154,7 @@ ExecStart=/home/me/.local/bin/harmonia exec -- /usr/bin/node /srv/agent/index.js
 
 ## 升级
 
-- **App（Android）**：在“设置 → 检查更新”中升级，也会每天自动检查一次。安装包经过签名校验，数据保留。
+- **App（Android）**：在“设置 → 检查更新”中升级，也会每天自动检查一次，自动选择当前架构的安装包。安装包经过签名校验，数据保留。`0.3.1-rc.10` 起按架构分包，此前版本需要从 Releases 下载对应 APK 覆盖安装一次，请勿卸载；之后继续应用内更新。
 - **App（iPhone）**：“设置 → 检查更新”会提示新版本。点“下载并导入签名工具”，在弹出的面板里选择安装时使用的签名工具（轻松签、全能签、万能签等），再用它和同一个 Apple ID（或证书）签名安装即可，数据保留。也可以点“打开下载页”自己下载。
 - **命令行**：`harmonia update`。后台服务每天检查一次，有新版本时 `harmonia status` 会提示。
 - **服务端**：在你的 Fork 中点击 Sync fork。

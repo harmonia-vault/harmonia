@@ -367,6 +367,10 @@ harmonia uninstall
 - **Android**：
   - App 在前台时检查，24 小时内最多检查一次。有更新时显示更新说明，用户确认后在 App 内下载 APK，验证哈希，然后交给系统安装器（需要 `REQUEST_INSTALL_PACKAGES` 权限）。
   - Android 与 iOS 共用下载进度界面：连接时显示等待状态，接收数据时按实际字节数与已签名清单中的总大小显示进度条、百分比和已下载大小；收完后显示校验状态。校验与缓存写入完成后才进入原有安装或分享步骤，下载失败仍留在 App 内提示重试。
+  - Android 按现有支持架构分包：`harmonia-<版本>-android-arm64.apk`（ARM64）与 `harmonia-<版本>-android-arm.apk`（ARM32）；使用 Flutter `--split-per-abi --target-platform android-arm,android-arm64`，每个 APK 只包含对应架构的原生库，不发布通用包或 x86_64 包。
+  - 签名清单的 Android 资源键改为 `android-arm64`、`android-arm`，每项独立记录 URL、SHA-256 与大小；App 使用 Dart 标准 `Abi.current()` 选择当前运行架构，不以设备型号猜测，不新增原生桥。缺少匹配资源时明确提示去发布页选择，不误报已是最新版本。iOS 和 CLI 的资源键不变。
+  - 分包保持统一版本号、原有签名密钥和构建号算法；设置 Flutter 官方 `force-version-code-ignoring-abi=true`，禁止为架构额外抬高 versionCode，避免后续版本被系统判成降级。
+  - 0.3.1-rc.10 是首次分包版本；此前版本只认识通用包资源键，需要从发布页选择对应架构覆盖安装一次（不卸载），之后继续 App 内更新。按照 1.0 前不保留兼容分支的规则，不保留通用包资源键。
   - 系统会校验 APK 签名必须与已安装版本一致。
   - `versionCode` 由版本号计算，顺序与版本顺序一致：基础版本 ×100 + 后缀分（alpha N → N，beta N → 20+N，rc N → 50+N，正式版 → 99），例如 `0.1.2-beta.1` → 10221、`0.1.2-rc.1` → 10251、`0.1.2` → 10299。不使用 CI 的 run_number。
 - **服务端**：`/instance` 返回服务端版本和协议版本。客户端发现协议不兼容时，提示用户更新服务端（Sync fork 或 Actions 更新），或者更新客户端。
@@ -653,7 +657,7 @@ iOS App 与 Android App 是同一个 Flutter 工程（`app/`），`lib/` 下的�
 
 ### 14.4 分发与更新
 
-- **发布物**：每个 Release 增加 `harmonia-<版本>.ipa`（未签名），由 CI 在 macOS 上构建。签名清单的 `assets` 增加 `ios` 一项（下载地址、SHA-256、大小），格式与 `android` 相同。构建号沿用 Android 的 `versionCode` 算法。
+- **发布物**：每个 Release 增加 `harmonia-<版本>.ipa`（未签名），由 CI 在 macOS 上构建。签名清单的 `assets` 增加 `ios` 一项（下载地址、SHA-256、大小），格式与 Android 分包相同。构建号沿用 Android 的 `versionCode` 算法。
 - **安装**：使用者用 AltStore、SideStore 或自己的开发者证书签名后安装。README 说明安装步骤，并提醒：
   - 用免费 Apple ID 签名的 App 7 天后过期，需要在过期前重新签名（上述工具会自动续签）；过期后 App 打不开，重新签名后数据仍在。
   - 换一个 Apple ID 或证书签名，相当于安装了另一个 App，原来的数据读不到，需要按新设备重新接入。

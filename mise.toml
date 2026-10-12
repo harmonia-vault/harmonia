@@ -96,9 +96,9 @@ dir = "cli"
 run = "go build -o bin/harmonia ./cmd/harmonia"
 
 [tasks.build-apk]
-description = "构建 Android Release APK"
+description = "构建 Android ARM64 与 ARM32 分架构 Release APK"
 dir = "app"
-run = "flutter build apk --release"
+run = "flutter build apk --release --split-per-abi --target-platform android-arm,android-arm64"
 
 [tasks.build-ipa]
 description = "构建未签名的 iOS IPA（自行签名后安装）"

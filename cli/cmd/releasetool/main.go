@@ -87,7 +87,8 @@ func manifest(args []string) error {
 		"cli-linux-amd64":   "harmonia-linux-amd64",
 		"cli-windows-arm64": "harmonia-windows-arm64.exe",
 		"cli-windows-amd64": "harmonia-windows-amd64.exe",
-		"android":           "harmonia-" + *version + ".apk",
+		"android-arm64":     "harmonia-" + *version + "-android-arm64.apk",
+		"android-arm":       "harmonia-" + *version + "-android-arm.apk",
 		"ios":               "harmonia-" + *version + ".ipa",
 	}
 	assets := map[string]asset{}

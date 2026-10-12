@@ -1,6 +1,7 @@
 // 应用内更新：读取更新源（GitHub Releases 的 update-feed）中对应渠道、带 minisign 签名的清单。
 // 安装包下载后先按清单校验。Android 上交给系统安装器；iOS 上交给用户选择的签名工具，由它签名安装。
 import 'dart:convert';
+import 'dart:ffi';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -11,6 +12,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../core/crypto.dart';
 import '../core/update_download.dart';
+import '../core/update_asset.dart';
 import 'debug_update.dart';
 import 'platform.dart';
 import '../ui/download_progress.dart';
@@ -122,8 +124,11 @@ Future<UpdateInfo?> fetchUpdate(HCrypto c, UpdateChannel channel) async {
   // 正式版渠道只接受正式版本，防止测试版清单被当作正式版下发。
   if (channel == UpdateChannel.stable && isPrerelease(version)) throw Exception('更新信息异常，已拒绝。');
   if (!isNewer(version, appVersion)) return null;
-  final asset = ((m['assets'] as Map)[hostPlatform] as Map?)?.cast<String, dynamic>();
-  if (asset == null) return null;
+  final asset = selectAppUpdateAsset(
+    (m['assets'] as Map).cast<String, dynamic>(),
+    platform: hostPlatform,
+    abi: Abi.current(),
+  );
   return UpdateInfo(
     version,
     m['notes'] as String? ?? '',
