@@ -149,6 +149,7 @@ const MIGRATIONS: string[][] = [
     `CREATE TABLE login_failures (net TEXT PRIMARY KEY, count INTEGER NOT NULL, window_start INTEGER NOT NULL, next_at INTEGER NOT NULL)`,
     `CREATE TABLE login_events (at INTEGER NOT NULL)`,
   ],
+  [`ALTER TABLE devices ADD COLUMN system_vars INTEGER NOT NULL DEFAULT 0`],
 ];
 
 export function migrate(sql: Sql): void {

@@ -124,3 +124,38 @@ describe("激活状态与顺序", () => {
     ]);
   });
 });
+
+describe("写入系统变量开关", () => {
+  it("默认关闭；管理设备和设备本身都能修改；设备本身不能改名，也不能修改其他设备", async () => {
+    const s = new TestServer();
+    const a = await TestAccount.create(s);
+    const e1 = await a.createEnv(s, [a.phone.id], "A");
+    const cli = await pairClient(s, a, [{ envId: e1, role: "ro" }]);
+    const other = await pairClient(s, a, [{ envId: e1, role: "ro" }]);
+    const self = async () => (await s.ok("GET", "/api/v1/sync?since=0", { token: cli.token })).self;
+    const seen = async () =>
+      (await s.ok("GET", "/api/v1/sync?since=0", { token: a.phone.token })).manager.devices.find((d: { id: string }) => d.id === cli.id);
+    expect((await self()).systemVars).toBe(false);
+
+    const pushes = s.pushes.length;
+    await s.ok("PATCH", "/api/v1/devices/self", { token: cli.token, body: { systemVars: true } });
+    expect(s.pushes.slice(pushes).some((p) => p.msg.type === "changed")).toBe(true);
+    expect((await self()).systemVars).toBe(true);
+    expect((await seen()).systemVars).toBe(true);
+
+    // 管理设备改名时不带开关，开关保持不变；单独关闭开关时名字保持不变。
+    await s.ok("PATCH", `/api/v1/devices/${cli.id}`, { token: a.phone.token, body: { name: "办公室电脑" } });
+    expect(await seen()).toMatchObject({ name: "办公室电脑", systemVars: true });
+    await s.ok("PATCH", `/api/v1/devices/${cli.id}`, { token: a.phone.token, body: { systemVars: false } });
+    expect(await self()).toMatchObject({ name: "办公室电脑", systemVars: false });
+
+    const rename = await s.call("PATCH", "/api/v1/devices/self", { token: cli.token, body: { name: "x" } });
+    expect(rename.status).toBe(403);
+    const byOther = await s.call("PATCH", `/api/v1/devices/${cli.id}`, { token: other.token, body: { systemVars: true } });
+    expect(byOther.status).toBe(403);
+    const empty = await s.call("PATCH", "/api/v1/devices/self", { token: cli.token, body: {} });
+    expect(empty.status).toBe(400);
+    const wrong = await s.call("PATCH", "/api/v1/devices/self", { token: cli.token, body: { systemVars: "yes" } });
+    expect(wrong.status).toBe(400);
+  });
+});

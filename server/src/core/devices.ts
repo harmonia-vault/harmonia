@@ -80,12 +80,20 @@ export function deviceRoutes(app: Hono, deps: Deps) {
     return c.json({ ok: true });
   });
 
+  // 设备名和“写入系统变量”开关：管理设备可以修改任何设备，设备本身用 self 只能修改自己的开关（docs/protocol.md 3.2）。
   app.patch("/api/v1/devices/:id", async (c) => {
-    await requireDevice(c, deps, { manager: true });
-    const t = target(sql, id(c.req.param("id"), "设备 ID"));
-    const name = label((await readJson(c)).name, "设备名");
+    const d = await requireDevice(c, deps);
+    const param = c.req.param("id");
+    if (param !== "self" && d.kind !== "manager") throw forbidden("只有管理设备可以修改其他设备。");
+    const t = param === "self" ? d : target(sql, id(param, "设备 ID"));
+    const body = await readJson(c);
+    if (body.name === undefined && body.systemVars === undefined) throw bad("没有要修改的内容。");
+    if (body.name !== undefined && d.kind !== "manager") throw forbidden("只有管理设备可以修改设备名。");
+    if (body.systemVars !== undefined && typeof body.systemVars !== "boolean") throw bad("systemVars 只能是 true 或 false。");
+    const name = body.name === undefined ? t.name : label(body.name, "设备名");
+    const systemVars = body.systemVars === undefined ? t.system_vars : Number(body.systemVars);
     sql.transaction(() => {
-      sql.run(`UPDATE devices SET name = ? WHERE id = ?`, name, t.id);
+      sql.run(`UPDATE devices SET name = ?, system_vars = ? WHERE id = ?`, name, systemVars, t.id);
       bump(sql);
     });
     deps.notifier.send("all", { type: "changed", seq: headSeq(sql) });

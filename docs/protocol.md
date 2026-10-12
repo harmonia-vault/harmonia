@@ -194,7 +194,7 @@ HashToP256(pk)：
 | `PUT /account/password` | device（管理设备） | `{kdfSalt, authKey}` |
 | `POST /auth/challenge` | 请求头 `X-Harmonia-Account` | `{deviceId}` → `{nonce, expiresAt}`，nonce 只能使用一次，2 分钟内有效 |
 | `POST /auth/device-session` | 请求头 `X-Harmonia-Account` | `{deviceId, nonce, signature}` → `{token, expiresAt}` |
-| `POST /pairings` | password | `{name, platform, signPub, boxPub, rootPub, canManage}` → `{id, secret, expiresAt}`，10 分钟内有效。`platform` 是 `android`、`ios`、`darwin`、`linux` 之一，只用于显示。`canManage` 表示发起方的客户端具备管理功能（目前只有 App 为 true）。服务端记录发起方 IP；该 IP 被阻止时返回 `pairing_blocked` |
+| `POST /pairings` | password | `{name, platform, signPub, boxPub, rootPub, canManage}` → `{id, secret, expiresAt}`，10 分钟内有效。`platform` 是 `android`、`ios`、`darwin`、`linux`、`windows` 之一，只用于显示。`canManage` 表示发起方的客户端具备管理功能（目前只有 App 为 true）。服务端记录发起方 IP；该 IP 被阻止时返回 `pairing_blocked` |
 | `GET /pairings/{id}/events` | 请求头 `X-Harmonia-Account` 和 `X-Pairing-Secret` | 发起方的等待连接（WebSocket），见 3.5.1 |
 | `GET /pairings/{id}/status` | 请求头 `X-Harmonia-Account` 和 `X-Pairing-Secret` | `{status}`：`pending` / `approved` / `rejected` / `expired` / `cancelled`。只在等待连接意外断开后查询一次 |
 | `GET /pairings` | device（管理设备） | 列出发起方仍在等待的请求，每项带 `ip` 和 `canManage` |
@@ -210,7 +210,7 @@ HashToP256(pk)：
 | `DELETE /environments/{id}/variables/{name}` | 同上 | 请求头带 `Idempotency-Key` |
 | `PUT /devices/{id}/grants` | 管理设备 | `{grants:[{envId, role, expiresAt}], envelopes:[{envId, keyVersion, sealed, sig}]}`，整体替换；新授权的环境必须附带封装。已有授权保留激活状态和顺序，新授权默认激活并排在最后 |
 | `PUT /devices/{id}/activation` | 管理设备；或设备本身，此时 `{id}` 为 `self` | `{envs:[{envId, active}]}`，按顺序从前到后排列（排在前面的覆盖后面的同名变量），必须包含该设备全部未到期的授权环境（可以带上已到期的），不能有未授权的环境，否则返回 `conflict`；没有列出的已到期授权保持原有相对顺序，排在后面。只修改激活状态和顺序 |
-| `PATCH /devices/{id}` | 管理设备 | `{name}` |
+| `PATCH /devices/{id}` | 管理设备；或设备本身，此时 `{id}` 为 `self` | `{name, systemVars}`，两项都可以省略，但至少要有一项。`systemVars`（布尔）表示这台设备是否把系统自身使用的变量名写入系统环境，目前只有 Windows 上的 CLI 使用，默认 false。设备本身只能修改 `systemVars` |
 | `POST /devices/{id}/revoke` | 管理设备 | 撤销。不能撤销最后一台管理设备 |
 | `POST /devices/self/revoke` | device | 本机退出。最后一台管理设备需要带上 `{confirmLast:true}` |
 | `POST /recovery/session` | 请求头 `X-Harmonia-Account` | `{nonce, signature}` → `{token, expiresAt}` |
@@ -255,14 +255,14 @@ HashToP256(pk)：
 ```json
 {
   "seq": 42,
-  "self": {"id": "...", "kind": "client", "name": "...", "rotationRequired": false},
+  "self": {"id": "...", "kind": "client", "name": "...", "rotationRequired": false, "systemVars": false},
   "environments": [{"id": "...", "name": "...", "keyVersion": "1", "role": "rw", "expiresAt": 0, "active": true, "position": 0}],
   "envelopes": [{"envId": "...", "keyVersion": "1", "sealed": "...", "sig": "..."}],
   "variables": [{"envId": "...", "name": "K", "value": "<密文>", "keyVersion": "1", "deleted": false, "seq": 40}],
   "manager": {
     "rootSealed": "...",
     "recovery": {"generation": "1", "boxPub": "..."},
-    "devices": [{"id": "...", "name": "...", "platform": "...", "kind": "...", "signPub": "...", "boxPub": "...", "cert": "...", "createdAt": 0, "lastSeenAt": 0, "grants": [{"envId": "...", "role": "...", "expiresAt": 0, "active": true, "position": 0}]}]
+    "devices": [{"id": "...", "name": "...", "platform": "...", "kind": "...", "signPub": "...", "boxPub": "...", "cert": "...", "createdAt": 0, "lastSeenAt": 0, "systemVars": false, "grants": [{"envId": "...", "role": "...", "expiresAt": 0, "active": true, "position": 0}]}]
   }
 }
 ```
@@ -270,6 +270,7 @@ HashToP256(pk)：
 - `environments` 和 `envelopes` 每次都返回当前可访问的**完整列表**。客户端据此清除不在列表中的环境。
 - `variables` 只返回增量：所在环境可见，并且满足 `seq > N`，或者本设备对该环境的授权是在 N 之后获得的。
 - `manager` 字段只返回给管理设备。管理设备的 `role` 恒为 `admin`。
+- `systemVars` 是设备上的“写入系统变量”开关，见 `PATCH /devices/{id}`；响应里没有这个字段时（较旧的服务端）按 false 处理。
 - `active` 和 `position` 是授权上的激活状态和顺序，`position` 从 0 开始，越小越靠前。管理设备的 `environments` 中 `active` 恒为 true，`position` 按环境创建先后排列。
 
 ### 3.5 推送

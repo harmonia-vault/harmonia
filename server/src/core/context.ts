@@ -50,6 +50,7 @@ export type Device = {
   root_sealed: string | null;
   status: string;
   rotation_required: number;
+  system_vars: number;
   created_at: number;
   last_seen_at: number;
 };
