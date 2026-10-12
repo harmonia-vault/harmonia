@@ -104,8 +104,10 @@ class _NavBar extends StatelessWidget {
     final p = context.palette;
     if (usesGlass(context)) {
       const icons = [CupertinoIcons.square_stack_3d_up, CupertinoIcons.device_laptop, CupertinoIcons.gear_alt];
-      return Padding(
-        padding: EdgeInsets.only(bottom: (MediaQuery.viewPaddingOf(context).bottom - 16).clamp(8, 24)),
+      return SafeArea(
+        top: false,
+        maintainBottomViewPadding: true,
+        minimum: const EdgeInsets.only(bottom: 8),
         child: GlassTabBar.bottom(
           tabs: [
             for (var i = 0; i < items.length; i++)
@@ -126,7 +128,7 @@ class _NavBar extends StatelessWidget {
           barHeight: 64,
           barBorderRadius: 32,
           settings: glassSettings(context),
-          quality: GlassQuality.premium,
+          quality: glassQuality(context),
           selectedIconColor: p.accent,
           selectedLabelColor: p.accent,
           unselectedIconColor: p.ink,
@@ -144,8 +146,10 @@ class _NavBar extends StatelessWidget {
       color: p.card,
       child: Material(
         color: Colors.transparent,
-        child: Padding(
-          padding: EdgeInsets.only(bottom: (MediaQuery.viewPaddingOf(context).bottom - 16).clamp(8, 24)),
+        child: SafeArea(
+          top: false,
+          maintainBottomViewPadding: true,
+          minimum: const EdgeInsets.only(bottom: 8),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(Space.sm, Space.sm, Space.sm, 0),
             child: Row(

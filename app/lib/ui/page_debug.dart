@@ -9,6 +9,7 @@ import '../core/debug_vault.dart';
 import '../core/appearance.dart';
 import 'app_scope.dart';
 import 'glass.dart';
+import 'glass_debug.dart';
 import 'page_debug_catalog.dart';
 import 'stage_page.dart';
 import 'theme.dart';
@@ -27,6 +28,7 @@ class _PageDebugState extends State<PageDebug> {
   String? _error;
   int _navigationGeneration = 0;
   bool _large = false, _contrast = false, _reduceMotion = false, _pageActive = false;
+  GlassQuality? _glassQuality;
   Stage _lastStage = Stage.home;
 
   @override
@@ -160,26 +162,29 @@ class _PageDebugState extends State<PageDebug> {
             highContrast: _contrast,
             disableAnimations: _reduceMotion,
           ),
-          child: LiquidGlassWidgets.wrap(
-            brightnessResolver: Theme.maybeBrightnessOf,
-            child: Scaffold(
-              appBar: AppBar(
-                title: const Text('页面调试 · 模拟数据', style: TextStyle(fontSize: 16)),
-                leading: IconButton(
-                  tooltip: '退出调试',
-                  icon: const Icon(Icons.close),
-                  onPressed: () => Navigator.pop(context),
-                ),
-                actions: [
-                  IconButton(tooltip: '返回目录', icon: const Icon(Icons.grid_view), onPressed: _catalog),
-                  IconButton(
-                    tooltip: '重置示例',
-                    icon: const Icon(Icons.restart_alt),
-                    onPressed: () => _reset(DebugScenario.normal),
+          child: GlassRenderingScope(
+            quality: _glassQuality,
+            child: LiquidGlassWidgets.wrap(
+              brightnessResolver: Theme.maybeBrightnessOf,
+              child: Scaffold(
+                appBar: AppBar(
+                  title: const Text('页面调试 · 模拟数据', style: TextStyle(fontSize: 16)),
+                  leading: IconButton(
+                    tooltip: '退出调试',
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
                   ),
-                ],
+                  actions: [
+                    IconButton(tooltip: '返回目录', icon: const Icon(Icons.grid_view), onPressed: _catalog),
+                    IconButton(
+                      tooltip: '重置示例',
+                      icon: const Icon(Icons.restart_alt),
+                      onPressed: () => _reset(DebugScenario.normal),
+                    ),
+                  ],
+                ),
+                body: child,
               ),
-              body: child,
             ),
           ),
         ),
@@ -189,6 +194,7 @@ class _PageDebugState extends State<PageDebug> {
         error: _error,
         onOpen: _open,
         options: [
+          GlassDebugOptions(quality: _glassQuality, onChanged: (quality) => setState(() => _glassQuality = quality)),
           SwitchListTile(
             title: const Text('液态玻璃'),
             value: session.c.appearance.liquidGlass,

@@ -41,6 +41,10 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- 液态玻璃的完整折射需要 Impeller；不强制 Vulkan，保留引擎的设备兼容回退。 -->
+        <meta-data
+            android:name="io.flutter.embedding.android.EnableImpeller"
+            android:value="true" />
     </application>
     <queries>
         <intent>

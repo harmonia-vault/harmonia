@@ -14,6 +14,7 @@ import 'devices.dart';
 import 'device_review.dart';
 import 'environments.dart';
 import 'glass.dart';
+import 'glass_debug.dart';
 import 'home.dart';
 import 'lock.dart';
 import 'pairing.dart';
@@ -34,7 +35,8 @@ class DebugPageEntry {
 
 Map<String, List<DebugPageEntry>> debugPages() => {
   '首页与管理': [
-    DebugPageEntry('首页与底部导航', (s) => s.vault.paired ? HomePage(c: s.c) : SignInPage(c: s.c)),
+    DebugPageEntry('首页、底部导航与安全区', (s) => s.vault.paired ? HomePage(c: s.c) : SignInPage(c: s.c)),
+    DebugPageEntry('玻璃折射对照', (_) => const GlassDebugPage()),
     DebugPageEntry('设备列表', (s) => s.vault.paired ? DevicesTab(c: s.c) : SignInPage(c: s.c)),
     DebugPageEntry('设置与安全弹窗', (s) => s.vault.paired ? SettingsTab(c: s.c) : SignInPage(c: s.c)),
     DebugPageEntry('关于与开源许可', (_) => const AboutPage()),

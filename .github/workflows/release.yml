@@ -1,10 +1,12 @@
 name: Release
 
 # 推送 v* 标签时发布：CLI 六个平台二进制、签名 APK、未签名 IPA、签名清单。服务端由 publish-server.yml 发布到 harmonia-worker。
+# 测试版也支持推送 release/v*-rc.*、release/v*-beta.*、release/v*-alpha.* 分支；全部构建成功后才创建标签和发布。
 # 带“-”的版本（例如 v0.1.2-rc.1、v0.1.2-beta.1）发布为预发布，只进入测试版渠道。
 on:
   push:
     tags: ['v*']
+    branches: ['release/v*-rc.*', 'release/v*-beta.*', 'release/v*-alpha.*']
 
 permissions:
   contents: write
@@ -17,7 +19,8 @@ jobs:
       # 服务端的版本号写在 server/package.json 里，不像 CLI 和 App 那样在构建时从标签取；这里拦住忘记改的情况。
       - name: 核对服务端版本号
         run: |
-          WANT="${GITHUB_REF_NAME#v}"
+          WANT="${GITHUB_REF_NAME#release/}"
+          WANT="${WANT#v}"
           WANT="${WANT%%-*}"
           HAVE="$(jq -r .version server/package.json)"
           if [ "$HAVE" != "$WANT" ]; then
@@ -31,7 +34,8 @@ jobs:
       - name: 构建
         working-directory: cli
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          TAG="${GITHUB_REF_NAME#release/}"
+          VERSION="${TAG#v}"
           mkdir -p ../dist
           for target in darwin/arm64 darwin/amd64 linux/arm64 linux/amd64 windows/arm64 windows/amd64; do
             ext=""
@@ -74,7 +78,8 @@ jobs:
       - name: 构建 APK
         working-directory: app
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          TAG="${GITHUB_REF_NAME#release/}"
+          VERSION="${TAG#v}"
           read -r BASE CODE <<< "$(bash tool/build-number.sh "$VERSION")"
           echo "versionCode=$CODE"
           flutter pub get
@@ -100,7 +105,8 @@ jobs:
       - name: 构建 IPA
         working-directory: app
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          TAG="${GITHUB_REF_NAME#release/}"
+          VERSION="${TAG#v}"
           read -r BASE CODE <<< "$(bash tool/build-number.sh "$VERSION")"
           flutter pub get
           flutter build ios --release --no-codesign \
@@ -134,15 +140,21 @@ jobs:
           HARMONIA_RELEASE_KEY: ${{ secrets.RELEASE_MINISIGN_KEY }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}"
-          # checkout 会把附注标签替换成轻量标签，重新拉取以读取标签说明。
-          git fetch --force origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
-          NOTES=$(git tag -l --format='%(contents:subject)%0a%0a%(contents:body)' "$GITHUB_REF_NAME" | sed '/^-----BEGIN/,$d' | head -20)
+          TAG="${GITHUB_REF_NAME#release/}"
+          VERSION="${TAG#v}"
+          URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}"
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            # checkout 会把附注标签替换成轻量标签，重新拉取以读取标签说明。
+            git fetch --force origin "refs/tags/${TAG}:refs/tags/${TAG}"
+            NOTES=$(git tag -l --format='%(contents:subject)%0a%0a%(contents:body)' "$TAG" | sed '/^-----BEGIN/,$d' | head -20)
+          else
+            # 发布分支固定到本次构建的提交；发布说明取提交正文。
+            NOTES=$(git log -1 --format=%B "$GITHUB_SHA" | head -20)
+          fi
           (cd cli && go run ./cmd/releasetool manifest --version "$VERSION" --dist ../dist --base-url "$URL" --notes "$NOTES")
           FLAGS=""
           case "$VERSION" in *-*) FLAGS="--prerelease" ;; esac
-          gh release create "$GITHUB_REF_NAME" dist/* --title "Harmonia $VERSION" --notes "${NOTES:-Harmonia $VERSION}" $FLAGS
+          gh release create "$TAG" dist/* --target "$GITHUB_SHA" --title "Harmonia $VERSION" --notes "${NOTES:-Harmonia $VERSION}" $FLAGS
       - name: 更新渠道清单
         env:
           GH_TOKEN: ${{ github.token }}
@@ -154,6 +166,7 @@ jobs:
           fi
           mkdir -p feed
           gh release download update-feed -D feed -p '*.json*' || true
-          (cd cli && go run ./cmd/releasetool feed --version "${GITHUB_REF_NAME#v}" --dist ../dist --feed ../feed)
+          TAG="${GITHUB_REF_NAME#release/}"
+          (cd cli && go run ./cmd/releasetool feed --version "${TAG#v}" --dist ../dist --feed ../feed)
           cp dist/install.sh dist/install.ps1 feed/
           gh release upload update-feed feed/* --clobber

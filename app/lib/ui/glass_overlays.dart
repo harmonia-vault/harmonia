@@ -137,7 +137,7 @@ class AppMenuButton extends StatelessWidget {
       itemBorderRadius: 20,
       menuPadding: const EdgeInsets.all(6),
       settings: glassSettings(context),
-      quality: GlassQuality.premium,
+      quality: glassQuality(context),
       semanticLabel: '环境操作',
       items: [
         for (final item in items)

@@ -1,4 +1,6 @@
 // 玻璃承载悬浮操作，正文保持实色；内容始终位于折射层之外。
+import 'dart:ui' as ui;
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,12 +11,31 @@ import 'theme.dart';
 abstract final class GlassResources {
   static bool _ready = false;
 
+  static bool get supportsRefraction => ui.ImageFilter.isShaderFilterSupported;
+
   static Future<void> prepare() async {
     if (_ready) return;
     await LiquidGlassWidgets.initialize(enablePerformanceMonitor: false);
+    debugPrint('[Harmonia glass] shaderFilterSupported=$supportsRefraction');
     _ready = true;
   }
 }
+
+/// 只在页面调试中覆盖；正常界面按引擎能力选择，不增加用户画质设置。
+class GlassRenderingScope extends InheritedWidget {
+  const GlassRenderingScope({super.key, this.quality, required super.child});
+  final GlassQuality? quality;
+
+  static GlassQuality qualityOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<GlassRenderingScope>()?.quality ??
+      (GlassResources.supportsRefraction ? GlassQuality.premium : GlassQuality.standard);
+
+  @override
+  bool updateShouldNotify(GlassRenderingScope oldWidget) => quality != oldWidget.quality;
+}
+
+// 不支持完整折射时直接选 standard，避免插件把 premium 的厚度和光照再次缩小。
+GlassQuality glassQuality(BuildContext context) => GlassRenderingScope.qualityOf(context);
 
 bool usesGlass(BuildContext context) =>
     (Theme.of(context).extension<AppearanceTheme>()?.liquidGlass ?? false) && !MediaQuery.highContrastOf(context);
@@ -60,7 +81,7 @@ class AppSurface extends StatelessWidget {
                 child: glass
                     ? GlassContainer(
                         useOwnLayer: true,
-                        quality: GlassQuality.premium,
+                        quality: glassQuality(context),
                         shape: LiquidRoundedSuperellipse(borderRadius: radius),
                         settings: glassSettings(context, color: color),
                       )
