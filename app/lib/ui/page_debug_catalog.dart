@@ -13,6 +13,7 @@ import 'auth_pages.dart';
 import 'devices.dart';
 import 'device_review.dart';
 import 'environments.dart';
+import 'feedback_debug.dart';
 import 'glass.dart';
 import 'glass_debug.dart';
 import 'home.dart';
@@ -35,8 +36,9 @@ class DebugPageEntry {
 
 Map<String, List<DebugPageEntry>> debugPages() => {
   '首页与管理': [
-    DebugPageEntry('首页、底部导航与安全区', (s) => s.vault.paired ? HomePage(c: s.c) : SignInPage(c: s.c)),
+    DebugPageEntry('首页、Android / iOS 底部间距', (s) => s.vault.paired ? HomePage(c: s.c) : SignInPage(c: s.c)),
     DebugPageEntry('玻璃折射对照', (_) => const GlassDebugPage()),
+    DebugPageEntry('通知与下载进度', (_) => const FeedbackDebugPage()),
     DebugPageEntry('设备列表', (s) => s.vault.paired ? DevicesTab(c: s.c) : SignInPage(c: s.c)),
     DebugPageEntry('设置与安全弹窗', (s) => s.vault.paired ? SettingsTab(c: s.c) : SignInPage(c: s.c)),
     DebugPageEntry('关于与开源许可', (_) => const AboutPage()),
@@ -204,7 +206,7 @@ Map<String, List<DebugPageEntry>> debugPages() => {
       ),
     ),
     DebugPageEntry(
-      '更新弹层',
+      '更新说明与下载',
       (s) => DebugOverlay(show: (c) => checkForUpdate(c, manual: true, channel: s.c.updateChannel)),
     ),
   ],

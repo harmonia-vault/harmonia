@@ -104,10 +104,7 @@ class _NavBar extends StatelessWidget {
     final p = context.palette;
     if (usesGlass(context)) {
       const icons = [CupertinoIcons.square_stack_3d_up, CupertinoIcons.device_laptop, CupertinoIcons.gear_alt];
-      return SafeArea(
-        top: false,
-        maintainBottomViewPadding: true,
-        minimum: const EdgeInsets.only(bottom: 8),
+      return _NavSafeArea(
         child: GlassTabBar.bottom(
           tabs: [
             for (var i = 0; i < items.length; i++)
@@ -146,10 +143,7 @@ class _NavBar extends StatelessWidget {
       color: p.card,
       child: Material(
         color: Colors.transparent,
-        child: SafeArea(
-          top: false,
-          maintainBottomViewPadding: true,
-          minimum: const EdgeInsets.only(bottom: 8),
+        child: _NavSafeArea(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(Space.sm, Space.sm, Space.sm, 0),
             child: Row(
@@ -202,6 +196,24 @@ class _NavBar extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Android 保留完整手势区；iOS 恢复此前已验证的紧凑留白，两端都避让横屏侧边。
+class _NavSafeArea extends StatelessWidget {
+  const _NavSafeArea({required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final ios = Theme.of(context).platform == TargetPlatform.iOS;
+    return SafeArea(
+      top: false,
+      bottom: !ios,
+      maintainBottomViewPadding: true,
+      minimum: EdgeInsets.only(bottom: ios ? (MediaQuery.viewPaddingOf(context).bottom - 16).clamp(8, 24) : 8),
+      child: child,
     );
   }
 }

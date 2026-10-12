@@ -3,13 +3,17 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
 import '../core/crypto.dart';
+import '../core/update_download.dart';
+import 'debug_update.dart';
 import 'platform.dart';
+import '../ui/download_progress.dart';
 import '../ui/update_sheet.dart';
 import '../ui/app_scope.dart';
 import '../ui/widgets.dart';
@@ -34,6 +38,7 @@ enum UpdateChannel {
   static UpdateChannel parse(String? s) =>
       values.where((c) => c.name == s).firstOrNull ?? (isPrerelease(appVersion) ? beta : stable);
 }
+
 const _channel = MethodChannel('harmonia/platform');
 
 class UpdateInfo {
@@ -101,10 +106,8 @@ Future<UpdateInfo?> fetchUpdate(HCrypto c, UpdateChannel channel) async {
   // 清单与签名同时请求。
   final List<http.Response> responses;
   try {
-    responses = await Future.wait([
-      http.get(Uri.parse(url)),
-      http.get(Uri.parse('$url.minisig')),
-    ]).timeout(const Duration(seconds: 20));
+    responses = await Future.wait([http.get(Uri.parse(url)), http.get(Uri.parse('$url.minisig'))])
+        .timeout(const Duration(seconds: 20));
   } catch (_) {
     throw Exception('无法连接更新服务器，请检查网络后重试。');
   }
@@ -121,8 +124,13 @@ Future<UpdateInfo?> fetchUpdate(HCrypto c, UpdateChannel channel) async {
   if (!isNewer(version, appVersion)) return null;
   final asset = ((m['assets'] as Map)[hostPlatform] as Map?)?.cast<String, dynamic>();
   if (asset == null) return null;
-  return UpdateInfo(version, m['notes'] as String? ?? '', asset['url'] as String, asset['sha256'] as String,
-      asset['size'] as int);
+  return UpdateInfo(
+    version,
+    m['notes'] as String? ?? '',
+    asset['url'] as String,
+    asset['sha256'] as String,
+    asset['size'] as int,
+  );
 }
 
 late HCrypto updaterCrypto;
@@ -132,10 +140,21 @@ DateTime? _lastAutoCheck;
 Future<void> checkForUpdate(BuildContext context, {required bool manual, required UpdateChannel channel}) async {
   if (AppScope.isSimulated(context)) {
     if (!manual) return;
-    final choice = await showUpdateSheet(context, version: '0.0.1', current: '0.0.0',
+    final choice = await showUpdateSheet(
+      context,
+      version: '0.0.1',
+      current: '0.0.0',
       notes: List.generate(8, (i) => '- 示例更新 ${i + 1}：检查长内容滚动与固定按钮。').join('\n'),
-      hint: '此处使用模拟更新。', primary: '模拟安装', secondary: '模拟打开下载页');
-    if (choice != null && context.mounted) toast(context, '模拟操作已完成');
+      hint: '此处使用模拟更新。',
+      primary: '模拟安装',
+      secondary: '模拟打开下载页',
+    );
+    if (!context.mounted) return;
+    if (choice == UpdateChoice.primary) {
+      await simulateUpdateDownload(context);
+    } else if (choice != null) {
+      toast(context, '模拟打开下载页');
+    }
     return;
   }
   if (!manual) {
@@ -159,25 +178,32 @@ Future<void> checkForUpdate(BuildContext context, {required bool manual, require
   if (info == null) {
     if (manual) {
       toast(
-          context,
-          channel == UpdateChannel.stable && isPrerelease(appVersion)
-              ? '当前是测试版 $appVersion，正式版发布更高的版本后会提示升级'
-              : '已是最新版本（$appVersion）');
+        context,
+        channel == UpdateChannel.stable && isPrerelease(appVersion)
+            ? '当前是测试版 $appVersion，正式版发布更高的版本后会提示升级'
+            : '已是最新版本（$appVersion）',
+      );
     }
     return;
   }
   if (Platform.isIOS) return _offerIpa(context, info);
-  final choice = await showUpdateSheet(context,
-      version: info.version,
-      current: appVersion,
-      notes: info.notes,
-      hint: '下载后会打开系统安装界面，数据会保留。',
-      primary: '下载并安装');
+  final choice = await showUpdateSheet(
+    context,
+    version: info.version,
+    current: appVersion,
+    notes: info.notes,
+    hint: '下载后会打开系统安装界面，数据会保留。',
+    primary: '下载并安装',
+  );
   if (choice == null || !context.mounted) return;
   if (await _channel.invokeMethod<bool>('canInstall') != true) {
     if (!context.mounted) return;
-    final ok = await confirmDialog(context,
-        title: '需要允许安装应用', body: '请在接下来的系统设置中允许 Harmonia 安装应用，然后回来再点一次“检查更新”。', ok: '去设置');
+    final ok = await confirmDialog(
+      context,
+      title: '需要允许安装应用',
+      body: '请在接下来的系统设置中允许 Harmonia 安装应用，然后回来再点一次“检查更新”。',
+      ok: '去设置',
+    );
     if (ok) await _channel.invokeMethod('openInstallSettings');
     return;
   }
@@ -190,30 +216,48 @@ Future<void> checkForUpdate(BuildContext context, {required bool manual, require
 /// 目录里之前留下的安装包先清掉。
 Future<File?> _download(BuildContext context, UpdateInfo info, String extension) async {
   late File file;
-  final ok = await runBusy(context, () async {
-    final res = await http.get(Uri.parse(info.url)).timeout(const Duration(minutes: 5));
-    final bytes = res.bodyBytes;
-    if (res.statusCode != 200 || bytes.length != info.size || b64(sha256(bytes)) != _hexToB64(info.sha256)) {
-      throw Exception('下载的安装包校验失败，请稍后重试。');
-    }
-    final dir = Directory('${(await getApplicationCacheDirectory()).path}/updates');
-    if (await dir.exists()) await dir.delete(recursive: true);
-    await dir.create(recursive: true);
-    file = File('${dir.path}/harmonia-${info.version}.$extension');
-    await file.writeAsBytes(bytes, flush: true);
-  });
-  return ok ? file : null;
+  final progress = ValueNotifier(DownloadProgress(total: info.size));
+  final refresh = Stopwatch()..start();
+  try {
+    final ok = await runBusy(context, () async {
+      final bytes = await downloadUpdatePackage(
+        Uri.parse(info.url),
+        expectedSize: info.size,
+        onProgress: (received) {
+          // 大文件分块很密集，界面最多每 100 毫秒刷新一次，首尾状态始终显示。
+          if (received != 0 && received != info.size && refresh.elapsedMilliseconds < 100) return;
+          refresh.reset();
+          progress.value = DownloadProgress(total: info.size, received: received, phase: DownloadPhase.receiving);
+        },
+      );
+      progress.value = DownloadProgress(total: info.size, received: bytes.length, phase: DownloadPhase.verifying);
+      // 保留原有哈希校验，放到后台计算，校验期间进度界面仍可绘制。
+      if (b64(await compute(sha256, bytes)) != _hexToB64(info.sha256)) {
+        throw Exception('下载的安装包校验失败，请稍后重试。');
+      }
+      final dir = Directory('${(await getApplicationCacheDirectory()).path}/updates');
+      if (await dir.exists()) await dir.delete(recursive: true);
+      await dir.create(recursive: true);
+      file = File('${dir.path}/harmonia-${info.version}.$extension');
+      await file.writeAsBytes(bytes, flush: true);
+    }, progressBuilder: (_) => DownloadProgressDialog(progress: progress));
+    return ok ? file : null;
+  } finally {
+    progress.dispose();
+  }
 }
 
 /// iOS 不能在 App 内安装：下载并校验新的 IPA，再通过系统分享面板交给用户安装 Harmonia 时用的签名工具。
 Future<void> _offerIpa(BuildContext context, UpdateInfo info) async {
-  final choice = await showUpdateSheet(context,
-      version: info.version,
-      current: appVersion,
-      notes: info.notes,
-      hint: '下载后会弹出分享面板，请在里面选择安装 Harmonia 时使用的签名工具，用它签名安装，数据会保留。',
-      primary: '下载并导入签名工具',
-      secondary: '打开下载页');
+  final choice = await showUpdateSheet(
+    context,
+    version: info.version,
+    current: appVersion,
+    notes: info.notes,
+    hint: '下载后会弹出分享面板，请在里面选择安装 Harmonia 时使用的签名工具，用它签名安装，数据会保留。',
+    primary: '下载并导入签名工具',
+    secondary: '打开下载页',
+  );
   if (choice == UpdateChoice.secondary) return openUrl('$_releases/tag/v${info.version}');
   if (choice == null || !context.mounted) return;
   final file = await _download(context, info, 'ipa');

@@ -19,19 +19,47 @@ String errorText(Object e) {
 }
 
 void toast(BuildContext context, String msg) {
+  final glass = usesGlass(context);
   ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
-    ..showSnackBar(SnackBar(content: Text(msg)));
+    ..showSnackBar(
+      glass
+          ? SnackBar(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              padding: EdgeInsets.zero,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              clipBehavior: Clip.none,
+              content: AppSurface(
+                color: context.palette.card,
+                radius: 24,
+                tintAlpha: 0.55,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  child: Text(tidy(msg), style: TextStyle(color: context.palette.ink, height: 1.45)),
+                ),
+              ),
+            )
+          : SnackBar(content: Text(msg)),
+    );
 }
 
 /// 执行一个异步操作：期间显示进度，失败时提示原因。返回是否成功。
-Future<bool> runBusy(BuildContext context, Future<void> Function() fn, {String? done}) async {
+Future<bool> runBusy(
+  BuildContext context,
+  Future<void> Function() fn, {
+  String? done,
+  WidgetBuilder? progressBuilder,
+}) async {
   final nav = Navigator.of(context);
   // 只移除这个进度弹窗本身：操作期间页面栈可能因阶段切换而被清空。
   final route = DialogRoute<void>(
     context: context,
     barrierDismissible: false,
-    builder: (_) => const PopScope(canPop: false, child: Center(child: CircularProgressIndicator())),
+    builder: (context) => PopScope(
+      canPop: false,
+      child: progressBuilder?.call(context) ?? const Center(child: CircularProgressIndicator()),
+    ),
   );
   nav.push(route);
   void close() {
@@ -59,7 +87,7 @@ Future<bool> confirmDialog(
 }) async {
   final r = await showDialog<bool>(
     context: context,
-      useRootNavigator: false,
+    useRootNavigator: false,
     builder: (c) => AppAlertDialog(
       title: Text(title),
       content: Text(tidy(body)),
