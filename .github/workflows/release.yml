@@ -14,6 +14,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # 服务端的版本号写在 server/package.json 里，不像 CLI 和 App 那样在构建时从标签取；这里拦住忘记改的情况。
+      - name: 核对服务端版本号
+        run: |
+          WANT="${GITHUB_REF_NAME#v}"
+          WANT="${WANT%%-*}"
+          HAVE="$(jq -r .version server/package.json)"
+          if [ "$HAVE" != "$WANT" ]; then
+            echo "::error::server/package.json 的版本号是 $HAVE，与标签 $GITHUB_REF_NAME 不一致。请先把它改成 $WANT 并合并到 main，再重新打标签。"
+            exit 1
+          fi
       - uses: actions/setup-go@v5
         with:
           go-version-file: cli/go.mod
