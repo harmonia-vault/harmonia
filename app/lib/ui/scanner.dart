@@ -4,49 +4,65 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../core/api.dart';
 import 'theme.dart';
+import 'app_scope.dart';
+import 'glass.dart';
 import 'widgets.dart';
 
 /// 相机取景框：识别到二维码时把内容交给 [onCode]。同一个二维码在镜头里会被反复识别，由调用方去重。
 class QrScannerView extends StatefulWidget {
-  const QrScannerView({super.key, required this.onCode, required this.blocked});
+  const QrScannerView({super.key, required this.onCode, required this.blocked, required this.simulatedCode});
   final void Function(String raw) onCode;
 
   /// 相机打不开时显示的说明，要告诉用户还能怎么办。
   final String blocked;
+  final String simulatedCode;
 
   @override
   State<QrScannerView> createState() => _QrScannerViewState();
 }
 
 class _QrScannerViewState extends State<QrScannerView> {
-  final _scanner = MobileScannerController(formats: [BarcodeFormat.qrCode]);
+  MobileScannerController? _scanner;
 
   @override
   void dispose() {
-    _scanner.dispose();
+    _scanner?.dispose();
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) => ClipRRect(
-    borderRadius: BorderRadius.circular(18),
-    child: AspectRatio(
-      aspectRatio: 1,
-      child: MobileScanner(
-        controller: _scanner,
-        errorBuilder: (context, error) => Container(
-          color: context.palette.card,
-          alignment: Alignment.center,
-          padding: const EdgeInsets.all(Space.xl),
-          child: Text(widget.blocked, textAlign: TextAlign.center),
-        ),
-        onDetect: (capture) {
-          final raw = capture.barcodes.firstOrNull?.rawValue;
-          if (raw != null) widget.onCode(raw);
-        },
-      ),
-    ),
-  );
+  Widget build(BuildContext context) => AppScope.isSimulated(context)
+      ? AspectRatio(
+          aspectRatio: 1,
+          child: Card(
+            child: Center(
+              child: FilledButton.icon(
+                onPressed: () => widget.onCode(widget.simulatedCode),
+                icon: const Icon(Icons.qr_code_scanner),
+                label: const Text('模拟扫码'),
+              ),
+            ),
+          ),
+        )
+      : ClipRRect(
+          borderRadius: BorderRadius.circular(18),
+          child: AspectRatio(
+            aspectRatio: 1,
+            child: MobileScanner(
+              controller: _scanner ??= MobileScannerController(formats: [BarcodeFormat.qrCode]),
+              errorBuilder: (context, error) => Container(
+                color: context.palette.card,
+                alignment: Alignment.center,
+                padding: const EdgeInsets.all(Space.xl),
+                child: Text(widget.blocked, textAlign: TextAlign.center),
+              ),
+              onDetect: (capture) {
+                final raw = capture.barcodes.firstOrNull?.rawValue;
+                if (raw != null) widget.onCode(raw);
+              },
+            ),
+          ),
+        );
 }
 
 /// 扫服务器首页上的二维码；扫到后带着服务器地址返回上一页。
@@ -75,15 +91,16 @@ class _ScanServerPageState extends State<ScanServerPage> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('扫码连接服务器')),
-    body: ListView(
-      padding: const EdgeInsets.all(Space.lg),
+  Widget build(BuildContext context) => AppPage(
+    appBar: AppBarSurface(title: const Text('扫码连接服务器')),
+    body: (context) => ListView(
+      padding: pagePadding(context, const EdgeInsets.all(Space.lg)),
       children: [
         Text(tidy('在电脑的浏览器里打开服务器地址，扫描页面上的二维码。')),
         const SizedBox(height: Space.md),
         QrScannerView(
           onCode: _found,
+          simulatedCode: 'https://debug.invalid',
           blocked: '无法打开相机。请在系统设置中允许 Harmonia 使用相机，或返回上一页手动填写服务器地址。',
         ),
       ],

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
 import 'app/controller.dart';
 import 'app/identity.dart';
@@ -13,15 +14,15 @@ import 'app/licenses.dart';
 import 'app/platform.dart';
 import 'app/updater.dart';
 import 'core/crypto.dart';
+import 'core/account.dart';
+import 'core/vault.dart';
+import 'ui/app_scope.dart';
 import 'core/keyring.dart';
 import 'core/phrases.dart';
 import 'core/store.dart';
-import 'ui/auth_pages.dart';
-import 'ui/home.dart';
-import 'ui/lock.dart';
+import 'ui/glass.dart';
+import 'ui/stage_page.dart';
 import 'ui/pairing.dart';
-import 'ui/pin_setup.dart';
-import 'ui/recovery_pages.dart';
 import 'ui/theme.dart';
 import 'ui/widgets.dart';
 
@@ -46,16 +47,20 @@ Future<void> main() async {
   updaterCrypto = crypto;
   phraseBreaker = PhraseBreaker.fromJson(await rootBundle.loadString('assets/budoux/zh-hans.json'));
   final secure = SecureStore();
-  identity = Identity(Keyring(crypto, secure, KeystoreKeys()));
+  final identity = Identity(Keyring(crypto, secure, KeystoreKeys()));
   await identity.loadBioName();
   final dir = Directory('${(await getApplicationSupportDirectory()).path}/harmonia');
+  final files = FileStore(dir);
   final controller = AppController(
     crypto: crypto,
     secure: secure,
-    files: FileStore(dir),
+    files: files,
+    account: AccountService(crypto, platform: hostPlatform),
+    vault: Vault(crypto, secure, files),
     deviceName: await hostDeviceName(),
     platform: hostPlatform,
     identity: identity,
+    prepareGlass: GlassResources.prepare,
   );
   runApp(HarmoniaApp(c: controller));
   await controller.start();
@@ -90,6 +95,10 @@ class _HarmoniaAppState extends State<HarmoniaApp> with WidgetsBindingObserver {
 
   /// 阶段变化时清空页面栈，只显示新阶段的根页面；同一阶段内的子页面保留。
   void _onChange() {
+    if (widget.c.pageDebugActive) {
+      setState(() {});
+      return;
+    }
     if (_shownStage != widget.c.stage) {
       _shownStage = widget.c.stage;
       _navigator.currentState?.popUntil((r) => r.isFirst);
@@ -103,11 +112,15 @@ class _HarmoniaAppState extends State<HarmoniaApp> with WidgetsBindingObserver {
   Future<void> _popupPairing() async {
     final c = widget.c;
     final nav = _navigator.currentState;
-    if (c.stage != Stage.home || nav == null) return;
+    if (c.pageDebugActive || c.stage != Stage.home || nav == null) return;
     final fresh = c.pairings.where((p) => _seenPairings.add(p.id)).toList();
     if (fresh.isEmpty || _reviewing) return;
     _reviewing = true;
-    await nav.push(MaterialPageRoute(builder: (_) => ReviewPairingPage(c: c, request: fresh.last, scanned: false)));
+    await nav.push(
+      MaterialPageRoute(
+        builder: (_) => ReviewPairingPage(c: c, request: fresh.last, scanned: false),
+      ),
+    );
     _reviewing = false;
   }
 
@@ -123,37 +136,28 @@ class _HarmoniaAppState extends State<HarmoniaApp> with WidgetsBindingObserver {
     }
   }
 
-  Widget _root() {
-    final c = widget.c;
-    return switch (c.stage) {
-      Stage.loading => const Scaffold(body: Center(child: CircularProgressIndicator())),
-      Stage.connect => ConnectPage(c: c),
-      Stage.signedOut => SignInPage(c: c),
-      Stage.verifyEmail => VerifyEmailPage(c: c),
-      Stage.setPin => SetPinPage(c: c),
-      Stage.setup => SetupPage(c: c),
-      Stage.unpaired => UnpairedPage(c: c),
-      Stage.pairing => PairingWaitPage(c: c),
-      Stage.locked => LockPage(c: c),
-      Stage.rotation => RotationPage(c: c, forced: true),
-      Stage.home => HomePage(c: c),
-    };
-  }
-
   @override
   Widget build(BuildContext context) => MaterialApp(
-        title: 'Harmonia',
-        debugShowCheckedModeBanner: false,
-        theme: buildTheme(Brightness.light),
-        darkTheme: buildTheme(Brightness.dark),
-        locale: const Locale('zh', 'CN'),
-        supportedLocales: const [Locale('zh', 'CN')],
-        localizationsDelegates: const [
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
-        navigatorKey: _navigator,
-        home: KeyedSubtree(key: ValueKey(widget.c.stage), child: _root()),
-      );
+    title: 'Harmonia',
+    debugShowCheckedModeBanner: false,
+    themeMode: colorThemeMode(widget.c.appearance.colorMode),
+    theme: buildTheme(Brightness.light, liquidGlass: widget.c.appearance.liquidGlass),
+    darkTheme: buildTheme(Brightness.dark, liquidGlass: widget.c.appearance.liquidGlass),
+    builder: (_, child) => AppScope(
+      identity: widget.c.identity,
+      child: LiquidGlassWidgets.wrap(brightnessResolver: Theme.maybeBrightnessOf, child: child!),
+    ),
+    locale: const Locale('zh', 'CN'),
+    supportedLocales: const [Locale('zh', 'CN')],
+    localizationsDelegates: const [
+      GlobalMaterialLocalizations.delegate,
+      GlobalWidgetsLocalizations.delegate,
+      GlobalCupertinoLocalizations.delegate,
+    ],
+    navigatorKey: _navigator,
+    home: Offstage(
+      offstage: widget.c.pageDebugActive,
+      child: KeyedSubtree(key: ValueKey(widget.c.stage), child: stagePage(widget.c)),
+    ),
+  );
 }

@@ -5,11 +5,12 @@ import '../app/controller.dart';
 import '../core/api.dart';
 import '../core/crypto.dart';
 import '../core/models.dart';
-import '../core/vault.dart';
 import 'devices.dart' show GrantEditor, expiryFrom, platformIcon, platformName;
 import 'lock.dart';
 import 'scanner.dart';
 import 'theme.dart';
+import 'glass_overlays.dart';
+import 'glass.dart';
 import 'widgets.dart';
 
 class AddDevicePage extends StatefulWidget {
@@ -42,7 +43,8 @@ class _AddDevicePageState extends State<AddDevicePage> {
     final ctl = TextEditingController();
     final code = await showDialog<String>(
       context: context,
-      builder: (c) => AlertDialog(
+      useRootNavigator: false,
+      builder: (c) => AppAlertDialog(
         title: const Text('输入核对码'),
         content: TextField(
           controller: ctl,
@@ -63,14 +65,15 @@ class _AddDevicePageState extends State<AddDevicePage> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('添加设备')),
-    body: ListView(
-      padding: const EdgeInsets.all(Space.lg),
+  Widget build(BuildContext context) => AppPage(
+    appBar: AppBarSurface(title: const Text('添加设备')),
+    body: (context) => ListView(
+      padding: pagePadding(context, const EdgeInsets.all(Space.lg)),
       children: [
         const Text('扫描电脑终端或另一台手机上显示的二维码。'),
         const SizedBox(height: Space.md),
         QrScannerView(
+          simulatedCode: pairingQr('debug-pairing', pairingFingerprint('debug-pairing', 'debug-sign', 'debug-box', 'debug-root')),
           onCode: (raw) => _found(() => widget.c.vault.pairingFromQr(raw), scanned: true),
           blocked: '无法打开相机。请在系统设置中允许 Harmonia 使用相机，或改用核对码。',
         ),
@@ -160,8 +163,9 @@ class _ReviewPairingPageState extends State<ReviewPairingPage> {
     var block = false;
     final ok = await showDialog<bool>(
       context: context,
+      useRootNavigator: false,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, set) => AlertDialog(
+        builder: (ctx, set) => AppAlertDialog(
           title: Text('拒绝“${p.name}”？'),
           content: CheckboxListTile(
             value: block,
@@ -187,10 +191,10 @@ class _ReviewPairingPageState extends State<ReviewPairingPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('批准设备')),
-      body: ListView(
-        padding: const EdgeInsets.all(Space.lg),
+    return AppPage(
+      appBar: AppBarSurface(title: const Text('批准设备')),
+      body: (context) => ListView(
+        padding: pagePadding(context, const EdgeInsets.all(Space.lg)),
         children: [
           Card(
             child: ListTile(

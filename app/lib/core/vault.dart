@@ -60,19 +60,23 @@ class RotationAttempt {
   final int generation;
 }
 
-class Vault {
+class Vault with VaultDevices {
   Vault(this.crypto, this.secure, this.files);
 
+  @override
   final HCrypto crypto;
   final LocalStore secure;
   final LocalStore files;
 
+  @override
   LocalConfig? config;
+  @override
   ApiClient? api;
   SignKey? signKey;
   BoxKey? boxKey;
   SignKey? root;
   SyncCache cache = SyncCache();
+  @override
   final Map<String, Uint8List> _envKeys = {};
 
   /// 本机数据密钥：由 App PIN 或指纹解开后设置，锁定时清除。
@@ -84,6 +88,7 @@ class Vault {
 
   bool get paired => config != null;
   bool get isManager => cache.self['kind'] == 'manager';
+  @override
   List<Environment> get environments => cache.environments;
   List<DeviceInfo> get devices => cache.devices;
 
@@ -153,6 +158,7 @@ class Vault {
 
   // ---- 同步 ----
 
+  @override
   Future<void> sync({bool full = false}) async {
     final since = full ? 0 : cache.seq;
     Map<String, dynamic> res;
@@ -218,6 +224,7 @@ class Vault {
     }
   }
 
+  @override
   Environment environment(String id) => cache.environments.firstWhere((e) => e.id == id,
       orElse: () => throw VaultException('环境不存在，可能已被删除。'));
 
@@ -235,6 +242,7 @@ class Vault {
 
   // ---- 环境与变量 ----
 
+  @override
   SignKey _root() {
     final r = root;
     if (r == null) throw VaultException('只有管理设备可以执行这个操作。');
@@ -242,6 +250,7 @@ class Vault {
   }
 
   /// 校验设备证书后返回它的加密公钥。
+  @override
   Uint8List _verifiedBoxPub(String deviceId, String kind, String signPub, String boxPub,
       String cert) {
     if (!crypto.verify(unb64(config!.rootPub), deviceCertMsg(deviceId, kind, signPub, boxPub),
@@ -251,6 +260,7 @@ class Vault {
     return unb64(boxPub);
   }
 
+  @override
   Map<String, dynamic> _envelope(
       String envId, int keyVersion, String recipient, Uint8List boxPub, Uint8List envKey) {
     final sealed = crypto.seal(envKey, boxPub);

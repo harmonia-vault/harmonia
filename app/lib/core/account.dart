@@ -48,13 +48,15 @@ class PendingPairing {
 }
 
 class AccountService {
-  AccountService(this.crypto, {this.platform = 'android'});
+  AccountService(this.crypto, {this.platform = 'android', ApiClient Function(String)? clientFactory})
+      : _clientFactory = clientFactory ?? ApiClient.new;
   final HCrypto crypto;
+  final ApiClient Function(String) _clientFactory;
 
   /// 本机在协议中的平台名（`android` 或 `ios`），只用于显示。
   final String platform;
 
-  ApiClient _client(String server, [String? accountId]) => ApiClient(server)..accountId = accountId;
+  ApiClient _client(String server, [String? accountId]) => _clientFactory(server)..accountId = accountId;
 
   Future<InstanceInfo> instance(String rawServer) async {
     final server = normalizeServer(rawServer);

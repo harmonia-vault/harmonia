@@ -1,7 +1,17 @@
 // 管理设备的操作：处理配对请求、调整其他设备的授权与激活、改名和移除。
 part of 'vault.dart';
 
-extension VaultDevices on Vault {
+mixin VaultDevices {
+  HCrypto get crypto;
+  ApiClient? get api;
+  LocalConfig? get config;
+  List<Environment> get environments;
+  Map<String, Uint8List> get _envKeys;
+  SignKey _root();
+  Environment environment(String id);
+  Future<void> sync({bool full = false});
+  Uint8List _verifiedBoxPub(String deviceId, String kind, String signPub, String boxPub, String cert);
+  Map<String, dynamic> _envelope(String envId, int keyVersion, String recipient, Uint8List boxPub, Uint8List envKey);
   // ---- 配对 ----
 
   Future<List<PairingRequest>> pendingPairings() async {

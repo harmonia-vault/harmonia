@@ -1,5 +1,7 @@
 // 已接入后的主界面：环境 / 设备 / 设置。
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
 import '../app/controller.dart';
 import '../app/updater.dart';
@@ -7,6 +9,7 @@ import 'devices.dart';
 import 'environments.dart';
 import 'settings.dart';
 import 'theme.dart';
+import 'glass.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key, required this.c});
@@ -21,7 +24,9 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => checkForUpdate(context, manual: false, channel: widget.c.updateChannel));
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => checkForUpdate(context, manual: false, channel: widget.c.updateChannel),
+    );
   }
 
   @override
@@ -29,27 +34,44 @@ class _HomePageState extends State<HomePage> {
     final c = widget.c;
     final pages = [EnvironmentsTab(c: c), DevicesTab(c: c), SettingsTab(c: c)];
     return Scaffold(
-      body: Column(children: [
-        if (!c.online)
-          Material(
-            color: context.palette.warnBox,
-            child: SafeArea(
-              bottom: false,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: Space.lg, vertical: Space.sm),
-                child: Row(children: [
-                  Icon(Icons.cloud_off_outlined, size: 18, color: context.palette.onWarnBox),
-                  const SizedBox(width: Space.sm),
-                  Expanded(
-                    child: Text('离线：显示的是上次同步的数据，修改需要联网。',
-                        style: TextStyle(color: context.palette.onWarnBox, fontSize: 13)),
+      extendBody: usesGlass(context),
+      body: Column(
+        children: [
+          if (!c.online)
+            Material(
+              color: context.palette.warnBox,
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: Space.lg, vertical: Space.sm),
+                  child: Row(
+                    children: [
+                      Icon(Icons.cloud_off_outlined, size: 18, color: context.palette.onWarnBox),
+                      const SizedBox(width: Space.sm),
+                      Expanded(
+                        child: Text(
+                          '离线：显示的是上次同步的数据，修改需要联网。',
+                          style: TextStyle(color: context.palette.onWarnBox, fontSize: 13),
+                        ),
+                      ),
+                    ],
                   ),
-                ]),
+                ),
+              ),
+            ),
+          Expanded(
+            // 横幅已包含状态栏安全区，页面不再重复预留。
+            child: MediaQuery.removePadding(
+              context: context,
+              removeTop: !c.online,
+              child: IndexedStack(
+                index: _tab,
+                children: [for (var i = 0; i < pages.length; i++) HeroMode(enabled: i == _tab, child: pages[i])],
               ),
             ),
           ),
-        Expanded(child: IndexedStack(index: _tab, children: pages)),
-      ]),
+        ],
+      ),
       bottomNavigationBar: _NavBar(
         selected: _tab,
         onSelect: (i) => setState(() => _tab = i),
@@ -80,16 +102,59 @@ class _NavBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
-    return Material(
-      color: p.card,
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: Space.sm, vertical: Space.sm),
-          child: Row(children: [
+    if (usesGlass(context)) {
+      const icons = [CupertinoIcons.square_stack_3d_up, CupertinoIcons.device_laptop, CupertinoIcons.gear_alt];
+      return Padding(
+        padding: EdgeInsets.only(bottom: (MediaQuery.viewPaddingOf(context).bottom - 16).clamp(8, 24)),
+        child: GlassTabBar.bottom(
+          tabs: [
             for (var i = 0; i < items.length; i++)
-              Expanded(child: _tile(context, items[i], i == selected, () => onSelect(i))),
-          ]),
+              GlassTab(
+                icon: Badge(
+                  isLabelVisible: items[i].badge > 0,
+                  label: Text('${items[i].badge}'),
+                  child: Icon(icons[i]),
+                ),
+                label: items[i].label,
+              ),
+          ],
+          showIndicator: !MediaQuery.disableAnimationsOf(context),
+          selectedIndex: selected,
+          onTabSelected: onSelect,
+          horizontalPadding: 24,
+          verticalPadding: 4,
+          barHeight: 64,
+          barBorderRadius: 32,
+          settings: glassSettings(context),
+          quality: GlassQuality.premium,
+          selectedIconColor: p.accent,
+          selectedLabelColor: p.accent,
+          unselectedIconColor: p.ink,
+          unselectedLabelColor: p.ink,
+          indicatorColor: p.ink.withValues(alpha: 0.06),
+          indicatorExpansion: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          iconLabelSpacing: 3,
+          interactionBehavior: MediaQuery.disableAnimationsOf(context)
+              ? GlassInteractionBehavior.none
+              : GlassInteractionBehavior.full,
+        ),
+      );
+    }
+    return AppSurface(
+      color: p.card,
+      child: Material(
+        color: Colors.transparent,
+        child: Padding(
+          padding: EdgeInsets.only(bottom: (MediaQuery.viewPaddingOf(context).bottom - 16).clamp(8, 24)),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(Space.sm, Space.sm, Space.sm, 0),
+            child: Row(
+              children: [
+                for (var i = 0; i < items.length; i++)
+                  Expanded(child: _tile(context, items[i], i == selected, () => onSelect(i))),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -119,13 +184,17 @@ class _NavBar extends StatelessWidget {
               color: on ? p.yellow : Colors.transparent,
               borderRadius: BorderRadius.circular(16),
             ),
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              icon,
-              const SizedBox(height: 2),
-              Text(item.label,
-                  style: TextStyle(
-                      fontSize: 12, color: fg, fontWeight: on ? FontWeight.w600 : FontWeight.w500)),
-            ]),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                icon,
+                const SizedBox(height: 2),
+                Text(
+                  item.label,
+                  style: TextStyle(fontSize: 12, color: fg, fontWeight: on ? FontWeight.w600 : FontWeight.w500),
+                ),
+              ],
+            ),
           ),
         ),
       ),

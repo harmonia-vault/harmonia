@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 
 import '../app/controller.dart';
 import '../core/models.dart';
-import '../core/vault.dart';
 import 'theme.dart';
 import 'widgets.dart';
 

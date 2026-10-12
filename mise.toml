@@ -62,6 +62,26 @@ description = "App 核心（纯 Dart）单元测试"
 dir = "app"
 run = "flutter test test/core"
 
+[tasks.deps-app]
+description = "解析 App 依赖"
+dir = "app"
+run = "flutter pub get"
+
+[tasks.check-app]
+description = "App 静态检查"
+dir = "app"
+run = "flutter analyze"
+
+[tasks.fmt-app]
+description = "格式化指定的 App 源文件"
+dir = "app"
+run = "dart format --line-length 120"
+
+[tasks.run-app]
+description = "在指定设备运行 App"
+dir = "app"
+run = "flutter run"
+
 [tasks.test]
 description = "全部单元测试"
 depends = ["test-cli", "test-server", "test-app"]

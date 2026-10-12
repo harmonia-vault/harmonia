@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import '../app/controller.dart';
 import '../core/api.dart';
 import '../core/models.dart';
-import '../core/vault.dart';
 import 'devices.dart' show platformIcon, platformName;
 import 'lock.dart';
 import 'theme.dart';
