@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 
 import 'theme.dart';
+import 'glass.dart';
 import 'widgets.dart';
 
 /// 用户在面板上的选择；直接关闭或点“以后再说”时为 null。
@@ -32,16 +33,45 @@ Future<UpdateChoice?> showUpdateSheet(
   isScrollControlled: true,
   // 内容多的时候面板会很高，留出状态栏的位置。
   useSafeArea: true,
-  showDragHandle: true,
-  backgroundColor: context.palette.paper,
-  builder: (c) => _UpdateSheet(
-    version: version,
-    current: current,
-    notes: _parseNotes(notes),
-    hint: hint,
-    primary: primary,
-    secondary: secondary,
-  ),
+  showDragHandle: !usesGlass(context),
+  backgroundColor: usesGlass(context) ? Colors.transparent : context.palette.paper,
+  barrierColor: usesGlass(context) ? Colors.black.withValues(alpha: 0.24) : null,
+  builder: (c) {
+    final content = _UpdateSheet(
+      version: version,
+      current: current,
+      notes: _parseNotes(notes),
+      hint: hint,
+      primary: primary,
+      secondary: secondary,
+    );
+    if (!usesGlass(c)) return content;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(12, 12, 12, MediaQuery.paddingOf(c).bottom + 12),
+      child: AppSurface(
+        color: c.palette.paper,
+        radius: 36,
+        tintAlpha: 0.88,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              child: Container(
+                width: 32,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: c.palette.mute.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            Flexible(child: content),
+          ],
+        ),
+      ),
+    );
+  },
 );
 
 class _UpdateSheet extends StatelessWidget {
@@ -61,7 +91,10 @@ class _UpdateSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
+    if (usesGlass(context)) return _glassContent(context);
     return SafeArea(
+      top: false,
+      bottom: !usesGlass(context),
       child: ConstrainedBox(
         // 更新内容再长也给标题和按钮留出位置，中间那一块自己滚动。
         constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.8),
@@ -105,7 +138,7 @@ class _UpdateSheet extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: p.card,
                       borderRadius: BorderRadius.circular(18),
-                      border: Border.all(color: p.line, width: 1.2),
+                      border: usesGlass(context) ? null : Border.all(color: p.line, width: 1.2),
                     ),
                     clipBehavior: Clip.antiAlias,
                     child: SingleChildScrollView(
@@ -137,6 +170,68 @@ class _UpdateSheet extends StatelessWidget {
               TextButton(onPressed: () => Navigator.pop(context), child: const Text('以后再说')),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _glassContent(BuildContext context) {
+    final p = context.palette;
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.72),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 4, 24, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '发现新版本',
+                        style: TextStyle(color: p.ink, fontSize: 24, fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 6),
+                      Text('Harmonia $version · 当前 $current', style: TextStyle(color: p.mute, fontSize: 13)),
+                    ],
+                  ),
+                ),
+                IconButton.filledTonal(
+                  tooltip: '以后再说',
+                  style: IconButton.styleFrom(backgroundColor: p.ink.withValues(alpha: 0.06), foregroundColor: p.mute),
+                  icon: const Icon(Icons.close, size: 20),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (final (i, n) in notes.indexed) ...[if (i > 0) const SizedBox(height: 14), _NoteLine(n)],
+                    if (notes.isNotEmpty) const SizedBox(height: 20),
+                    Text(tidy(hint), style: TextStyle(color: p.mute, fontSize: 13, height: 1.5)),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            FilledButton(onPressed: () => Navigator.pop(context, UpdateChoice.primary), child: Text(primary)),
+            if (secondary != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: TextButton(
+                  onPressed: () => Navigator.pop(context, UpdateChoice.secondary),
+                  child: Text(secondary!),
+                ),
+              ),
+          ],
         ),
       ),
     );

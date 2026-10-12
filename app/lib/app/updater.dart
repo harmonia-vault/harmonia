@@ -11,6 +11,7 @@ import 'package:path_provider/path_provider.dart';
 import '../core/crypto.dart';
 import 'platform.dart';
 import '../ui/update_sheet.dart';
+import '../ui/app_scope.dart';
 import '../ui/widgets.dart';
 
 const appVersion = String.fromEnvironment('APP_VERSION', defaultValue: '0.1.0');
@@ -129,6 +130,14 @@ DateTime? _lastAutoCheck;
 
 /// 检查更新。manual=false 时每 24 小时最多检查一次，并且只在有新版本时提示。
 Future<void> checkForUpdate(BuildContext context, {required bool manual, required UpdateChannel channel}) async {
+  if (AppScope.isSimulated(context)) {
+    if (!manual) return;
+    final choice = await showUpdateSheet(context, version: '0.0.1', current: '0.0.0',
+      notes: List.generate(8, (i) => '- 示例更新 ${i + 1}：检查长内容滚动与固定按钮。').join('\n'),
+      hint: '此处使用模拟更新。', primary: '模拟安装', secondary: '模拟打开下载页');
+    if (choice != null && context.mounted) toast(context, '模拟操作已完成');
+    return;
+  }
   if (!manual) {
     if (releasePublicKey.isEmpty) return;
     if (_lastAutoCheck != null && DateTime.now().difference(_lastAutoCheck!) < const Duration(hours: 24)) return;

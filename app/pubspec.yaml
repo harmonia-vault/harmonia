@@ -44,6 +44,7 @@ dependencies:
   qr_flutter: ^4.1.0
   path_provider: ^2.1.6
   convert: ^3.1.2
+  liquid_glass_widgets: 1.12.0
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -57,7 +57,7 @@ class _SetPinPageState extends State<SetPinPage> {
             const SizedBox(height: Space.xl),
             FilledButton.icon(
               onPressed: _enableBio,
-              icon: Icon(bioIcon),
+              icon: Icon(bioIcon(c.identity)),
               label: Text('开启${c.identity.bio('解锁')}'),
             ),
             const SizedBox(height: Space.sm),

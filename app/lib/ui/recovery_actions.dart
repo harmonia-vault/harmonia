@@ -7,6 +7,7 @@ import '../app/platform.dart';
 import '../core/crypto.dart';
 import '../core/recovery_sheet.dart';
 import 'theme.dart';
+import 'app_scope.dart';
 import 'widgets.dart';
 
 /// 复制恢复码：剪贴板预览中隐藏，1 分钟后自动清空。
@@ -18,7 +19,7 @@ class CopyRecoveryCode extends StatelessWidget {
   Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         OutlinedButton.icon(
           onPressed: () async {
-            await copySensitive(formatRecoveryCode(code));
+            if (!AppScope.isSimulated(context)) await copySensitive(formatRecoveryCode(code));
             if (context.mounted) toast(context, '已复制。为了安全，1 分钟后会自动清空剪贴板');
           },
           icon: const Icon(Icons.copy_outlined),
@@ -53,6 +54,11 @@ class _RecoveryDoneViewState extends State<RecoveryDoneView> {
   bool _saved = false;
 
   Future<void> _download() async {
+    if (AppScope.isSimulated(context)) {
+      setState(() => _saved = true);
+      toast(context, '已模拟保存');
+      return;
+    }
     var saved = false;
     await runBusy(context, () async {
       final now = DateTime.now();

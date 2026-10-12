@@ -3,22 +3,22 @@ import 'package:flutter/material.dart';
 
 import '../app/controller.dart';
 import '../core/models.dart';
-import '../core/vault.dart';
 import 'activation.dart';
 import 'environments.dart' show askName;
 import 'lock.dart';
 import 'pairing.dart';
 import 'theme.dart';
+import 'glass.dart';
 import 'widgets.dart';
 
 IconData platformIcon(String p) => switch (p) {
-      'android' => Icons.phone_android,
-      'ios' => Icons.phone_iphone,
-      'darwin' => Icons.laptop_mac_outlined,
-      'linux' => Icons.computer_outlined,
-      'windows' => Icons.desktop_windows_outlined,
-      _ => Icons.devices_other_outlined,
-    };
+  'android' => Icons.phone_android,
+  'ios' => Icons.phone_iphone,
+  'darwin' => Icons.laptop_mac_outlined,
+  'linux' => Icons.computer_outlined,
+  'windows' => Icons.desktop_windows_outlined,
+  _ => Icons.devices_other_outlined,
+};
 
 String platformName(String p) =>
     {'android': 'Android 手机', 'ios': 'iPhone', 'darwin': 'macOS', 'linux': 'Linux', 'windows': 'Windows'}[p] ?? p;
@@ -53,6 +53,11 @@ class _DevicesTabState extends State<DevicesTab> {
     _loadPending();
   }
 
+  Future<void> _addDevice() async {
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => AddDevicePage(c: c)));
+    if (mounted) await _loadPending();
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_seenCount != c.pendingPairingCount) {
@@ -61,23 +66,28 @@ class _DevicesTabState extends State<DevicesTab> {
     }
     final devices = [...c.vault.devices]..sort((a, b) => (a.isManager ? 0 : 1).compareTo(b.isManager ? 0 : 1));
     final me = c.vault.config!.deviceId;
-    return Scaffold(
-      appBar: AppBar(title: const Text('设备')),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () async {
-          await Navigator.push(context, MaterialPageRoute(builder: (_) => AddDevicePage(c: c)));
-          _loadPending();
-        },
-        icon: const Icon(Icons.qr_code_scanner),
-        label: const Text('添加设备'),
+    return AppPage(
+      appBar: AppBarSurface(
+        largeTitle: usesGlass(context),
+        title: const Text('设备'),
+        actions: usesGlass(context)
+            ? [IconButton(tooltip: '添加设备', onPressed: _addDevice, icon: const Icon(Icons.add))]
+            : null,
       ),
-      body: RefreshIndicator(
+      floatingActionButton: usesGlass(context)
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: _addDevice,
+              icon: const Icon(Icons.qr_code_scanner),
+              label: const Text('添加设备'),
+            ),
+      body: (context) => RefreshIndicator(
         onRefresh: () async {
           await c.syncNow();
           await _loadPending();
         },
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, 96),
+          padding: pagePadding(context, const EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, 96)),
           children: [
             if (_pending.isNotEmpty) ...[
               const SectionTitle('等待批准'),
@@ -92,8 +102,12 @@ class _DevicesTabState extends State<DevicesTab> {
                       subtitle: Text('${platformName(p.platform)} · 请求接入'),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () async {
-                        await Navigator.push(context,
-                            MaterialPageRoute(builder: (_) => ReviewPairingPage(c: c, request: p, scanned: false)));
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ReviewPairingPage(c: c, request: p, scanned: false),
+                          ),
+                        );
                         _loadPending();
                       },
                     ),
@@ -102,25 +116,35 @@ class _DevicesTabState extends State<DevicesTab> {
             ],
             const SectionTitle('已授权的设备'),
             Card(
-              child: Column(children: [
-                for (final (i, d) in devices.indexed) ...[
-                  if (i > 0) const Divider(),
-                  ListTile(
-                    leading: Icon(platformIcon(d.platform)),
-                    title: Text(d.id == me ? '${d.name}（本机）' : d.name),
-                    subtitle: Text(d.isManager
-                        ? '管理设备 · ${formatTime(d.lastSeenAt)}活动'
-                        : '${d.grants.length} 个环境 · ${formatTime(d.lastSeenAt)}活动'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => Navigator.push(
-                        context, MaterialPageRoute(builder: (_) => DevicePage(c: c, deviceId: d.id))),
-                  ),
+              child: Column(
+                children: [
+                  for (final (i, d) in devices.indexed) ...[
+                    if (i > 0) const Divider(),
+                    ListTile(
+                      leading: Icon(platformIcon(d.platform)),
+                      title: Text(d.id == me ? '${d.name}（本机）' : d.name),
+                      subtitle: Text(
+                        d.isManager
+                            ? '管理设备 · ${formatTime(d.lastSeenAt)}活动'
+                            : '${d.grants.length} 个环境 · ${formatTime(d.lastSeenAt)}活动',
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => DevicePage(c: c, deviceId: d.id),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
-              ]),
+              ),
             ),
             const SizedBox(height: Space.md),
-            Text('在电脑上运行 harmonia login 后，点击“添加设备”扫描终端里的二维码。',
-                style: TextStyle(color: context.palette.mute, height: 1.5)),
+            Text(
+              '在电脑上运行 harmonia login 后，点击“添加设备”扫描终端里的二维码。',
+              style: TextStyle(color: context.palette.mute, height: 1.5),
+            ),
           ],
         ),
       ),
@@ -143,7 +167,13 @@ int expiryFrom(String label) {
 
 /// 编辑一台电脑对各环境的权限。null 表示无权限。
 class GrantEditor extends StatelessWidget {
-  const GrantEditor({super.key, required this.envs, required this.roles, required this.expiry, required this.onChanged});
+  const GrantEditor({
+    super.key,
+    required this.envs,
+    required this.roles,
+    required this.expiry,
+    required this.onChanged,
+  });
   final List<Environment> envs;
   final Map<String, String?> roles;
   final Map<String, String> expiry;
@@ -151,12 +181,16 @@ class GrantEditor extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Card(
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          for (final (i, e) in envs.indexed) ...[
-            if (i > 0) const Divider(),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(Space.lg, Space.md, Space.lg, Space.md),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final (i, e) in envs.indexed) ...[
+          if (i > 0) const Divider(),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(Space.lg, Space.md, Space.lg, Space.md),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
                 Text(e.name, style: const TextStyle(fontWeight: FontWeight.w600)),
                 const SizedBox(height: Space.sm),
                 SegmentedButton<String>(
@@ -188,11 +222,13 @@ class GrantEditor extends StatelessWidget {
                     },
                   ),
                 ],
-              ]),
+              ],
             ),
-          ],
-        ]),
-      );
+          ),
+        ],
+      ],
+    ),
+  );
 }
 
 class DevicePage extends StatefulWidget {
@@ -240,12 +276,15 @@ class _DevicePageState extends State<DevicePage> {
   Future<void> _revoke(DeviceInfo d) async {
     final me = d.id == c.vault.config!.deviceId;
     if (me) return;
-    final ok = await confirmDialog(context,
-        title: '移除“${d.name}”？',
-        body: '这台设备将立即失去访问权限，联网后会自动清除本机保存的变量。\n'
-            '已经被复制或正在运行的程序中的变量无法收回，必要时请在服务商处更换相应的密钥。',
-        ok: '移除',
-        danger: true);
+    final ok = await confirmDialog(
+      context,
+      title: '移除“${d.name}”？',
+      body:
+          '这台设备将立即失去访问权限，联网后会自动清除本机保存的变量。\n'
+          '已经被复制或正在运行的程序中的变量无法收回，必要时请在服务商处更换相应的密钥。',
+      ok: '移除',
+      danger: true,
+    );
     if (!ok || !mounted) return;
     if (!await confirmIdentity(context, '验证身份以移除“${d.name}”')) return;
     if (!mounted) return;
@@ -256,11 +295,14 @@ class _DevicePageState extends State<DevicePage> {
 
   Future<void> _setSystemVars(DeviceInfo d, bool on) async {
     if (on) {
-      final ok = await confirmDialog(context,
-          title: '写入系统变量？',
-          body: '开启后，账号里名为 Path、TEMP 之类的变量会写入“${d.name}”的用户环境变量。\n'
-              '写错会影响这台电脑上的所有程序。原来的值会先记下，关闭后恢复。',
-          ok: '开启');
+      final ok = await confirmDialog(
+        context,
+        title: '写入系统变量？',
+        body:
+            '开启后，账号里名为 Path、TEMP 之类的变量会写入“${d.name}”的用户环境变量。\n'
+            '写错会影响这台电脑上的所有程序。原来的值会先记下，关闭后恢复。',
+        ok: '开启',
+      );
       if (!ok || !mounted) return;
     }
     await runBusy(context, () => c.guard(() => c.vault.setSystemVars(d.id, on)));
@@ -273,8 +315,8 @@ class _DevicePageState extends State<DevicePage> {
     if (d == null) return const Scaffold(body: Center(child: Text('设备已被移除')));
     if (_roles == null) _reset(d);
     final me = d.id == c.vault.config!.deviceId;
-    return Scaffold(
-      appBar: AppBar(
+    return AppPage(
+      appBar: AppBarSurface(
         title: Text(d.name),
         actions: [
           IconButton(
@@ -289,56 +331,64 @@ class _DevicePageState extends State<DevicePage> {
           ),
         ],
       ),
-      body: ListView(padding: const EdgeInsets.all(Space.lg), children: [
-        Card(
-          child: Column(children: [
-            ListTile(leading: Icon(platformIcon(d.platform)), title: Text(platformName(d.platform)),
-                subtitle: Text(d.isManager ? '管理设备' : '电脑')),
-            const Divider(),
-            ListTile(title: const Text('接入时间'), trailing: Text(formatTime(d.createdAt))),
-            const Divider(),
-            ListTile(title: const Text('最近活动'), trailing: Text(formatTime(d.lastSeenAt))),
-          ]),
-        ),
-        if (!d.isManager) ...[
-          const SectionTitle('环境权限'),
-          if (c.vault.environments.isEmpty)
-            const Banner2('还没有环境。')
-          else
-            GrantEditor(
-              envs: c.vault.environments,
-              roles: _roles!,
-              expiry: _expiry,
-              onChanged: () => setState(() => _dirty = true),
+      body: (context) => ListView(
+        padding: pagePadding(context, const EdgeInsets.all(Space.lg)),
+        children: [
+          Card(
+            child: Column(
+              children: [
+                ListTile(
+                  leading: Icon(platformIcon(d.platform)),
+                  title: Text(platformName(d.platform)),
+                  subtitle: Text(d.isManager ? '管理设备' : '电脑'),
+                ),
+                const Divider(),
+                ListTile(title: const Text('接入时间'), trailing: Text(formatTime(d.createdAt))),
+                const Divider(),
+                ListTile(title: const Text('最近活动'), trailing: Text(formatTime(d.lastSeenAt))),
+              ],
             ),
-          const SizedBox(height: Space.lg),
-          FilledButton(onPressed: _dirty ? () => _save(d) : null, child: const Text('保存权限')),
-          if (d.grants.isNotEmpty) ActivationEditor(c: c, device: d),
-          if (d.platform == 'windows') ...[
-            const SectionTitle('系统变量'),
-            Card(
-              child: SwitchListTile(
-                title: const Text('写入系统变量'),
-                subtitle: Text(tidy('Path、TEMP 这类 Windows 自身使用的变量，默认不写入这台电脑。')),
-                value: d.systemVars,
-                onChanged: (on) => _setSystemVars(d, on),
+          ),
+          if (!d.isManager) ...[
+            const SectionTitle('环境权限'),
+            if (c.vault.environments.isEmpty)
+              const Banner2('还没有环境。')
+            else
+              GrantEditor(
+                envs: c.vault.environments,
+                roles: _roles!,
+                expiry: _expiry,
+                onChanged: () => setState(() => _dirty = true),
               ),
+            const SizedBox(height: Space.lg),
+            FilledButton(onPressed: _dirty ? () => _save(d) : null, child: const Text('保存权限')),
+            if (d.grants.isNotEmpty) ActivationEditor(c: c, device: d),
+            if (d.platform == 'windows') ...[
+              const SectionTitle('系统变量'),
+              Card(
+                child: SwitchListTile(
+                  title: const Text('写入系统变量'),
+                  subtitle: Text(tidy('Path、TEMP 这类 Windows 自身使用的变量，默认不写入这台电脑。')),
+                  value: d.systemVars,
+                  onChanged: (on) => _setSystemVars(d, on),
+                ),
+              ),
+            ],
+          ] else
+            const Padding(
+              padding: EdgeInsets.only(top: Space.lg),
+              child: Banner2('管理设备可以访问全部环境，并能批准和移除其他设备。'),
+            ),
+          if (!me) ...[
+            const SizedBox(height: Space.xl),
+            OutlinedButton(
+              style: OutlinedButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error),
+              onPressed: () => _revoke(d),
+              child: const Text('移除这台设备'),
             ),
           ],
-        ] else
-          const Padding(
-            padding: EdgeInsets.only(top: Space.lg),
-            child: Banner2('管理设备可以访问全部环境，并能批准和移除其他设备。'),
-          ),
-        if (!me) ...[
-          const SizedBox(height: Space.xl),
-          OutlinedButton(
-            style: OutlinedButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error),
-            onPressed: () => _revoke(d),
-            child: const Text('移除这台设备'),
-          ),
         ],
-      ]),
+      ),
     );
   }
 }

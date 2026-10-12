@@ -6,7 +6,9 @@ import '../core/api.dart';
 import 'recovery_pages.dart';
 import 'scanner.dart';
 import 'theme.dart';
+import 'glass_overlays.dart';
 import 'widgets.dart';
+import 'app_scope.dart';
 
 class ConnectPage extends StatefulWidget {
   const ConnectPage({super.key, required this.c});
@@ -35,31 +37,27 @@ class _ConnectPageState extends State<ConnectPage> {
 
   @override
   Widget build(BuildContext context) => AuthScaffold(
-        title: '连接服务器',
-        subtitle: '输入你部署的 Harmonia 服务地址，或者扫描服务器首页上的二维码。\n环境变量在手机上加密后才会上传，服务器只保存密文。',
-        children: [
-          TextField(
-            autofillHints: null,
-            controller: _url,
-            keyboardType: TextInputType.url,
-            autocorrect: false,
-            decoration: const InputDecoration(
-              labelText: '服务器地址',
-              hintText: 'vault.example.com',
-              prefixIcon: Icon(Icons.dns_outlined),
-            ),
-            onSubmitted: (_) => _connect(),
-          ),
-          const SizedBox(height: Space.xl),
-          FilledButton(onPressed: _connect, child: const Text('连接')),
-          const SizedBox(height: Space.sm),
-          OutlinedButton.icon(
-            onPressed: _scan,
-            icon: const Icon(Icons.qr_code_scanner),
-            label: const Text('扫码填写'),
-          ),
-        ],
-      );
+    title: '连接服务器',
+    subtitle: '输入你部署的 Harmonia 服务地址，或者扫描服务器首页上的二维码。\n环境变量在手机上加密后才会上传，服务器只保存密文。',
+    children: [
+      TextField(
+        autofillHints: null,
+        controller: _url,
+        keyboardType: TextInputType.url,
+        autocorrect: false,
+        decoration: const InputDecoration(
+          labelText: '服务器地址',
+          hintText: 'vault.example.com',
+          prefixIcon: Icon(Icons.dns_outlined),
+        ),
+        onSubmitted: (_) => _connect(),
+      ),
+      const SizedBox(height: Space.xl),
+      FilledButton(onPressed: _connect, child: const Text('连接')),
+      const SizedBox(height: Space.sm),
+      OutlinedButton.icon(onPressed: _scan, icon: const Icon(Icons.qr_code_scanner), label: const Text('扫码填写')),
+    ],
+  );
 }
 
 class SignInPage extends StatefulWidget {
@@ -114,20 +112,25 @@ class _SignInPageState extends State<SignInPage> {
     final ctl = TextEditingController();
     return showDialog<String>(
       context: context,
+      useRootNavigator: false,
       barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => AppAlertDialog(
         title: const Text('输入邮箱验证码'),
-        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(message),
-          const SizedBox(height: Space.md),
-          TextField(
-            controller: ctl,
-            autofocus: true,
-            autofillHints: const [AutofillHints.oneTimeCode],
-            textCapitalization: TextCapitalization.characters,
-            decoration: const InputDecoration(labelText: '邮件中的 8 位验证码'),
-          ),
-        ]),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(message),
+            const SizedBox(height: Space.md),
+            TextField(
+              controller: ctl,
+              autofocus: true,
+              autofillHints: AppScope.isSimulated(context) ? null : const [AutofillHints.oneTimeCode],
+              textCapitalization: TextCapitalization.characters,
+              decoration: const InputDecoration(labelText: '邮件中的 8 位验证码'),
+            ),
+          ],
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
           FilledButton(onPressed: () => Navigator.pop(ctx, ctl.text.trim()), child: const Text('登录')),
@@ -145,56 +148,65 @@ class _SignInPageState extends State<SignInPage> {
       subtitle: _register ? '用邮箱注册一个 Harmonia 账号。' : '登录你的 Harmonia 账号。',
       children: [
         if (c.notice != null) ...[Banner2(c.notice!, warn: true), const SizedBox(height: Space.lg)],
-        Row(children: [
-          Icon(Icons.dns_outlined, size: 16, color: context.palette.mute),
-          const SizedBox(width: Space.sm),
-          Expanded(child: Text(c.prefs.server ?? '', style: TextStyle(color: context.palette.mute))),
-          TextButton(onPressed: c.changeServer, child: const Text('更换')),
-        ]),
+        Row(
+          children: [
+            Icon(Icons.dns_outlined, size: 16, color: context.palette.mute),
+            const SizedBox(width: Space.sm),
+            Expanded(
+              child: Text(c.prefs.server ?? '', style: TextStyle(color: context.palette.mute)),
+            ),
+            TextButton(onPressed: c.changeServer, child: const Text('更换')),
+          ],
+        ),
         const SizedBox(height: Space.md),
         AutofillGroup(
+          onDisposeAction: AppScope.isSimulated(context) ? AutofillContextAction.cancel : AutofillContextAction.commit,
           child: Form(
             key: _form,
-            child: Column(children: [
-              TextFormField(
-                controller: _email,
-                keyboardType: TextInputType.emailAddress,
-                autocorrect: false,
-                autofillHints: const [AutofillHints.email],
-                decoration: const InputDecoration(labelText: '邮箱'),
-                validator: validateEmail,
-              ),
-              const SizedBox(height: Space.md),
-              TextFormField(
-                controller: _password,
-                obscureText: !_show,
-                autofillHints: [_register ? AutofillHints.newPassword : AutofillHints.password],
-                decoration: InputDecoration(
-                  labelText: '密码',
-                  suffixIcon: IconButton(
-                    icon: Icon(_show ? Icons.visibility_off_outlined : Icons.visibility_outlined),
-                    onPressed: () => setState(() => _show = !_show),
-                  ),
+            child: Column(
+              children: [
+                TextFormField(
+                  controller: _email,
+                  keyboardType: TextInputType.emailAddress,
+                  autocorrect: false,
+                  autofillHints: AppScope.isSimulated(context) ? null : const [AutofillHints.email],
+                  decoration: const InputDecoration(labelText: '邮箱'),
+                  validator: validateEmail,
                 ),
-                validator: _register ? validatePassword : (v) => (v ?? '').isEmpty ? '请输入密码' : null,
-              ),
-              if (_register) ...[
                 const SizedBox(height: Space.md),
                 TextFormField(
-                  autofillHints: null,
-                  controller: _confirm,
+                  controller: _password,
                   obscureText: !_show,
-                  decoration: const InputDecoration(labelText: '再次输入密码'),
-                  validator: (v) => v != _password.text ? '两次输入的密码不一致' : null,
+                  autofillHints: AppScope.isSimulated(context)
+                      ? null
+                      : [_register ? AutofillHints.newPassword : AutofillHints.password],
+                  decoration: InputDecoration(
+                    labelText: '密码',
+                    suffixIcon: IconButton(
+                      icon: Icon(_show ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+                      onPressed: () => setState(() => _show = !_show),
+                    ),
+                  ),
+                  validator: _register ? validatePassword : (v) => (v ?? '').isEmpty ? '请输入密码' : null,
                 ),
-                const SizedBox(height: Space.md),
-                Banner2(
-                  inst?.emailVerification ?? true
-                      ? '注册后需要输入邮件中的验证码。\n密码只用于登录，不能用来解密数据；数据由手机上的密钥和恢复码保护。'
-                      : '密码只用于登录，不能用来解密数据；数据由手机上的密钥和恢复码保护。',
-                ),
+                if (_register) ...[
+                  const SizedBox(height: Space.md),
+                  TextFormField(
+                    autofillHints: null,
+                    controller: _confirm,
+                    obscureText: !_show,
+                    decoration: const InputDecoration(labelText: '再次输入密码'),
+                    validator: (v) => v != _password.text ? '两次输入的密码不一致' : null,
+                  ),
+                  const SizedBox(height: Space.md),
+                  Banner2(
+                    inst?.emailVerification ?? true
+                        ? '注册后需要输入邮件中的验证码。\n密码只用于登录，不能用来解密数据；数据由手机上的密钥和恢复码保护。'
+                        : '密码只用于登录，不能用来解密数据；数据由手机上的密钥和恢复码保护。',
+                  ),
+                ],
               ],
-            ]),
+            ),
           ),
         ),
         const SizedBox(height: Space.xl),
@@ -206,23 +218,39 @@ class _SignInPageState extends State<SignInPage> {
           OutlinedButton(onPressed: () => setState(() => _register = true), child: const Text('注册新账号')),
         if (!_register) ...[
           const SizedBox(height: Space.lg),
-          Wrap(alignment: WrapAlignment.center, spacing: Space.sm, children: [
-            TextButton(
-              onPressed: () => Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => ForgotPasswordPage(c: c, email: _email.text))),
-              child: const Text('忘记密码'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.push(
-                  context, MaterialPageRoute(builder: (_) => RecoverPage(c: c, email: _email.text))),
-              child: const Text('用恢复码恢复'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => AccountResetPage(c: c, email: _email.text))),
-              child: const Text('重置账号'),
-            ),
-          ]),
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: Space.sm,
+            children: [
+              TextButton(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ForgotPasswordPage(c: c, email: _email.text),
+                  ),
+                ),
+                child: const Text('忘记密码'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => RecoverPage(c: c, email: _email.text),
+                  ),
+                ),
+                child: const Text('用恢复码恢复'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => AccountResetPage(c: c, email: _email.text),
+                  ),
+                ),
+                child: const Text('重置账号'),
+              ),
+            ],
+          ),
         ],
       ],
     );
@@ -241,31 +269,28 @@ class _VerifyEmailPageState extends State<VerifyEmailPage> {
 
   @override
   Widget build(BuildContext context) => AuthScaffold(
-        title: '验证邮箱',
-        subtitle: '验证码已发送到 ${widget.c.pendingEmail}，15 分钟内有效。',
-        onBack: widget.c.cancelToSignIn,
-        children: [
-          TextField(
-            controller: _code,
-            textCapitalization: TextCapitalization.characters,
-            autocorrect: false,
-            autofillHints: null,
-            maxLength: 9,
-            style: const TextStyle(fontFamily: 'monospace', fontSize: 22, letterSpacing: 3),
-            decoration: const InputDecoration(labelText: '8 位验证码', counterText: ''),
-          ),
-          const SizedBox(height: Space.xl),
-          FilledButton(
-            onPressed: () => runBusy(context, () => widget.c.verifyEmail(_code.text)),
-            child: const Text('验证'),
-          ),
-          const SizedBox(height: Space.md),
-          TextButton(
-            onPressed: () => runBusy(context, widget.c.resendVerification, done: '已重新发送验证码'),
-            child: const Text('没有收到？重新发送'),
-          ),
-        ],
-      );
+    title: '验证邮箱',
+    subtitle: '验证码已发送到 ${widget.c.pendingEmail}，15 分钟内有效。',
+    onBack: widget.c.cancelToSignIn,
+    children: [
+      TextField(
+        controller: _code,
+        textCapitalization: TextCapitalization.characters,
+        autocorrect: false,
+        autofillHints: null,
+        maxLength: 9,
+        style: const TextStyle(fontFamily: 'monospace', fontSize: 22, letterSpacing: 3),
+        decoration: const InputDecoration(labelText: '8 位验证码', counterText: ''),
+      ),
+      const SizedBox(height: Space.xl),
+      FilledButton(onPressed: () => runBusy(context, () => widget.c.verifyEmail(_code.text)), child: const Text('验证')),
+      const SizedBox(height: Space.md),
+      TextButton(
+        onPressed: () => runBusy(context, widget.c.resendVerification, done: '已重新发送验证码'),
+        child: const Text('没有收到？重新发送'),
+      ),
+    ],
+  );
 }
 
 class ForgotPasswordPage extends StatefulWidget {
@@ -295,36 +320,39 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
       onBack: () => Navigator.pop(context),
       children: [
         AutofillGroup(
+          onDisposeAction: AppScope.isSimulated(context) ? AutofillContextAction.cancel : AutofillContextAction.commit,
           child: Form(
             key: _form,
-            child: Column(children: [
-              TextFormField(
-                autofillHints: const [AutofillHints.email],
-                controller: _email,
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(labelText: '邮箱'),
-                validator: validateEmail,
-                enabled: !_sent,
-              ),
-              if (_sent) ...[
-                const SizedBox(height: Space.md),
+            child: Column(
+              children: [
                 TextFormField(
-                  autofillHints: null,
-                  controller: _code,
-                  textCapitalization: TextCapitalization.characters,
-                  decoration: const InputDecoration(labelText: '邮件中的 8 位验证码'),
-                  validator: (v) => (v ?? '').trim().length < 8 ? '请输入 8 位验证码' : null,
+                  autofillHints: AppScope.isSimulated(context) ? null : const [AutofillHints.email],
+                  controller: _email,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(labelText: '邮箱'),
+                  validator: validateEmail,
+                  enabled: !_sent,
                 ),
-                const SizedBox(height: Space.md),
-                TextFormField(
-                  autofillHints: const [AutofillHints.newPassword],
-                  controller: _password,
-                  obscureText: true,
-                  decoration: const InputDecoration(labelText: '新密码'),
-                  validator: validatePassword,
-                ),
+                if (_sent) ...[
+                  const SizedBox(height: Space.md),
+                  TextFormField(
+                    autofillHints: null,
+                    controller: _code,
+                    textCapitalization: TextCapitalization.characters,
+                    decoration: const InputDecoration(labelText: '邮件中的 8 位验证码'),
+                    validator: (v) => (v ?? '').trim().length < 8 ? '请输入 8 位验证码' : null,
+                  ),
+                  const SizedBox(height: Space.md),
+                  TextFormField(
+                    autofillHints: AppScope.isSimulated(context) ? null : const [AutofillHints.newPassword],
+                    controller: _password,
+                    obscureText: true,
+                    decoration: const InputDecoration(labelText: '新密码'),
+                    validator: validatePassword,
+                  ),
+                ],
               ],
-            ]),
+            ),
           ),
         ),
         const SizedBox(height: Space.xl),
@@ -332,8 +360,11 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
           FilledButton(
             onPressed: () async {
               if (!_form.currentState!.validate()) return;
-              final ok = await runBusy(context, () async => _flow = await c.account.requestPasswordReset(c.server, _email.text),
-                  done: '验证码已发送');
+              final ok = await runBusy(
+                context,
+                () async => _flow = await c.account.requestPasswordReset(c.server, _email.text),
+                done: '验证码已发送',
+              );
               if (ok) setState(() => _sent = true);
             },
             child: const Text('发送验证码'),
@@ -342,9 +373,11 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
           FilledButton(
             onPressed: () async {
               if (!_form.currentState!.validate()) return;
-              final ok = await runBusy(context,
-                  () => c.account.completePasswordReset(c.server, _email.text, _flow!, _code.text, _password.text),
-                  done: '密码已更新，请用新密码登录');
+              final ok = await runBusy(
+                context,
+                () => c.account.completePasswordReset(c.server, _email.text, _flow!, _code.text, _password.text),
+                done: '密码已更新，请用新密码登录',
+              );
               if (ok && context.mounted) Navigator.pop(context);
             },
             child: const Text('设置新密码'),
@@ -379,11 +412,10 @@ class _AccountResetPageState extends State<AccountResetPage> {
       subtitle: '只有在密码、恢复码和所有管理设备都丢失时才需要重置。',
       onBack: () => Navigator.pop(context),
       children: [
-        const Banner2('重置会永久删除这个账号的全部环境、变量和已授权设备，无法撤销，也无法找回数据。\n之后可以用同一个邮箱重新注册。',
-            warn: true),
+        const Banner2('重置会永久删除这个账号的全部环境、变量和已授权设备，无法撤销，也无法找回数据。\n之后可以用同一个邮箱重新注册。', warn: true),
         const SizedBox(height: Space.lg),
         TextField(
-          autofillHints: const [AutofillHints.email],
+          autofillHints: AppScope.isSimulated(context) ? null : const [AutofillHints.email],
           controller: _email,
           enabled: !_sent,
           keyboardType: TextInputType.emailAddress,
@@ -409,8 +441,11 @@ class _AccountResetPageState extends State<AccountResetPage> {
         if (!_sent)
           FilledButton(
             onPressed: () async {
-              final ok = await runBusy(context, () async => _flow = await c.account.requestAccountReset(c.server, _email.text),
-                  done: '验证码已发送');
+              final ok = await runBusy(
+                context,
+                () async => _flow = await c.account.requestAccountReset(c.server, _email.text),
+                done: '验证码已发送',
+              );
               if (ok) setState(() => _sent = true);
             },
             child: const Text('发送验证码'),
@@ -422,8 +457,10 @@ class _AccountResetPageState extends State<AccountResetPage> {
                 ? null
                 : () async {
                     final ok = await runBusy(
-                        context, () => c.account.completeAccountReset(c.server, _email.text, _flow!, _code.text),
-                        done: '账号已重置，可以重新注册');
+                      context,
+                      () => c.account.completeAccountReset(c.server, _email.text, _flow!, _code.text),
+                      done: '账号已重置，可以重新注册',
+                    );
                     if (ok && context.mounted) Navigator.pop(context);
                   },
             child: const Text('永久删除并重置'),

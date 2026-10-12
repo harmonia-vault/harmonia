@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
 import '../core/account.dart';
+import '../core/appearance.dart';
 import '../core/api.dart';
 import '../core/crypto.dart';
 import '../core/models.dart';
@@ -36,10 +37,8 @@ class Prefs {
   String? updateChannel;
 
   Map<String, dynamic> toJson() => {'server': server, 'email': email, 'updateChannel': updateChannel};
-  factory Prefs.fromJson(Map<String, dynamic> j) => Prefs(
-      server: j['server'] as String?,
-      email: j['email'] as String?,
-      updateChannel: j['updateChannel'] as String?);
+  factory Prefs.fromJson(Map<String, dynamic> j) =>
+      Prefs(server: j['server'] as String?, email: j['email'] as String?, updateChannel: j['updateChannel'] as String?);
 }
 
 class AppController extends ChangeNotifier {
@@ -50,8 +49,10 @@ class AppController extends ChangeNotifier {
     required this.deviceName,
     required this.platform,
     required this.identity,
-  })  : account = AccountService(crypto, platform: platform),
-        vault = Vault(crypto, secure, files);
+    required this.account,
+    required this.vault,
+    required Future<void> Function() prepareGlass,
+  }) : appearance = AppearanceSettings(files, prepareGlass: prepareGlass);
 
   final HCrypto crypto;
   final LocalStore secure;
@@ -63,12 +64,28 @@ class AppController extends ChangeNotifier {
   final Identity identity;
   final AccountService account;
   final Vault vault;
+  final AppearanceSettings appearance;
+  String? appearanceError;
+
+  /// 调试导航覆盖真实会话时，隐藏真实页面并阻止真实弹窗进入。
+  bool pageDebugActive = false;
+
+  void beginPageDebug() {
+    pageDebugActive = true;
+    refresh();
+  }
+
+  void endPageDebug() {
+    pageDebugActive = false;
+    refresh();
+  }
 
   Stage stage = Stage.loading;
   Prefs prefs = Prefs();
   InstanceInfo? instance;
   PasswordSession? session;
   SetupDraft? setupDraft;
+
   /// 首次初始化已提交成功，正在显示完成页。
   bool setupCompleted = false;
   PendingPairing? pendingPairing;
@@ -89,6 +106,7 @@ class AppController extends ChangeNotifier {
 
   /// 推送连接状态：false 时界面显示“离线”。
   bool online = false;
+
   /// 待批准的配对请求（只有管理设备会有）。
   List<PairingRequest> pairings = [];
   int get pendingPairingCount => pairings.length;
@@ -108,11 +126,24 @@ class AppController extends ChangeNotifier {
 
   void refresh() => notifyListeners();
 
+  @override
+  void dispose() {
+    _stopPush();
+    _lockTimer?.cancel();
+    pendingPairing?.cancel();
+    super.dispose();
+  }
+
   Future<void> _savePrefs() => files.write(_prefsKey, jsonEncode(prefs.toJson()));
 
   // ---- 启动 ----
 
   Future<void> start() async {
+    try {
+      await appearance.load();
+    } catch (_) {
+      appearanceError = '外观设置未能加载，请重新设置。';
+    }
     await _dropLeftovers();
     final raw = await files.read(_prefsKey);
     if (raw != null) prefs = Prefs.fromJson((jsonDecode(raw) as Map).cast<String, dynamic>());
@@ -182,6 +213,18 @@ class AppController extends ChangeNotifier {
   }
 
   UpdateChannel get updateChannel => UpdateChannel.parse(prefs.updateChannel);
+
+  Future<void> setLiquidGlass(bool enabled) async {
+    await appearance.setLiquidGlass(enabled);
+    appearanceError = null;
+    notifyListeners();
+  }
+
+  Future<void> setColorMode(AppColorMode mode) async {
+    await appearance.setColorMode(mode);
+    appearanceError = null;
+    notifyListeners();
+  }
 
   Future<void> setUpdateChannel(UpdateChannel c) async {
     prefs.updateChannel = c.name;
@@ -276,19 +319,22 @@ class AppController extends ChangeNotifier {
       try {
         online = true;
         notifyListeners();
-        await vault.listen(() async {
-          if (gen != _pushGeneration) return;
-          if (vault.isManager) {
-            try {
-              pairings = await vault.pendingPairings();
-            } catch (_) {}
-          }
-          notifyListeners();
-        }, () async {
-          if (gen != _pushGeneration) return;
-          pairings = await vault.pendingPairings();
-          notifyListeners();
-        });
+        await vault.listen(
+          () async {
+            if (gen != _pushGeneration) return;
+            if (vault.isManager) {
+              try {
+                pairings = await vault.pendingPairings();
+              } catch (_) {}
+            }
+            notifyListeners();
+          },
+          () async {
+            if (gen != _pushGeneration) return;
+            pairings = await vault.pendingPairings();
+            notifyListeners();
+          },
+        );
       } on RevokedException {
         if (gen == _pushGeneration) await _handleRevoked();
         return;

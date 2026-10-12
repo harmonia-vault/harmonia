@@ -6,6 +6,9 @@ import '../core/api.dart';
 import '../core/phrases.dart';
 import '../core/vault.dart';
 import 'theme.dart';
+import 'app_scope.dart';
+import 'glass_overlays.dart';
+import 'glass.dart';
 
 /// 把异常转成给用户看的一句话。
 String errorText(Object e) {
@@ -23,7 +26,7 @@ void toast(BuildContext context, String msg) {
 
 /// 执行一个异步操作：期间显示进度，失败时提示原因。返回是否成功。
 Future<bool> runBusy(BuildContext context, Future<void> Function() fn, {String? done}) async {
-  final nav = Navigator.of(context, rootNavigator: true);
+  final nav = Navigator.of(context);
   // 只移除这个进度弹窗本身：操作期间页面栈可能因阶段切换而被清空。
   final route = DialogRoute<void>(
     context: context,
@@ -47,11 +50,17 @@ Future<bool> runBusy(BuildContext context, Future<void> Function() fn, {String? 
   }
 }
 
-Future<bool> confirmDialog(BuildContext context,
-    {required String title, required String body, String ok = '确认', bool danger = false}) async {
+Future<bool> confirmDialog(
+  BuildContext context, {
+  required String title,
+  required String body,
+  String ok = '确认',
+  bool danger = false,
+}) async {
   final r = await showDialog<bool>(
     context: context,
-    builder: (c) => AlertDialog(
+      useRootNavigator: false,
+    builder: (c) => AppAlertDialog(
       title: Text(title),
       content: Text(tidy(body)),
       actions: [
@@ -95,25 +104,35 @@ class AuthScaffold extends StatelessWidget {
   }
 
   Widget _scaffold(BuildContext context, Palette p) {
-    return Scaffold(
+    return AppPage(
       appBar: onBack == null
           ? null
-          : AppBar(leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: onBack)),
-      body: SafeArea(
+          : AppBarSurface(
+              leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: onBack),
+            ),
+      body: (context) => SafeArea(
+        top: !usesGlass(context) || onBack == null,
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 520),
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(Space.xl, Space.xl, Space.xl, Space.xxl),
+              padding: EdgeInsets.fromLTRB(
+                Space.xl,
+                Space.xl + (usesGlass(context) && onBack != null ? MediaQuery.paddingOf(context).top : 0),
+                Space.xl,
+                Space.xxl,
+              ),
               children: [
                 if (onBack == null) ...[
-                  Row(children: [
-                    const BrandMark(),
-                    const SizedBox(width: Space.md),
-                    Text('和弦', style: Theme.of(context).textTheme.titleLarge),
-                    const SizedBox(width: Space.sm),
-                    Text('Harmonia', style: TextStyle(color: p.mute)),
-                  ]),
+                  Row(
+                    children: [
+                      const BrandMark(),
+                      const SizedBox(width: Space.md),
+                      Text('和弦', style: Theme.of(context).textTheme.titleLarge),
+                      const SizedBox(width: Space.sm),
+                      Text('Harmonia', style: TextStyle(color: p.mute)),
+                    ],
+                  ),
                   const SizedBox(height: Space.xxl),
                 ],
                 Text(title, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w600)),
@@ -144,7 +163,10 @@ class BrandMark extends StatelessWidget {
       width: 40,
       height: 40,
       decoration: BoxDecoration(
-          color: p.yellow, borderRadius: BorderRadius.circular(12), border: Border.all(color: p.ink, width: 1.4)),
+        color: p.yellow,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: p.ink, width: 1.4),
+      ),
       child: Icon(Icons.graphic_eq_rounded, color: p.ink),
     );
   }
@@ -167,12 +189,20 @@ class Banner2 extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: warn ? p.warnBox : p.line),
       ),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Icon(icon ?? (warn ? Icons.warning_amber_rounded : Icons.info_outline),
-            size: 20, color: warn ? p.onWarnBox : p.mute),
-        const SizedBox(width: Space.sm),
-        Expanded(child: Text(tidy(text), style: TextStyle(color: warn ? p.onWarnBox : p.ink, height: 1.45))),
-      ]),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            icon ?? (warn ? Icons.warning_amber_rounded : Icons.info_outline),
+            size: 20,
+            color: warn ? p.onWarnBox : p.mute,
+          ),
+          const SizedBox(width: Space.sm),
+          Expanded(
+            child: Text(tidy(text), style: TextStyle(color: warn ? p.onWarnBox : p.ink, height: 1.45)),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -194,30 +224,39 @@ class CodeBox extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: p.ink, width: 1.4),
       ),
-      child: Row(children: [
-        Expanded(
-          // 按组换行，不在一组中间断开。
-          child: Wrap(spacing: 10, runSpacing: 4, children: [
-            for (final g in code.split('-'))
-              Text(g,
-                  style: TextStyle(
+      child: Row(
+        children: [
+          Expanded(
+            // 按组换行，不在一组中间断开。
+            child: Wrap(
+              spacing: 10,
+              runSpacing: 4,
+              children: [
+                for (final g in code.split('-'))
+                  Text(
+                    g,
+                    style: TextStyle(
                       fontFamily: 'monospace',
                       fontSize: big ? 26 : 20,
                       letterSpacing: 2,
                       fontWeight: FontWeight.w600,
-                      height: 1.4)),
-          ]),
-        ),
-        if (copyable)
-          IconButton(
-            tooltip: '复制',
-            icon: const Icon(Icons.copy_rounded),
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: code));
-              toast(context, '已复制');
-            },
+                      height: 1.4,
+                    ),
+                  ),
+              ],
+            ),
           ),
-      ]),
+          if (copyable)
+            IconButton(
+              tooltip: '复制',
+              icon: const Icon(Icons.copy_rounded),
+              onPressed: () {
+                if (!AppScope.isSimulated(context)) Clipboard.setData(ClipboardData(text: code));
+                toast(context, '已复制');
+              },
+            ),
+        ],
+      ),
     );
   }
 }
@@ -228,14 +267,19 @@ class SectionTitle extends StatelessWidget {
   final Widget? trailing;
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(Space.xs, Space.lg, Space.xs, Space.sm),
-        child: Row(children: [
-          Expanded(
-              child: Text(text,
-                  style: TextStyle(color: context.palette.mute, fontWeight: FontWeight.w600, fontSize: 13))),
-          if (trailing != null) trailing!,
-        ]),
-      );
+    padding: const EdgeInsets.fromLTRB(Space.xs, Space.lg, Space.xs, Space.sm),
+    child: Row(
+      children: [
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(color: context.palette.mute, fontWeight: FontWeight.w600, fontSize: 13),
+          ),
+        ),
+        ?trailing,
+      ],
+    ),
+  );
 }
 
 /// 空状态。
@@ -247,18 +291,24 @@ class EmptyState extends StatelessWidget {
   final Widget? action;
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: Space.xxl, horizontal: Space.xl),
-        child: Column(children: [
-          Icon(icon, size: 48, color: context.palette.mute),
-          const SizedBox(height: Space.md),
-          Text(title, style: Theme.of(context).textTheme.titleMedium, textAlign: TextAlign.center),
-          if (body != null) ...[
-            const SizedBox(height: Space.sm),
-            Text(tidy(body!), style: TextStyle(color: context.palette.mute, height: 1.5), textAlign: TextAlign.center),
-          ],
-          if (action != null) ...[const SizedBox(height: Space.lg), action!],
-        ]),
-      );
+    padding: const EdgeInsets.symmetric(vertical: Space.xxl, horizontal: Space.xl),
+    child: Column(
+      children: [
+        Icon(icon, size: 48, color: context.palette.mute),
+        const SizedBox(height: Space.md),
+        Text(title, style: Theme.of(context).textTheme.titleMedium, textAlign: TextAlign.center),
+        if (body != null) ...[
+          const SizedBox(height: Space.sm),
+          Text(
+            tidy(body!),
+            style: TextStyle(color: context.palette.mute, height: 1.5),
+            textAlign: TextAlign.center,
+          ),
+        ],
+        if (action != null) ...[const SizedBox(height: Space.lg), action!],
+      ],
+    ),
+  );
 }
 
 const roleNames = {'ro': '只读', 'rw': '读写', 'admin': '管理'};

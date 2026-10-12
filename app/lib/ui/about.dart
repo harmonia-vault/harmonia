@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../app/updater.dart';
 import 'theme.dart';
+import 'glass.dart';
 import 'widgets.dart';
 
 class _Project {
@@ -37,50 +38,66 @@ class _AboutPageState extends State<AboutPage> {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
-    return Scaffold(
-      appBar: AppBar(title: const Text('关于')),
-      body: FutureBuilder<List<_Project>>(
+    return AppPage(
+      appBar: AppBarSurface(title: const Text('关于')),
+      body: (context) => FutureBuilder<List<_Project>>(
         future: _projects,
         builder: (context, snap) {
           final projects = snap.data;
-          return ListView(padding: const EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, Space.xxl), children: [
-            const SizedBox(height: Space.lg),
-            Row(children: [
-              const BrandMark(),
-              const SizedBox(width: Space.md),
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('和弦 Harmonia', style: Theme.of(context).textTheme.titleLarge),
-                Text('版本 $appVersion', style: TextStyle(color: p.mute)),
-              ]),
-            ]),
-            const SizedBox(height: Space.lg),
-            Text(tidy('Harmonia 是开源软件，以 MIT 许可证发布。\n© 2026 Harmonia Contributors'),
-                style: TextStyle(color: p.mute, height: 1.5)),
-            const SizedBox(height: Space.xs),
-            SelectableText('github.com/harmonia-vault/harmonia', style: TextStyle(color: p.mute, height: 1.5)),
-            SectionTitle(projects == null ? '开源项目' : '开源项目（${projects.length} 个）'),
-            Text(tidy('Harmonia 用到了下面这些开源项目。\n点开可以查看各自的版权说明和许可证全文。'),
-                style: TextStyle(color: p.mute, height: 1.5)),
-            const SizedBox(height: Space.md),
-            if (snap.hasError)
-              const Banner2('没能读取开源项目列表，请退出这一页后再试。', warn: true)
-            else if (projects == null)
-              const Padding(padding: EdgeInsets.all(Space.xl), child: Center(child: CircularProgressIndicator()))
-            else
-              Card(
-                child: Column(children: [
-                  for (final (i, project) in projects.indexed) ...[
-                    if (i > 0) const Divider(),
-                    ListTile(
-                      title: Text(project.name),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => Navigator.push(
-                          context, MaterialPageRoute(builder: (_) => _LicensePage(project: project))),
-                    ),
-                  ],
-                ]),
+          return ListView(
+            padding: pagePadding(context, const EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, Space.xxl)),
+            children: [
+              const SizedBox(height: Space.lg),
+              Row(
+                children: [
+                  const BrandMark(),
+                  const SizedBox(width: Space.md),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('和弦 Harmonia', style: Theme.of(context).textTheme.titleLarge),
+                      Text('版本 $appVersion', style: TextStyle(color: p.mute)),
+                    ],
+                  ),
+                ],
               ),
-          ]);
+              const SizedBox(height: Space.lg),
+              Text(
+                tidy('Harmonia 是开源软件，以 MIT 许可证发布。\n© 2026 Harmonia Contributors'),
+                style: TextStyle(color: p.mute, height: 1.5),
+              ),
+              const SizedBox(height: Space.xs),
+              SelectableText('github.com/harmonia-vault/harmonia', style: TextStyle(color: p.mute, height: 1.5)),
+              SectionTitle(projects == null ? '开源项目' : '开源项目（${projects.length} 个）'),
+              Text(tidy('Harmonia 用到了下面这些开源项目。\n点开可以查看各自的版权说明和许可证全文。'), style: TextStyle(color: p.mute, height: 1.5)),
+              const SizedBox(height: Space.md),
+              if (snap.hasError)
+                const Banner2('没能读取开源项目列表，请退出这一页后再试。', warn: true)
+              else if (projects == null)
+                const Padding(
+                  padding: EdgeInsets.all(Space.xl),
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              else
+                Card(
+                  child: Column(
+                    children: [
+                      for (final (i, project) in projects.indexed) ...[
+                        if (i > 0) const Divider(),
+                        ListTile(
+                          title: Text(project.name),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => _LicensePage(project: project)),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+            ],
+          );
         },
       ),
     );
@@ -95,21 +112,32 @@ class _LicensePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final style = TextStyle(fontSize: 13, height: 1.5, color: context.palette.ink);
-    return Scaffold(
-      appBar: AppBar(title: Text(project.name)),
-      body: ListView(padding: const EdgeInsets.fromLTRB(Space.lg, Space.sm, Space.lg, Space.xxl), children: [
-        for (final (i, entry) in project.entries.indexed) ...[
-          if (i > 0) const Padding(padding: EdgeInsets.symmetric(vertical: Space.lg), child: Divider()),
-          for (final paragraph in entry.paragraphs)
-            Padding(
-              padding: EdgeInsets.only(
-                  left: paragraph.indent > 0 ? Space.lg * paragraph.indent : 0, bottom: Space.md),
-              child: Text(paragraph.text,
+    return AppPage(
+      appBar: AppBarSurface(title: Text(project.name)),
+      body: (context) => ListView(
+        padding: pagePadding(context, const EdgeInsets.fromLTRB(Space.lg, Space.sm, Space.lg, Space.xxl)),
+        children: [
+          for (final (i, entry) in project.entries.indexed) ...[
+            if (i > 0)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: Space.lg),
+                child: Divider(),
+              ),
+            for (final paragraph in entry.paragraphs)
+              Padding(
+                padding: EdgeInsets.only(
+                  left: paragraph.indent > 0 ? Space.lg * paragraph.indent : 0,
+                  bottom: Space.md,
+                ),
+                child: Text(
+                  paragraph.text,
                   style: style,
-                  textAlign: paragraph.indent == LicenseParagraph.centeredIndent ? TextAlign.center : TextAlign.start),
-            ),
+                  textAlign: paragraph.indent == LicenseParagraph.centeredIndent ? TextAlign.center : TextAlign.start,
+                ),
+              ),
+          ],
         ],
-      ]),
+      ),
     );
   }
 }

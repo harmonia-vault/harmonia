@@ -8,11 +8,11 @@ import '../app/controller.dart';
 import '../app/identity.dart';
 import '../core/keyring.dart';
 import 'theme.dart';
+import 'app_scope.dart';
+import 'glass_overlays.dart';
 import 'widgets.dart';
 
-late Identity identity;
-
-String get bioInvalidatedText => '手机${identity.bio('有变化')}，${identity.bio('解锁')}已关闭，可以在设置中重新开启';
+String bioInvalidatedText(Identity identity) => '手机${identity.bio('有变化')}，${identity.bio('解锁')}已关闭，可以在设置中重新开启';
 
 /// 等当前页面真正显示到屏幕上。弹系统验证之前调用：iOS 在面容 ID 出现时会暂停 App 的绘制，
 /// 弹得太早，屏幕会停在页面画出来之前的那一帧，看起来是空白。
@@ -24,19 +24,21 @@ Future<void> pagePainted() async {
   await Future<void>.delayed(const Duration(milliseconds: 120));
 }
 
-IconData get bioIcon => identity.bioIsFace ? Icons.face_unlock_outlined : Icons.fingerprint;
+IconData bioIcon(Identity identity) => identity.bioIsFace ? Icons.face_unlock_outlined : Icons.fingerprint;
 
 /// 敏感操作前确认身份：开启了生物识别时先用它，取消或失败时改输 PIN。返回解开的本机数据密钥。
 Future<Uint8List?> verifyIdentity(BuildContext context, String reason) async {
+  final identity = AppScope.of(context).identity;
   final key = await identity.unlockWithBio(reason);
   if (key != null) return key;
   if (!context.mounted) return null;
   if (identity.bioInvalidated) {
     identity.bioInvalidated = false;
-    toast(context, bioInvalidatedText);
+    toast(context, bioInvalidatedText(identity));
   }
   return showDialog<Uint8List>(
     context: context,
+      useRootNavigator: false,
     barrierDismissible: false,
     builder: (_) => _PinDialog(reason: reason),
   );
@@ -99,7 +101,7 @@ class _PinDialogState extends State<_PinDialog> {
   Future<void> _submit() async {
     if (_pin.text.isEmpty || _busy) return;
     setState(() => _busy = true);
-    final r = await identity.keyring.unlock(_pin.text);
+    final r = await AppScope.of(context).identity.keyring.unlock(_pin.text);
     if (!mounted) return;
     if (r.ok) return Navigator.pop(context, r.key);
     _pin.clear();
@@ -110,7 +112,7 @@ class _PinDialogState extends State<_PinDialog> {
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
+  Widget build(BuildContext context) => AppAlertDialog(
         title: const Text('输入 App PIN'),
         content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(widget.reason),
@@ -130,8 +132,9 @@ Future<String?> askNewPin(BuildContext context) {
   String? error;
   return showDialog<String>(
     context: context,
+      useRootNavigator: false,
     builder: (c) => StatefulBuilder(
-      builder: (c, setState) => AlertDialog(
+      builder: (c, setState) => AppAlertDialog(
         title: const Text('设置新的 App PIN'),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
           PinField(controller: a, autofocus: true, label: '新 PIN（${Keyring.minPin}–${Keyring.maxPin} 位数字）'),
@@ -146,7 +149,7 @@ Future<String?> askNewPin(BuildContext context) {
               if (e != null) return setState(() => error = e);
               Navigator.pop(c, a.text);
             },
-            child: const Text('确定'),
+            child: const Text('保存'),
           ),
         ],
       ),
@@ -174,7 +177,7 @@ class _LockPageState extends State<LockPage> {
   }
 
   Future<void> _start() async {
-    final bio = await identity.bioEnabled();
+    final bio = await widget.c.identity.bioEnabled();
     if (!mounted) return;
     setState(() => _bio = bio);
     if (!bio) return;
@@ -185,10 +188,10 @@ class _LockPageState extends State<LockPage> {
   Future<void> _useBio() async {
     if (_busy) return;
     setState(() => _busy = true);
-    final key = await identity.unlockWithBio('解锁 Harmonia');
+    final key = await widget.c.identity.unlockWithBio('解锁 Harmonia');
     if (!mounted) return;
     if (key != null) return _done(key);
-    final bio = await identity.bioEnabled();
+    final bio = await widget.c.identity.bioEnabled();
     if (!mounted) return;
     setState(() {
       _busy = false;
@@ -199,7 +202,7 @@ class _LockPageState extends State<LockPage> {
   Future<void> _submit() async {
     if (_pin.text.isEmpty || _busy) return;
     setState(() => _busy = true);
-    final r = await identity.keyring.unlock(_pin.text);
+    final r = await widget.c.identity.keyring.unlock(_pin.text);
     if (!mounted) return;
     if (r.ok) return _done(r.key!);
     _pin.clear();
@@ -210,9 +213,9 @@ class _LockPageState extends State<LockPage> {
   }
 
   Future<void> _done(Uint8List key) async {
-    if (identity.bioInvalidated) {
-      identity.bioInvalidated = false;
-      toast(context, bioInvalidatedText);
+    if (widget.c.identity.bioInvalidated) {
+      widget.c.identity.bioInvalidated = false;
+      toast(context, bioInvalidatedText(widget.c.identity));
     }
     try {
       await widget.c.unlock(key);
@@ -228,7 +231,7 @@ class _LockPageState extends State<LockPage> {
   Future<void> _forgot() async {
     final ok = await confirmDialog(context,
         title: '清除本机数据？',
-        body: '${_bio ? '如果只是忘记了 PIN，可以先用${identity.bio('解锁')}，再到“设置”中修改 PIN。\n' : ''}'
+        body: '${_bio ? '如果只是忘记了 PIN，可以先用${widget.c.identity.bio('解锁')}，再到“设置”中修改 PIN。\n' : ''}'
             '清除后，账号和云端数据不受影响，但这台手机需要重新登录，并由管理设备批准或用恢复码恢复。\n'
             '这台手机原来的设备记录需要在管理设备上移除。',
         ok: '清除本机数据',
@@ -268,8 +271,8 @@ class _LockPageState extends State<LockPage> {
                 const SizedBox(height: Space.sm),
                 TextButton.icon(
                   onPressed: _busy ? null : _useBio,
-                  icon: Icon(bioIcon),
-                  label: Text('用${identity.bio('解锁')}'),
+                  icon: Icon(bioIcon(widget.c.identity)),
+                  label: Text('用${widget.c.identity.bio('解锁')}'),
                 ),
               ],
               const SizedBox(height: Space.md),
