@@ -10,14 +10,21 @@ import '../core/appearance.dart';
 import 'app_scope.dart';
 import 'glass.dart';
 import 'glass_debug.dart';
+import 'glass_transparency.dart';
 import 'page_debug_catalog.dart';
 import 'stage_page.dart';
 import 'theme.dart';
 
 class PageDebug extends StatefulWidget {
-  const PageDebug({super.key, this.initialGlass = false, this.initialColorMode = AppColorMode.system});
+  const PageDebug({
+    super.key,
+    this.initialGlass = false,
+    this.initialColorMode = AppColorMode.system,
+    this.initialGlassOpacity = 0.5,
+  });
   final bool initialGlass;
   final AppColorMode initialColorMode;
+  final double initialGlassOpacity;
   @override
   State<PageDebug> createState() => _PageDebugState();
 }
@@ -46,6 +53,7 @@ class _PageDebugState extends State<PageDebug> {
       }
       await session.c.setLiquidGlass(widget.initialGlass);
       await session.c.setColorMode(widget.initialColorMode);
+      await session.c.setGlassOpacity(widget.initialGlassOpacity);
       if (!mounted) {
         session.dispose();
         return;
@@ -143,8 +151,16 @@ class _PageDebugState extends State<PageDebug> {
     return MaterialApp(
       navigatorKey: _navigator,
       debugShowCheckedModeBanner: false,
-      theme: buildTheme(Brightness.light, liquidGlass: session.c.appearance.liquidGlass),
-      darkTheme: buildTheme(Brightness.dark, liquidGlass: session.c.appearance.liquidGlass),
+      theme: buildTheme(
+        Brightness.light,
+        liquidGlass: session.c.appearance.liquidGlass,
+        glassOpacity: session.c.appearance.glassOpacity,
+      ),
+      darkTheme: buildTheme(
+        Brightness.dark,
+        liquidGlass: session.c.appearance.liquidGlass,
+        glassOpacity: session.c.appearance.glassOpacity,
+      ),
       themeMode: colorThemeMode(session.c.appearance.colorMode),
       locale: const Locale('zh', 'CN'),
       supportedLocales: const [Locale('zh', 'CN')],
@@ -221,6 +237,8 @@ class _PageDebugState extends State<PageDebug> {
               },
             ),
           ),
+          if (session.c.appearance.liquidGlass)
+            GlassTransparencyControl(value: session.c.appearance.glassOpacity, onChanged: session.c.setGlassOpacity),
           SwitchListTile(title: const Text('大字号'), value: _large, onChanged: (v) => setState(() => _large = v)),
           SwitchListTile(title: const Text('高对比度'), value: _contrast, onChanged: (v) => setState(() => _contrast = v)),
           SwitchListTile(

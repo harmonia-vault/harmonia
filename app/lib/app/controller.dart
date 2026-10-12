@@ -226,6 +226,12 @@ class AppController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setGlassOpacity(double opacity) async {
+    await appearance.setGlassOpacity(opacity);
+    appearanceError = null;
+    notifyListeners();
+  }
+
   Future<void> setUpdateChannel(UpdateChannel c) async {
     prefs.updateChannel = c.name;
     await _savePrefs();

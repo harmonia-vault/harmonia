@@ -15,7 +15,7 @@ class FeedbackDebugPage extends StatelessWidget {
     body: (context) => ListView(
       padding: pagePadding(context, const EdgeInsets.all(20)),
       children: [
-        const Banner2('这里不会联网或保存文件。可在目录切换玻璃、明暗主题、大字号与高对比度后查看效果。'),
+        const Banner2('这里不会联网或保存文件。可在目录调整玻璃透明度、明暗、大字号、高对比度和减少动态效果，检查通知与弹层动画。'),
         const SectionTitle('气泡通知'),
         OutlinedButton(onPressed: () => toast(context, '已复制'), child: const Text('短通知')),
         OutlinedButton(

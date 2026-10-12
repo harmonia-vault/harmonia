@@ -70,6 +70,9 @@ flutter:
     - assets/recovery_sheet.html
     - assets/budoux/zh-hans.json
     - assets/licenses/
+    - ios/Runner/Assets.xcassets/AppIcon.appiconset/AppIcon.png
+    - ios/Runner/Assets.xcassets/AppIcon.appiconset/AppIcon-dark.png
+    - android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:

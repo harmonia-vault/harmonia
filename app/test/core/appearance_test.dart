@@ -8,11 +8,22 @@ import 'package:harmonia/core/store.dart';
 Future<void> _prepared() async {}
 
 void main() {
+  test('透明度只在五个标记附近吸附，其他位置保持无级', () {
+    expect(snapGlassOpacity(0.02), 0);
+    expect(snapGlassOpacity(0.48), 0.5);
+    expect(snapGlassOpacity(0.52), 0.5);
+    expect(snapGlassOpacity(0.23), 0.25);
+    expect(snapGlassOpacity(0.73), 0.75);
+    expect(snapGlassOpacity(0.98), 1);
+    expect(snapGlassOpacity(0.18), 0.18);
+    expect(snapGlassOpacity(0.66), 0.66);
+  });
   test('首次使用默认关闭，不准备玻璃资源', () async {
     final settings = AppearanceSettings(MemoryStore(), prepareGlass: () => throw StateError('不应加载'));
     await settings.load();
     expect(settings.liquidGlass, isFalse);
     expect(settings.colorMode, AppColorMode.system);
+    expect(settings.glassOpacity, 0.5);
   });
 
   test('新实例恢复已保存的选择，另一台设备保持自己的选择', () async {
@@ -110,6 +121,49 @@ void main() {
     await expectLater(settings.load(), throwsFormatException);
     expect(settings.colorMode, AppColorMode.dark);
     expect(settings.liquidGlass, isFalse);
+  });
+
+  test('无级透明度重启后保留，快速调整不会覆盖颜色和开关', () async {
+    final store = MemoryStore();
+    final settings = AppearanceSettings(store, prepareGlass: _prepared);
+    for (final level in [0.0, 0.18, 0.5, 0.73, 1.0]) {
+      await Future.wait([
+        settings.setGlassOpacity(level),
+        settings.setColorMode(AppColorMode.dark),
+        settings.setLiquidGlass(true),
+      ]);
+      final restarted = AppearanceSettings(store, prepareGlass: _prepared);
+      await restarted.load();
+      expect(restarted.glassOpacity, level);
+      expect(restarted.colorMode, AppColorMode.dark);
+      expect(restarted.liquidGlass, isTrue);
+    }
+  });
+
+  test('透明度保存失败不改变界面，后续调整仍可保存', () async {
+    final store = _FailingStore();
+    final settings = AppearanceSettings(store, prepareGlass: _prepared);
+    store.failWrites = true;
+    await expectLater(settings.setGlassOpacity(0.0), throwsA(isA<FileSystemException>()));
+    expect(settings.glassOpacity, 0.5);
+    store.failWrites = false;
+    await settings.setGlassOpacity(1.0);
+    final restarted = AppearanceSettings(store, prepareGlass: _prepared);
+    await restarted.load();
+    expect(restarted.glassOpacity, 1.0);
+  });
+
+  test('没有指定透明度时使用中档，损坏值不覆盖内存状态', () async {
+    final store = MemoryStore();
+    await store.write('appearance', '{"liquidGlass":true,"colorMode":"dark"}');
+    final settings = AppearanceSettings(store, prepareGlass: _prepared);
+    await settings.load();
+    expect(settings.glassOpacity, 0.5);
+    await store.write('appearance', '{"liquidGlass":false,"colorMode":"light","glassOpacity":1.5}');
+    await expectLater(settings.load(), throwsFormatException);
+    expect(settings.liquidGlass, isTrue);
+    expect(settings.colorMode, AppColorMode.dark);
+    expect(settings.glassOpacity, 0.5);
   });
 
   test('拒绝无效的持久化值，不能把字符串当作开启', () async {

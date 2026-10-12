@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../app/updater.dart';
+import 'app_icon.dart';
 import 'theme.dart';
 import 'glass.dart';
 import 'widgets.dart';
@@ -50,14 +51,16 @@ class _AboutPageState extends State<AboutPage> {
               const SizedBox(height: Space.lg),
               Row(
                 children: [
-                  const BrandMark(),
+                  const AppIcon(),
                   const SizedBox(width: Space.md),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('和弦 Harmonia', style: Theme.of(context).textTheme.titleLarge),
-                      Text('版本 $appVersion', style: TextStyle(color: p.mute)),
-                    ],
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('和弦 Harmonia', style: Theme.of(context).textTheme.titleLarge),
+                        Text('版本 $appVersion', style: TextStyle(color: p.mute)),
+                      ],
+                    ),
                   ),
                 ],
               ),

@@ -9,6 +9,7 @@ import 'theme.dart';
 import 'app_scope.dart';
 import 'glass_overlays.dart';
 import 'glass.dart';
+import 'glass_motion.dart';
 
 /// 把异常转成给用户看的一句话。
 String errorText(Object e) {
@@ -24,16 +25,11 @@ void toast(BuildContext context, String msg) {
     ..hideCurrentSnackBar()
     ..showSnackBar(
       glass
-          ? SnackBar(
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              padding: EdgeInsets.zero,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-              clipBehavior: Clip.none,
+          ? GlassSnackBar(
               content: AppSurface(
                 color: context.palette.card,
                 radius: 24,
-                tintAlpha: 0.55,
+                tintAlpha: 0.76,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                   child: Text(tidy(msg), style: TextStyle(color: context.palette.ink, height: 1.45)),
@@ -41,6 +37,7 @@ void toast(BuildContext context, String msg) {
               ),
             )
           : SnackBar(content: Text(msg)),
+      snackBarAnimationStyle: notificationAnimationStyle(context),
     );
 }
 
@@ -53,7 +50,7 @@ Future<bool> runBusy(
 }) async {
   final nav = Navigator.of(context);
   // 只移除这个进度弹窗本身：操作期间页面栈可能因阶段切换而被清空。
-  final route = DialogRoute<void>(
+  final route = AppDialogRoute<void>(
     context: context,
     barrierDismissible: false,
     builder: (context) => PopScope(
@@ -62,17 +59,23 @@ Future<bool> runBusy(
     ),
   );
   nav.push(route);
-  void close() {
-    if (route.isActive) nav.removeRoute(route);
+  Future<void> close() async {
+    if (!route.isActive) return;
+    if (route.isCurrent) {
+      nav.pop();
+      await route.completed;
+    } else {
+      nav.removeRoute(route);
+    }
   }
 
   try {
     await fn();
-    close();
+    await close();
     if (done != null && context.mounted) toast(context, done);
     return true;
   } catch (e) {
-    close();
+    await close();
     if (context.mounted) toast(context, errorText(e));
     return false;
   }
@@ -85,7 +88,7 @@ Future<bool> confirmDialog(
   String ok = '确认',
   bool danger = false,
 }) async {
-  final r = await showDialog<bool>(
+  final r = await showAppDialog<bool>(
     context: context,
     useRootNavigator: false,
     builder: (c) => AppAlertDialog(
@@ -94,7 +97,12 @@ Future<bool> confirmDialog(
       actions: [
         TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('取消')),
         FilledButton(
-          style: danger ? FilledButton.styleFrom(backgroundColor: Theme.of(c).colorScheme.error) : null,
+          style: danger
+              ? FilledButton.styleFrom(
+                  backgroundColor: Theme.of(c).colorScheme.error,
+                  foregroundColor: Theme.of(c).colorScheme.onError,
+                )
+              : null,
           onPressed: () => Navigator.pop(c, true),
           child: Text(ok),
         ),

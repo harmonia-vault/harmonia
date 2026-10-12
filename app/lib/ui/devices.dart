@@ -10,6 +10,7 @@ import 'pairing.dart';
 import 'theme.dart';
 import 'glass.dart';
 import 'widgets.dart';
+import 'list_row.dart';
 
 IconData platformIcon(String p) => switch (p) {
   'android' => Icons.phone_android,
@@ -97,10 +98,11 @@ class _DevicesTabState extends State<DevicesTab> {
                   child: Card(
                     color: context.palette.yellow.withValues(alpha: 0.35),
                     child: ListTile(
+                      contentPadding: listRowPadding,
                       leading: Icon(platformIcon(p.platform)),
                       title: Text(p.name),
                       subtitle: Text('${platformName(p.platform)} · 请求接入'),
-                      trailing: const Icon(Icons.chevron_right),
+                      trailing: const ListRowChevron(),
                       onTap: () async {
                         await Navigator.push(
                           context,
@@ -121,6 +123,7 @@ class _DevicesTabState extends State<DevicesTab> {
                   for (final (i, d) in devices.indexed) ...[
                     if (i > 0) const Divider(),
                     ListTile(
+                      contentPadding: listRowPadding,
                       leading: Icon(platformIcon(d.platform)),
                       title: Text(d.id == me ? '${d.name}（本机）' : d.name),
                       subtitle: Text(
@@ -128,7 +131,7 @@ class _DevicesTabState extends State<DevicesTab> {
                             ? '管理设备 · ${formatTime(d.lastSeenAt)}活动'
                             : '${d.grants.length} 个环境 · ${formatTime(d.lastSeenAt)}活动',
                       ),
-                      trailing: const Icon(Icons.chevron_right),
+                      trailing: const ListRowChevron(),
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(

@@ -6,6 +6,8 @@ import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'glass.dart';
 import 'theme.dart';
 
+export 'glass_motion.dart' show showAppDialog, AppDialogRoute;
+
 class _GlassDialog extends StatelessWidget {
   const _GlassDialog({this.title, this.content, this.actions});
   final Widget? title, content;
@@ -14,6 +16,39 @@ class _GlassDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
+    final theme = Theme.of(context);
+    final inputBorder = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(14),
+      borderSide: BorderSide(color: p.mute),
+    );
+    final readableTheme = theme.copyWith(
+      inputDecorationTheme: theme.inputDecorationTheme.copyWith(
+        // 输入内容使用实色底，标签、计数和多行错误也不受背后页面颜色干扰。
+        filled: true,
+        fillColor: p.card,
+        enabledBorder: inputBorder,
+        focusedBorder: inputBorder.copyWith(borderSide: BorderSide(color: p.accent, width: 2)),
+        errorBorder: inputBorder.copyWith(borderSide: BorderSide(color: theme.colorScheme.error)),
+        focusedErrorBorder: inputBorder.copyWith(borderSide: BorderSide(color: theme.colorScheme.error, width: 2)),
+        labelStyle: TextStyle(color: p.mute),
+        floatingLabelStyle: WidgetStateTextStyle.resolveWith(
+          (states) => TextStyle(
+            color: states.contains(WidgetState.error)
+                ? theme.colorScheme.error
+                : states.contains(WidgetState.focused)
+                ? p.ink
+                : p.mute,
+          ),
+        ),
+        hintStyle: TextStyle(color: p.mute),
+        counterStyle: TextStyle(color: p.mute),
+        helperStyle: TextStyle(color: p.mute),
+        errorStyle: TextStyle(color: theme.colorScheme.error),
+        errorMaxLines: 4,
+        helperMaxLines: 4,
+        hintMaxLines: 3,
+      ),
+    );
     return Dialog(
       backgroundColor: Colors.transparent,
       elevation: 0,
@@ -22,73 +57,91 @@ class _GlassDialog extends StatelessWidget {
       child: AppSurface(
         color: p.card,
         radius: 32,
-        tintAlpha: 0.88,
+        tintAlpha: 0.94,
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (title != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 18),
-                  child: DefaultTextStyle(
-                    style: TextStyle(color: p.ink, fontSize: 20, fontWeight: FontWeight.w700, height: 1.3),
-                    textAlign: TextAlign.center,
-                    child: title!,
-                  ),
-                ),
-              if (content != null)
-                Flexible(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: DefaultTextStyle(
-                      style: TextStyle(color: p.ink, fontSize: 15, height: 1.5),
-                      child: content!,
-                    ),
-                  ),
-                ),
-              if (actions?.isNotEmpty ?? false) ...[
-                const SizedBox(height: 24),
-                FilledButtonTheme(
-                  data: FilledButtonThemeData(style: FilledButton.styleFrom(minimumSize: const Size(64, 46))),
-                  child: TextButtonTheme(
-                    data: TextButtonThemeData(
-                      style: TextButton.styleFrom(
-                        minimumSize: const Size(64, 46),
-                        backgroundColor: p.ink.withValues(alpha: 0.06),
-                        foregroundColor: p.ink,
+          child: Theme(
+            data: readableTheme,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                // 极短视口或大字号时连标题和按钮一起滚动，避免键盘把操作挤出屏幕。
+                final scrollWhole =
+                    constraints.maxHeight < 320 ||
+                    (MediaQuery.textScalerOf(context).scale(14) > 20 && constraints.maxHeight < 460);
+                final body = content == null
+                    ? null
+                    : Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: DefaultTextStyle(
+                          style: theme.textTheme.bodyMedium!.copyWith(color: p.ink, fontSize: 15, height: 1.5),
+                          child: content!,
+                        ),
+                      );
+                final panel = Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (title != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 18),
+                        child: DefaultTextStyle(
+                          style: theme.textTheme.titleLarge!.copyWith(
+                            color: p.ink,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                            height: 1.3,
+                          ),
+                          textAlign: TextAlign.center,
+                          child: title!,
+                        ),
                       ),
-                    ),
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        final stacked =
-                            constraints.maxWidth / actions!.length < 120 ||
-                            MediaQuery.textScalerOf(context).scale(14) > 20;
-                        return stacked
-                            ? Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  for (final (i, action) in actions!.indexed) ...[
-                                    if (i > 0) const SizedBox(height: 8),
-                                    action,
-                                  ],
-                                ],
-                              )
-                            : Row(
-                                children: [
-                                  for (final (i, action) in actions!.indexed) ...[
-                                    if (i > 0) const SizedBox(width: 10),
-                                    Expanded(child: action),
-                                  ],
-                                ],
-                              );
-                      },
-                    ),
-                  ),
-                ),
-              ],
-            ],
+                    if (body != null)
+                      if (scrollWhole) body else Flexible(child: SingleChildScrollView(child: body)),
+                    if (actions?.isNotEmpty ?? false) ...[
+                      const SizedBox(height: 24),
+                      FilledButtonTheme(
+                        data: FilledButtonThemeData(style: FilledButton.styleFrom(minimumSize: const Size(64, 46))),
+                        child: TextButtonTheme(
+                          data: TextButtonThemeData(
+                            style: TextButton.styleFrom(
+                              minimumSize: const Size(64, 46),
+                              backgroundColor: p.ink.withValues(alpha: 0.06),
+                              foregroundColor: p.ink,
+                            ),
+                          ),
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              final stacked =
+                                  constraints.maxWidth / actions!.length < 120 ||
+                                  MediaQuery.textScalerOf(context).scale(14) > 20;
+                              return stacked
+                                  ? Column(
+                                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                                      children: [
+                                        for (final (i, action) in actions!.indexed) ...[
+                                          if (i > 0) const SizedBox(height: 8),
+                                          action,
+                                        ],
+                                      ],
+                                    )
+                                  : Row(
+                                      children: [
+                                        for (final (i, action) in actions!.indexed) ...[
+                                          if (i > 0) const SizedBox(width: 10),
+                                          Expanded(child: action),
+                                        ],
+                                      ],
+                                    );
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                );
+                return scrollWhole ? SingleChildScrollView(child: panel) : panel;
+              },
+            ),
           ),
         ),
       ),

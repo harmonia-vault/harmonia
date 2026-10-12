@@ -20,11 +20,13 @@ abstract final class Space {
 }
 
 class AppearanceTheme extends ThemeExtension<AppearanceTheme> {
-  const AppearanceTheme(this.liquidGlass);
+  const AppearanceTheme(this.liquidGlass, [this.glassOpacity = 0.5]);
   final bool liquidGlass;
+  final double glassOpacity;
 
   @override
-  AppearanceTheme copyWith({bool? liquidGlass}) => AppearanceTheme(liquidGlass ?? this.liquidGlass);
+  AppearanceTheme copyWith({bool? liquidGlass, double? glassOpacity}) =>
+      AppearanceTheme(liquidGlass ?? this.liquidGlass, glassOpacity ?? this.glassOpacity);
 
   @override
   AppearanceTheme lerp(AppearanceTheme? other, double t) => other ?? this;
@@ -89,7 +91,7 @@ extension PaletteX on BuildContext {
   Palette get palette => Theme.of(this).extension<Palette>()!;
 }
 
-ThemeData buildTheme(Brightness brightness, {bool liquidGlass = false}) {
+ThemeData buildTheme(Brightness brightness, {bool liquidGlass = false, double glassOpacity = 0.5}) {
   final p = brightness == Brightness.light ? Palette.light : Palette.dark;
   final scheme = ColorScheme.fromSeed(
     seedColor: p.accent,
@@ -112,7 +114,7 @@ ThemeData buildTheme(Brightness brightness, {bool liquidGlass = false}) {
     useMaterial3: true,
     colorScheme: scheme,
     scaffoldBackgroundColor: p.paper,
-    extensions: [p, AppearanceTheme(liquidGlass)],
+    extensions: [p, AppearanceTheme(liquidGlass, glassOpacity)],
     appBarTheme: AppBarTheme(
       backgroundColor: p.paper,
       foregroundColor: p.ink,

@@ -141,8 +141,16 @@ class _HarmoniaAppState extends State<HarmoniaApp> with WidgetsBindingObserver {
     title: 'Harmonia',
     debugShowCheckedModeBanner: false,
     themeMode: colorThemeMode(widget.c.appearance.colorMode),
-    theme: buildTheme(Brightness.light, liquidGlass: widget.c.appearance.liquidGlass),
-    darkTheme: buildTheme(Brightness.dark, liquidGlass: widget.c.appearance.liquidGlass),
+    theme: buildTheme(
+      Brightness.light,
+      liquidGlass: widget.c.appearance.liquidGlass,
+      glassOpacity: widget.c.appearance.glassOpacity,
+    ),
+    darkTheme: buildTheme(
+      Brightness.dark,
+      liquidGlass: widget.c.appearance.liquidGlass,
+      glassOpacity: widget.c.appearance.glassOpacity,
+    ),
     builder: (_, child) => AppScope(
       identity: widget.c.identity,
       child: LiquidGlassWidgets.wrap(brightnessResolver: Theme.maybeBrightnessOf, child: child!),

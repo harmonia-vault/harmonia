@@ -110,7 +110,7 @@ class _SignInPageState extends State<SignInPage> {
   /// 账号正受到异常登录尝试时，服务端在密码正确后要求邮件验证码。返回 null 表示取消。
   Future<String?> _askCode(String message) {
     final ctl = TextEditingController();
-    return showDialog<String>(
+    return showAppDialog<String>(
       context: context,
       useRootNavigator: false,
       barrierDismissible: false,
@@ -127,7 +127,7 @@ class _SignInPageState extends State<SignInPage> {
               autofocus: true,
               autofillHints: AppScope.isSimulated(context) ? null : const [AutofillHints.oneTimeCode],
               textCapitalization: TextCapitalization.characters,
-              decoration: const InputDecoration(labelText: '邮件中的 8 位验证码'),
+              decoration: const InputDecoration(labelText: '邮箱验证码', helperText: '输入邮件中的 8 位验证码'),
             ),
           ],
         ),

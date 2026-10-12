@@ -41,7 +41,7 @@ class _AddDevicePageState extends State<AddDevicePage> {
 
   Future<void> _manual() async {
     final ctl = TextEditingController();
-    final code = await showDialog<String>(
+    final code = await showAppDialog<String>(
       context: context,
       useRootNavigator: false,
       builder: (c) => AppAlertDialog(
@@ -52,7 +52,7 @@ class _AddDevicePageState extends State<AddDevicePage> {
           autofocus: true,
           textCapitalization: TextCapitalization.characters,
           style: const TextStyle(fontFamily: 'monospace', fontSize: 18),
-          decoration: const InputDecoration(hintText: 'XXXX-XXXX-XXXX-XXXX'),
+          decoration: const InputDecoration(labelText: '核对码', hintText: 'XXXX-XXXX-XXXX-XXXX'),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(c), child: const Text('取消')),
@@ -73,7 +73,10 @@ class _AddDevicePageState extends State<AddDevicePage> {
         const Text('扫描电脑终端或另一台手机上显示的二维码。'),
         const SizedBox(height: Space.md),
         QrScannerView(
-          simulatedCode: pairingQr('debug-pairing', pairingFingerprint('debug-pairing', 'debug-sign', 'debug-box', 'debug-root')),
+          simulatedCode: pairingQr(
+            'debug-pairing',
+            pairingFingerprint('debug-pairing', 'debug-sign', 'debug-box', 'debug-root'),
+          ),
           onCode: (raw) => _found(() => widget.c.vault.pairingFromQr(raw), scanned: true),
           blocked: '无法打开相机。请在系统设置中允许 Harmonia 使用相机，或改用核对码。',
         ),
@@ -161,7 +164,7 @@ class _ReviewPairingPageState extends State<ReviewPairingPage> {
 
   Future<void> _reject() async {
     var block = false;
-    final ok = await showDialog<bool>(
+    final ok = await showAppDialog<bool>(
       context: context,
       useRootNavigator: false,
       builder: (ctx) => StatefulBuilder(

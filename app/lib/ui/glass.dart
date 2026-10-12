@@ -42,8 +42,14 @@ bool usesGlass(BuildContext context) =>
 
 LiquidGlassSettings glassSettings(BuildContext context, {Color? color}) {
   final dark = Theme.of(context).brightness == Brightness.dark;
+  final opacity = Theme.of(context).extension<AppearanceTheme>()?.glassOpacity ?? 0.5;
+  // 中点沿用既有材质；两段插值让其余位置连续变化。
+  final low = dark ? 0.24 : 0.14;
+  final middle = dark ? 0.52 : 0.38;
+  final high = dark ? 0.80 : 0.74;
+  final alpha = opacity <= 0.5 ? low + (middle - low) * opacity * 2 : middle + (high - middle) * (opacity - 0.5) * 2;
   return LiquidGlassSettings(
-    glassColor: (color ?? context.palette.card).withValues(alpha: dark ? 0.52 : 0.38),
+    glassColor: (color ?? context.palette.card).withValues(alpha: alpha),
     thickness: 22,
     blur: 12,
     refractiveIndex: 1.12,

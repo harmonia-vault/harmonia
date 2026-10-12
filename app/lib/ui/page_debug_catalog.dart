@@ -25,6 +25,7 @@ import 'recovery_pages.dart';
 import 'scanner.dart';
 import 'settings.dart';
 import 'widgets.dart';
+import 'theme.dart';
 
 class DebugPageEntry {
   const DebugPageEntry(this.name, this.page, {this.stage = Stage.home, this.prepare});
@@ -39,10 +40,11 @@ Map<String, List<DebugPageEntry>> debugPages() => {
     DebugPageEntry('首页、Android / iOS 底部间距', (s) => s.vault.paired ? HomePage(c: s.c) : SignInPage(c: s.c)),
     DebugPageEntry('玻璃折射对照', (_) => const GlassDebugPage()),
     DebugPageEntry('通知与下载进度', (_) => const FeedbackDebugPage()),
-    DebugPageEntry('设备列表', (s) => s.vault.paired ? DevicesTab(c: s.c) : SignInPage(c: s.c)),
-    DebugPageEntry('设置与安全弹窗', (s) => s.vault.paired ? SettingsTab(c: s.c) : SignInPage(c: s.c)),
-    DebugPageEntry('关于与开源许可', (_) => const AboutPage()),
-    DebugPageEntry('环境详情与菜单', (s) => _environment(s, edit: false)),
+    DebugPageEntry('环境列表与行尾间距', (s) => EnvironmentsTab(c: s.c)),
+    DebugPageEntry('设备列表与行尾间距', (s) => s.vault.paired ? DevicesTab(c: s.c) : SignInPage(c: s.c)),
+    DebugPageEntry('设置、透明度与输入弹窗', (s) => s.vault.paired ? SettingsTab(c: s.c) : SignInPage(c: s.c)),
+    DebugPageEntry('关于、应用图标与开源许可', (_) => const AboutPage()),
+    DebugPageEntry('环境详情、复制间距与菜单', (s) => _environment(s, edit: false)),
     DebugPageEntry('添加变量', (s) => _environment(s, edit: true)),
     DebugPageEntry('编辑变量', (s) {
       if (s.vault.environments.isEmpty) return _environment(s, edit: true);
@@ -183,7 +185,7 @@ Map<String, List<DebugPageEntry>> debugPages() => {
         },
       ),
     ),
-    DebugPageEntry('身份验证弹窗', (_) => DebugOverlay(show: (c) => verifyIdentity(c, '验证模拟身份后继续'))),
+    DebugPageEntry('身份验证与 PIN 错误提示', (_) => DebugOverlay(show: (c) => verifyIdentity(c, '验证模拟身份后继续'))),
     DebugPageEntry(
       '新 PIN 弹窗',
       (s) => DebugOverlay(
@@ -284,8 +286,18 @@ class _DebugOverlayState extends State<DebugOverlay> {
   @override
   Widget build(BuildContext context) => AppPage(
     appBar: const AppBarSurface(title: Text('弹窗预览')),
-    body: (c) => Center(
-      child: FilledButton(onPressed: () => widget.show(c), child: const Text('重新打开弹窗')),
+    body: (c) => ListView(
+      children: [
+        const Padding(padding: EdgeInsets.all(16), child: Banner2('可在目录切换明暗、大字号、高对比度和减少动态效果；输入错误 PIN 可查看错误提示。')),
+        FilledButton(onPressed: () => widget.show(c), child: const Text('重新打开弹窗')),
+        for (var i = 0; i < 8; i++)
+          Container(
+            height: 72,
+            color: i.isEven ? context.palette.sage : context.palette.yellow,
+            alignment: Alignment.center,
+            child: Text('合成背景 ${i + 1} · 检查弹窗文字遮盖', style: TextStyle(color: Palette.light.ink)),
+          ),
+      ],
     ),
   );
 }

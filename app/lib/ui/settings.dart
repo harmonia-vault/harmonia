@@ -13,6 +13,7 @@ import 'recovery_pages.dart';
 import 'theme.dart';
 import 'glass_overlays.dart';
 import 'glass.dart';
+import 'glass_transparency.dart';
 import 'widgets.dart';
 
 class SettingsTab extends StatefulWidget {
@@ -70,7 +71,7 @@ class _SettingsTabState extends State<SettingsTab> {
 
   Future<void> _changePassword() async {
     final a = TextEditingController(), b = TextEditingController();
-    final ok = await showDialog<bool>(
+    final ok = await showAppDialog<bool>(
       context: context,
       useRootNavigator: false,
       builder: (ctx) => AppAlertDialog(
@@ -84,9 +85,9 @@ class _SettingsTabState extends State<SettingsTab> {
               controller: a,
               obscureText: true,
               autofillHints: AppScope.isSimulated(context) ? null : const [AutofillHints.newPassword],
-              decoration: const InputDecoration(labelText: '新密码（至少 8 位）'),
+              decoration: const InputDecoration(labelText: '新密码', helperText: '至少 8 位'),
             ),
-            const SizedBox(height: Space.sm),
+            const SizedBox(height: Space.lg),
             TextField(
               controller: b,
               obscureText: true,
@@ -110,7 +111,7 @@ class _SettingsTabState extends State<SettingsTab> {
   }
 
   Future<void> _pickChannel() async {
-    final picked = await showDialog<UpdateChannel>(
+    final picked = await showAppDialog<UpdateChannel>(
       context: context,
       useRootNavigator: false,
       builder: (ctx) => AppSimpleDialog(
@@ -164,7 +165,7 @@ class _SettingsTabState extends State<SettingsTab> {
   }
 
   Future<void> _pickColorMode() async {
-    final picked = await showDialog<AppColorMode>(
+    final picked = await showAppDialog<AppColorMode>(
       context: context,
       useRootNavigator: false,
       builder: (ctx) => AppSimpleDialog(
@@ -197,7 +198,11 @@ class _SettingsTabState extends State<SettingsTab> {
       await Navigator.push(
         context,
         MaterialPageRoute<void>(
-          builder: (_) => PageDebug(initialGlass: glass, initialColorMode: c.appearance.colorMode),
+          builder: (_) => PageDebug(
+            initialGlass: glass,
+            initialColorMode: c.appearance.colorMode,
+            initialGlassOpacity: c.appearance.glassOpacity,
+          ),
         ),
       );
     } finally {
@@ -258,6 +263,10 @@ class _SettingsTabState extends State<SettingsTab> {
                   value: c.appearance.liquidGlass,
                   onChanged: _changingAppearance ? null : _toggleGlass,
                 ),
+                if (c.appearance.liquidGlass) ...[
+                  const Divider(),
+                  GlassTransparencyControl(value: c.appearance.glassOpacity, onChanged: c.setGlassOpacity),
+                ],
               ],
             ),
           ),

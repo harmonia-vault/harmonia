@@ -9,6 +9,7 @@ import 'app_scope.dart';
 import 'glass_overlays.dart';
 import 'glass.dart';
 import 'widgets.dart';
+import 'list_row.dart';
 
 final _varName = RegExp(r'^[A-Za-z_][A-Za-z0-9_]{0,127}$');
 
@@ -21,9 +22,9 @@ String? validateVarName(String? v) {
 
 Future<String?> askName(BuildContext context, {required String title, String initial = '', String label = '名称'}) {
   final ctl = TextEditingController(text: initial);
-  return showDialog<String>(
+  return showAppDialog<String>(
     context: context,
-      useRootNavigator: false,
+    useRootNavigator: false,
     builder: (c) => AppAlertDialog(
       title: Text(title),
       content: TextField(
@@ -31,7 +32,7 @@ Future<String?> askName(BuildContext context, {required String title, String ini
         autofillHints: null,
         autofocus: true,
         maxLength: 64,
-        decoration: InputDecoration(hintText: label),
+        decoration: InputDecoration(labelText: label),
         onSubmitted: (v) => Navigator.pop(c, v.trim().isEmpty ? null : v.trim()),
       ),
       actions: [
@@ -98,7 +99,7 @@ class EnvironmentsTab extends StatelessWidget {
                       .length;
                   return Card(
                     child: ListTile(
-                      contentPadding: const EdgeInsets.symmetric(horizontal: Space.lg, vertical: Space.sm),
+                      contentPadding: listRowPadding.copyWith(top: Space.sm, bottom: Space.sm),
                       leading: CircleAvatar(
                         backgroundColor: i.isEven ? context.palette.yellow : context.palette.sage,
                         foregroundColor: Palette.light.ink,
@@ -106,7 +107,7 @@ class EnvironmentsTab extends StatelessWidget {
                       ),
                       title: Text(e.name, style: const TextStyle(fontWeight: FontWeight.w600)),
                       subtitle: Text('$count 个变量 · $devices 台电脑可访问'),
-                      trailing: const Icon(Icons.chevron_right),
+                      trailing: const ListRowChevron(),
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(
@@ -240,6 +241,7 @@ class _EnvironmentPageState extends State<EnvironmentPage> {
                   for (final (i, n) in names.indexed) ...[
                     if (i > 0) const Divider(),
                     ListTile(
+                      contentPadding: listRowPadding,
                       title: Text(
                         n,
                         style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.w600),
@@ -256,8 +258,7 @@ class _EnvironmentPageState extends State<EnvironmentPage> {
                           builder: (_) => VariableEditPage(c: c, envId: env.id, name: n),
                         ),
                       ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
+                      trailing: ListRowActions(
                         children: [
                           IconButton(
                             tooltip: _revealed.contains(n) ? '隐藏' : '显示',

@@ -36,9 +36,9 @@ Future<Uint8List?> verifyIdentity(BuildContext context, String reason) async {
     identity.bioInvalidated = false;
     toast(context, bioInvalidatedText(identity));
   }
-  return showDialog<Uint8List>(
+  return showAppDialog<Uint8List>(
     context: context,
-      useRootNavigator: false,
+    useRootNavigator: false,
     barrierDismissible: false,
     builder: (_) => _PinDialog(reason: reason),
   );
@@ -54,29 +54,33 @@ String pinErrorText(PinResult r) {
 }
 
 class PinField extends StatelessWidget {
-  const PinField(
-      {super.key, required this.controller, this.label, this.error, this.autofocus = false, this.onSubmitted});
+  const PinField({
+    super.key,
+    required this.controller,
+    this.label,
+    this.helper,
+    this.error,
+    this.autofocus = false,
+    this.onSubmitted,
+  });
   final TextEditingController controller;
-  final String? label, error;
+  final String? label, helper, error;
   final bool autofocus;
   final ValueChanged<String>? onSubmitted;
 
   @override
   Widget build(BuildContext context) => TextField(
-        autofillHints: null,
-        controller: controller,
-        autofocus: autofocus,
-        obscureText: true,
-        enableSuggestions: false,
-        autocorrect: false,
-        keyboardType: TextInputType.number,
-        inputFormatters: [
-          FilteringTextInputFormatter.digitsOnly,
-          LengthLimitingTextInputFormatter(Keyring.maxPin),
-        ],
-        decoration: InputDecoration(labelText: label, errorText: error),
-        onSubmitted: onSubmitted,
-      );
+    autofillHints: null,
+    controller: controller,
+    autofocus: autofocus,
+    obscureText: true,
+    enableSuggestions: false,
+    autocorrect: false,
+    keyboardType: TextInputType.number,
+    inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(Keyring.maxPin)],
+    decoration: InputDecoration(labelText: label, helperText: helper, errorText: error),
+    onSubmitted: onSubmitted,
+  );
 }
 
 /// 检查两次输入的新 PIN，返回错误提示；没有问题时返回 null。
@@ -113,34 +117,41 @@ class _PinDialogState extends State<_PinDialog> {
 
   @override
   Widget build(BuildContext context) => AppAlertDialog(
-        title: const Text('输入 App PIN'),
-        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(widget.reason),
-          const SizedBox(height: Space.md),
-          PinField(controller: _pin, autofocus: true, error: _error, onSubmitted: (_) => _submit()),
-        ]),
-        actions: [
-          TextButton(onPressed: _busy ? null : () => Navigator.pop(context), child: const Text('取消')),
-          FilledButton(onPressed: _busy ? null : _submit, child: Text(_busy ? '验证中…' : '确认')),
-        ],
-      );
+    title: const Text('输入 App PIN'),
+    content: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(widget.reason),
+        const SizedBox(height: Space.md),
+        PinField(controller: _pin, autofocus: true, error: _error, onSubmitted: (_) => _submit()),
+      ],
+    ),
+    actions: [
+      TextButton(onPressed: _busy ? null : () => Navigator.pop(context), child: const Text('取消')),
+      FilledButton(onPressed: _busy ? null : _submit, child: Text(_busy ? '验证中…' : '确认')),
+    ],
+  );
 }
 
 /// 输入两次新 PIN。返回新 PIN；取消时返回 null。
 Future<String?> askNewPin(BuildContext context) {
   final a = TextEditingController(), b = TextEditingController();
   String? error;
-  return showDialog<String>(
+  return showAppDialog<String>(
     context: context,
-      useRootNavigator: false,
+    useRootNavigator: false,
     builder: (c) => StatefulBuilder(
       builder: (c, setState) => AppAlertDialog(
         title: const Text('设置新的 App PIN'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          PinField(controller: a, autofocus: true, label: '新 PIN（${Keyring.minPin}–${Keyring.maxPin} 位数字）'),
-          const SizedBox(height: Space.sm),
-          PinField(controller: b, label: '再次输入', error: error),
-        ]),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            PinField(controller: a, autofocus: true, label: '新 PIN', helper: '${Keyring.minPin}–${Keyring.maxPin} 位数字'),
+            const SizedBox(height: Space.lg),
+            PinField(controller: b, label: '再次输入', error: error),
+          ],
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(c), child: const Text('取消')),
           FilledButton(
@@ -229,13 +240,16 @@ class _LockPageState extends State<LockPage> {
   }
 
   Future<void> _forgot() async {
-    final ok = await confirmDialog(context,
-        title: '清除本机数据？',
-        body: '${_bio ? '如果只是忘记了 PIN，可以先用${widget.c.identity.bio('解锁')}，再到“设置”中修改 PIN。\n' : ''}'
-            '清除后，账号和云端数据不受影响，但这台手机需要重新登录，并由管理设备批准或用恢复码恢复。\n'
-            '这台手机原来的设备记录需要在管理设备上移除。',
-        ok: '清除本机数据',
-        danger: true);
+    final ok = await confirmDialog(
+      context,
+      title: '清除本机数据？',
+      body:
+          '${_bio ? '如果只是忘记了 PIN，可以先用${widget.c.identity.bio('解锁')}，再到“设置”中修改 PIN。\n' : ''}'
+          '清除后，账号和云端数据不受影响，但这台手机需要重新登录，并由管理设备批准或用恢复码恢复。\n'
+          '这台手机原来的设备记录需要在管理设备上移除。',
+      ok: '清除本机数据',
+      danger: true,
+    );
     if (!ok || !mounted) return;
     await runBusy(context, widget.c.forgetDevice);
   }
@@ -248,36 +262,39 @@ class _LockPageState extends State<LockPage> {
         child: Center(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(Space.xl),
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Icon(Icons.lock_outline_rounded, size: 56, color: p.ink),
-              const SizedBox(height: Space.lg),
-              Text('Harmonia 已锁定', style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: Space.sm),
-              Text(widget.c.prefs.email ?? '', style: TextStyle(color: p.mute)),
-              const SizedBox(height: Space.xxl),
-              PinField(
-                controller: _pin,
-                label: 'App PIN',
-                error: _error,
-                autofocus: !_bio,
-                onSubmitted: (_) => _submit(),
-              ),
-              const SizedBox(height: Space.lg),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(onPressed: _busy ? null : _submit, child: Text(_busy ? '正在解锁…' : '解锁')),
-              ),
-              if (_bio) ...[
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.lock_outline_rounded, size: 56, color: p.ink),
+                const SizedBox(height: Space.lg),
+                Text('Harmonia 已锁定', style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(height: Space.sm),
-                TextButton.icon(
-                  onPressed: _busy ? null : _useBio,
-                  icon: Icon(bioIcon(widget.c.identity)),
-                  label: Text('用${widget.c.identity.bio('解锁')}'),
+                Text(widget.c.prefs.email ?? '', style: TextStyle(color: p.mute)),
+                const SizedBox(height: Space.xxl),
+                PinField(
+                  controller: _pin,
+                  label: 'App PIN',
+                  error: _error,
+                  autofocus: !_bio,
+                  onSubmitted: (_) => _submit(),
                 ),
+                const SizedBox(height: Space.lg),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(onPressed: _busy ? null : _submit, child: Text(_busy ? '正在解锁…' : '解锁')),
+                ),
+                if (_bio) ...[
+                  const SizedBox(height: Space.sm),
+                  TextButton.icon(
+                    onPressed: _busy ? null : _useBio,
+                    icon: Icon(bioIcon(widget.c.identity)),
+                    label: Text('用${widget.c.identity.bio('解锁')}'),
+                  ),
+                ],
+                const SizedBox(height: Space.md),
+                TextButton(onPressed: _busy ? null : _forgot, child: const Text('忘记 PIN？')),
               ],
-              const SizedBox(height: Space.md),
-              TextButton(onPressed: _busy ? null : _forgot, child: const Text('忘记 PIN？')),
-            ]),
+            ),
           ),
         ),
       ),
