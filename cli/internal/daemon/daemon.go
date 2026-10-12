@@ -16,7 +16,8 @@ import (
 const (
 	fullSyncInterval = 5 * time.Minute
 	refreshInterval  = time.Minute
-	notPairedWait    = 30 * time.Second
+	// 还没有接入账号时只是读一下本机的配置文件，隔得短一些，harmonia login 完成后很快就能连上服务器。
+	notPairedWait = 3 * time.Second
 )
 
 // Hooks 允许后台服务挂接额外的周期任务（例如检查更新）。

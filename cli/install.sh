@@ -1,6 +1,7 @@
 #!/bin/sh
 # Harmonia CLI 安装脚本：按更新渠道下载当前系统对应的 harmonia 到 ~/.local/bin，并校验 SHA-256。
 #   curl -fsSL https://github.com/harmonia-vault/harmonia/releases/download/update-feed/install.sh | sh
+#   没有 curl 时：wget -qO- <同一个地址> | sh
 #   安装测试版：在 sh 前加上 HARMONIA_CHANNEL=beta
 set -eu
 
@@ -24,10 +25,20 @@ case "$(uname -m)" in
   *) echo "暂不支持这个处理器架构：$(uname -m)" >&2; exit 1 ;;
 esac
 
+# fetch <地址> <保存位置>：用 curl 下载，没有 curl 时用 wget。
+if command -v curl >/dev/null 2>&1; then
+  fetch() { curl -fsSL "$1" -o "$2"; }
+elif command -v wget >/dev/null 2>&1; then
+  fetch() { wget -q "$1" -O "$2"; }
+else
+  echo "需要 curl 或 wget 才能下载，请先安装其中一个。" >&2
+  exit 1
+fi
+
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
-curl -fsSL "$FEED/$CHANNEL.json" -o "$tmp/manifest.json" || {
+fetch "$FEED/$CHANNEL.json" "$tmp/manifest.json" || {
   echo "无法获取更新信息（$CHANNEL 渠道可能还没有发布过版本）。" >&2
   exit 1
 }
@@ -41,7 +52,7 @@ if [ -z "$url" ] || [ -z "$expected" ]; then
 fi
 
 echo "正在下载 harmonia $version（$os/$arch）……"
-curl -fsSL "$url" -o "$tmp/harmonia"
+fetch "$url" "$tmp/harmonia"
 if command -v sha256sum >/dev/null 2>&1; then
   actual=$(sha256sum "$tmp/harmonia" | cut -d' ' -f1)
 else
