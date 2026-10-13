@@ -55,7 +55,7 @@ class _DevicesTabState extends State<DevicesTab> {
   }
 
   Future<void> _addDevice() async {
-    await Navigator.push(context, MaterialPageRoute(builder: (_) => AddDevicePage(c: c)));
+    await addDevice(context, c);
     if (mounted) await _loadPending();
   }
 
@@ -72,7 +72,7 @@ class _DevicesTabState extends State<DevicesTab> {
       actions: [IconButton(tooltip: '添加设备', onPressed: _addDevice, icon: const Icon(Icons.add))],
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _addDevice,
-        icon: const Icon(Icons.qr_code_scanner),
+        icon: const Icon(Icons.add),
         label: const Text('添加设备'),
       ),
       onRefresh: () async {
@@ -136,7 +136,7 @@ class _DevicesTabState extends State<DevicesTab> {
         ),
         const SizedBox(height: Space.md),
         Text(
-          tidy('在电脑上运行 harmonia login 后，点击“添加设备”扫描终端里的二维码；用配对码发起的请求会出现在上面的“等待批准”中。'),
+          tidy('在电脑上运行 harmonia login 后，点击“添加设备”扫描终端里的二维码；也可以先在“添加设备”中生成配对码，用配对码发起的请求会出现在上面的“等待批准”中。'),
           style: TextStyle(color: context.palette.mute, height: 1.5),
         ),
       ],

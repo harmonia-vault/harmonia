@@ -1,4 +1,4 @@
-// 添加设备（扫码 / 核对码 → 核对 → 选择权限 → 批准；生成配对码），以及收到用配对码发起的请求时弹出的批准页。
+// 添加设备：先选扫码（或核对码）还是生成配对码；扫码 → 核对 → 选择权限 → 批准，以及收到用配对码发起的请求时弹出的批准页。
 import 'package:flutter/material.dart';
 
 import '../app/controller.dart';
@@ -13,6 +13,37 @@ import 'theme.dart';
 import 'glass_overlays.dart';
 import 'glass.dart';
 import 'widgets.dart';
+
+/// 添加设备：先选择方式。配对码要在对方发起之前生成，扫码则在对方发起之后，两者分开放（docs/rewrite-plan.md 5.10）。
+Future<void> addDevice(BuildContext context, AppController c) async {
+  final scan = await showAppDialog<bool>(
+    context: context,
+    useRootNavigator: false,
+    builder: (ctx) => AppSimpleDialog(
+      title: const Text('添加设备'),
+      children: [
+        ListTile(
+          leading: const Icon(Icons.qr_code_scanner),
+          title: const Text('扫码或输入核对码'),
+          subtitle: Text(tidy('对方已经显示了二维码，例如电脑上运行了 harmonia login，或另一台手机选择了接入')),
+          onTap: () => Navigator.pop(ctx, true),
+        ),
+        ListTile(
+          leading: const Icon(Icons.password_outlined),
+          title: const Text('生成配对码'),
+          subtitle: Text(tidy('对方还没开始：先生成配对码告诉对方，对方发起后这里会直接弹出批准页')),
+          onTap: () => Navigator.pop(ctx, false),
+        ),
+      ],
+    ),
+  );
+  if (scan == null || !context.mounted) return;
+  if (scan) {
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => AddDevicePage(c: c)));
+  } else {
+    await showPairingCode(context, c);
+  }
+}
 
 class AddDevicePage extends StatefulWidget {
   const AddDevicePage({super.key, required this.c});
@@ -87,17 +118,6 @@ class _AddDevicePageState extends State<AddDevicePage> {
           onPressed: _manual,
           icon: const Icon(Icons.keyboard_outlined),
           label: const Text('无法扫码？输入核对码'),
-        ),
-        const SectionTitle('用配对码发起'),
-        Text(
-          tidy('对方输入配对码后，请求会直接弹出在这台手机上，省去扫码；批准前仍要核对核对码。配对码 5 分钟内有效，只能用一次。'),
-          style: TextStyle(color: context.palette.mute, height: 1.5),
-        ),
-        const SizedBox(height: Space.md),
-        OutlinedButton.icon(
-          onPressed: () => showPairingCode(context, widget.c),
-          icon: const Icon(Icons.password_outlined),
-          label: const Text('生成配对码'),
         ),
       ],
     ),
