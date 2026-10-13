@@ -1,5 +1,6 @@
 // 实例首页：在浏览器里直接打开服务器地址时看到的页面。
-// 纯静态：不带脚本，不加载任何外部资源，也不透露这台服务器的配置（是否开放注册、有多少账号）。
+// 只带一段内嵌脚本（复制按钮，内容安全策略按哈希放行），不加载任何外部资源，
+// 也不透露这台服务器的配置（是否开放注册、有多少账号）。
 import { encode } from "uqr";
 
 const REPO = "https://github.com/harmonia-vault/harmonia";
@@ -84,9 +85,15 @@ h1{margin:56px 0 16px;font-size:clamp(26px,7.4vw,44px);line-height:1.2;font-weig
 h1 em{font-style:normal;text-decoration:underline var(--yellow);text-decoration-thickness:.16em;text-underline-offset:.14em;text-decoration-skip-ink:none}
 .lead{margin:0;max-width:34em;font-size:17px;color:var(--mute)}
 .addr{display:flex;align-items:center;gap:20px;margin-top:32px;padding:18px 20px;border:1.5px solid var(--ink);border-radius:18px;background:var(--card);box-shadow:4px 4px 0 var(--yellow)}
-.addr div{flex:1;min-width:0}
+.ai{position:relative;margin:0 0 20px;padding:14px 16px;border:1.5px solid var(--ink);border-radius:14px;background:var(--card);box-shadow:4px 4px 0 var(--accent)}
+.ai span{display:block;font-size:12px;color:var(--mute)}
+.ai .prompt{margin:6px 0 0;padding:10px 12px;border:1.5px dashed var(--ink);border-radius:10px;color:var(--ink);font-size:15px;overflow-wrap:anywhere;-webkit-user-select:all;user-select:all}
+.copy{position:absolute;top:10px;right:12px;padding:1px 10px;border:1.5px solid currentColor;border-radius:8px;background:transparent;color:inherit;font:inherit;font-size:12px;line-height:20px;cursor:pointer}
+.copy:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.addr div{position:relative;flex:1;min-width:0}
 .qr{flex:none;width:136px;height:136px;border-radius:10px}
-.addr span{font-size:13px;letter-spacing:.08em;color:var(--mute)}
+.addr span{display:block;font-size:13px;letter-spacing:.08em;color:var(--mute)}
+.addr .copy{top:0;right:0}
 .addr code{display:block;margin:2px 0 8px;font-size:clamp(17px,4.6vw,22px);font-weight:600;line-height:1.4;word-break:break-all;-webkit-user-select:all;user-select:all}
 .addr p{margin:0;font-size:14px;color:var(--mute)}
 h2{margin:64px 0 24px;font-size:22px}
@@ -98,9 +105,11 @@ p{margin:0 0 12px;color:var(--mute)}
 .steps li::before{content:counter(step);position:absolute;left:0;top:0;display:grid;place-items:center;width:34px;height:34px;border:1.5px solid var(--ink);border-radius:50%;background:var(--yellow);color:#1E1B16;font-weight:700;line-height:1}
 .steps li:not(:last-child)::after{content:"";position:absolute;left:16px;top:42px;bottom:8px;border-left:2px dashed var(--line)}
 .btn{display:inline-block;margin-right:16px;padding:8px 18px;border:1.5px solid var(--ink);border-radius:12px;background:var(--accent);color:var(--on-accent);font-weight:600;text-decoration:none}
-.term{margin:0 0 12px;padding:12px 16px;border:1.5px solid var(--term-edge);border-radius:14px;background:var(--term);color:#F2EDE4}
+.term{position:relative;margin:0 0 12px;padding:12px 16px;border:1.5px solid var(--term-edge);border-radius:14px;background:var(--term);color:#F2EDE4}
 .term span{display:block;font-size:12px;color:#A69D8D}
 .term code{display:block;padding:2px 0;font-size:13.5px;line-height:1.6;word-break:break-all;-webkit-user-select:all;user-select:all}
+.or{margin-top:20px;margin-bottom:8px}
+.addr span,.term span,.ai span{padding-right:64px;min-height:26px}
 .flow{display:grid;grid-template-columns:repeat(3,1fr)}
 .node{position:relative;padding:0 10px;text-align:center}
 .node+.node::before{content:"";position:absolute;top:42px;left:calc(-50% + 54px);width:calc(100% - 108px);border-top:2px dashed var(--ink);opacity:.4}
@@ -113,6 +122,7 @@ footer a{margin-right:16px}
 @media(max-width:600px){
 h1{margin-top:40px}
 .addr{flex-direction:column;align-items:flex-start;gap:14px}
+.addr div{align-self:stretch}
 .qr{width:152px;height:152px}
 h2{margin-top:48px}
 .flow{grid-template-columns:1fr}
@@ -145,6 +155,34 @@ function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 }
 
+/** 复制给 AI 助手的提示词，各个系统通用：先介绍 Harmonia，再让它安装命令行、读取 harmonia skill 的说明、接入这台服务器。用第三人称称呼用户，地址都用这台服务器的地址。 */
+function aiPrompt(origin: string): string {
+  return escapeHtml(
+    `Harmonia（和弦，${origin}）是用户部署的环境变量同步服务，开源、自托管：用户在手机 App 上管理 API Key 等环境变量，端到端加密后同步到用户授权的电脑，你可以用它的命令行取用这些变量，不需要用户把 Key 贴进对话。` +
+      `请在这台电脑上安装 Harmonia 命令行：macOS、Linux 运行 curl -fsSL ${FEED}/install.sh | HARMONIA_YES=1 sh；` +
+      `Windows 在 PowerShell 中运行 $env:HARMONIA_YES = '1'; irm ${FEED}/install.ps1 | iex。` +
+      `装好后运行 harmonia skill，按输出的说明接入服务器 ${origin}（邮箱和配对码向用户询问）。`,
+  );
+}
+
+// 复制按钮：给每个带 data-copy 的元素加一个按钮，复制它的文字。没有脚本时文字仍可点一下整段选中。
+// 剪贴板接口只在 HTTPS（和 localhost）下可用，其他情况选中文字后用 execCommand 复制。
+const COPY_SCRIPT = `document.querySelectorAll("[data-copy]").forEach(function(el){
+var b=document.createElement("button");b.type="button";b.className="copy";b.textContent="复制";
+function show(t){b.textContent=t;setTimeout(function(){b.textContent="复制"},1600)}
+function fallback(){var r=document.createRange();r.selectNodeContents(el);var s=getSelection();s.removeAllRanges();s.addRange(r);
+try{show(document.execCommand("copy")?"已复制":"请手动复制")}catch(e){show("请手动复制")}}
+b.addEventListener("click",function(){var t=el.textContent;
+if(navigator.clipboard&&window.isSecureContext){navigator.clipboard.writeText(t).then(function(){show("已复制")},fallback)}else{fallback()}});
+el.parentNode.appendChild(b)})`;
+
+let scriptHash: Promise<string> | undefined;
+/** 复制脚本的 SHA-256（base64），写进内容安全策略，只放行这一段脚本。 */
+function copyScriptHash(): Promise<string> {
+  scriptHash ??= crypto.subtle.digest("SHA-256", new TextEncoder().encode(COPY_SCRIPT)).then((d) => btoa(String.fromCharCode(...new Uint8Array(d))));
+  return scriptHash;
+}
+
 function page(origin: string): string {
   const address = escapeHtml(origin);
   return `<!doctype html>
@@ -172,7 +210,7 @@ ${ICON}
 <div class="addr">
 <div>
 <span>服务器地址</span>
-<code>${address}</code>
+<code data-copy>${address}</code>
 <p>在 App 的“连接服务器”页扫这个二维码，或者手动填这个地址，就能连接到这台服务器。</p>
 </div>
 ${qrCode(origin)}
@@ -191,10 +229,15 @@ ${qrCode(origin)}
 </li>
 <li>
 <h3>接入电脑</h3>
-<p>在电脑上安装命令行，再接入这台服务器。终端会显示二维码，用 App 扫码批准后，变量就会同步过来。</p>
-<div class="term"><span>macOS、Linux</span><code>curl -fsSL ${FEED}/install.sh | sh</code></div>
-<div class="term"><span>Windows（在 PowerShell 里运行）</span><code>irm ${FEED}/install.ps1 | iex</code></div>
-<div class="term"><span>安装后接入</span><code>harmonia login ${address}</code></div>
+<p>在电脑上安装命令行，再接入这台服务器。</p>
+<div class="ai">
+<span>让 AI 助手安装</span>
+<p class="prompt" data-copy>${aiPrompt(origin)}</p>
+</div>
+<p class="or">或者自己安装，用 App 扫终端里的二维码批准：</p>
+<div class="term"><span>macOS、Linux</span><code data-copy>curl -fsSL ${FEED}/install.sh | sh</code></div>
+<div class="term"><span>Windows（PowerShell）</span><code data-copy>irm ${FEED}/install.ps1 | iex</code></div>
+<div class="term"><span>安装后接入</span><code data-copy>harmonia login ${address}</code></div>
 </li>
 </ol>
 
@@ -210,18 +253,20 @@ ${qrCode(origin)}
 <a href="${REPO}">项目主页</a><a href="${REPO}-worker">自己部署一台</a>
 </footer>
 </div>
+<script>${COPY_SCRIPT}</script>
 </body>
 </html>
 `;
 }
 
 /** origin 是访问者用的地址（协议加主机名），页面上原样显示，供填进 App 和命令行。 */
-export function homePage(origin: string): Response {
+export async function homePage(origin: string): Promise<Response> {
+  const hash = await copyScriptHash();
   return new Response(page(origin), {
     headers: {
       "content-type": "text/html; charset=utf-8",
       "cache-control": "public, max-age=300",
-      "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+      "content-security-policy": `default-src 'none'; script-src 'sha256-${hash}'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
       "referrer-policy": "no-referrer",
       "x-content-type-options": "nosniff",
     },

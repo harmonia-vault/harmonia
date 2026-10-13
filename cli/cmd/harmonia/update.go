@@ -25,7 +25,8 @@ type updateCache struct {
 
 // settings 是与账号无关的本机设置，退出登录时保留。
 type settings struct {
-	UpdateChannel string `json:"updateChannel"`
+	UpdateChannel string   `json:"updateChannel,omitempty"`
+	SkillFiles    []string `json:"skillFiles,omitempty"` // harmonia skill install 写入过的技能文件
 }
 
 func stateFile(name string) string {
@@ -42,6 +43,11 @@ func loadSettings() settings {
 		_ = json.Unmarshal(data, &s)
 	}
 	return s
+}
+
+func saveSettings(s settings) error {
+	data, _ := json.Marshal(s)
+	return state.WriteAtomic(stateFile("settings.json"), data)
 }
 
 // updateChannel 返回当前更新渠道；测试版程序默认使用测试版渠道。
@@ -101,8 +107,9 @@ func cmdUpdateChannel(args []string) error {
 	if err != nil {
 		return err
 	}
-	data, _ := json.Marshal(settings{UpdateChannel: string(ch)})
-	if err := state.WriteAtomic(stateFile("settings.json"), data); err != nil {
+	s := loadSettings()
+	s.UpdateChannel = string(ch)
+	if err := saveSettings(s); err != nil {
 		return err
 	}
 	_ = os.Remove(stateFile("update.json"))
@@ -173,5 +180,6 @@ func cmdUpdate(ctx context.Context, args []string) error {
 		fmt.Println("注意：", err)
 	}
 	fmt.Printf("已升级到 %s。旧版本保留在 %s.old。\n", m.Version, bin)
+	refreshSkills(bin)
 	return nil
 }

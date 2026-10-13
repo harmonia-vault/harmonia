@@ -218,8 +218,9 @@ harmonia/                     # 唯一开发仓库
   - 设备：`GET /devices`、`PUT /devices/{id}/grants`、`PATCH /devices/{id}`、`POST /devices/{id}/revoke`
   - 恢复：`POST /recovery/challenge`、`POST /recovery/session`、`GET /recovery/envelopes`、`POST /recovery/enroll`、`POST /recovery/rotate`、`GET /recovery/rotate/{key}`
 - **实例首页**（`GET /`）：在浏览器里直接打开服务器地址时显示的一张静态页面，让部署的人确认服务器已经跑起来，也让拿到地址的人知道接下来怎么做。
-  - 内容：Harmonia 图标与一句话介绍、“运行中”、这台服务器的地址（取自访问时用的地址，供填进 App 和命令行）和地址的二维码（内容就是地址本身，由服务端生成后内嵌在页面里，供 App 的“连接服务器”页扫码填写；用手机相机直接扫则打开这张首页）、三步开始使用（下载 App、用邮箱注册或接入、在电脑上安装命令行并 `harmonia login`）、三句话说明工作方式（手机负责授权、服务器只存密文、电脑自动同步）、项目主页和服务端仓库的链接。
-  - 口径：不带脚本，不加载任何外部资源，链接只指向 GitHub 上的项目仓库；不显示这台服务器的配置和状态（是否开放注册、有没有账号、版本）；注明服务器由部署者自行运营、与项目方无关；要求搜索引擎不收录。
+  - 内容：Harmonia 图标与一句话介绍、“运行中”、这台服务器的地址（取自访问时用的地址，供填进 App 和命令行）和地址的二维码（内容就是地址本身，由服务端生成后内嵌在页面里，供 App 的“连接服务器”页扫码填写；用手机相机直接扫则打开这张首页）、三步开始使用（下载 App、用邮箱注册或接入、在电脑上安装命令行并 `harmonia login`；这一步在安装命令之前先给出“让 AI 助手安装”，卡片里只有提示词，不加其他说明，见 5.13）、三句话说明工作方式（手机负责授权、服务器只存密文、电脑自动同步）、项目主页和服务端仓库的链接。
+  - 服务器地址、AI 助手提示词和每条命令旁边都有“复制”按钮（2026-10-13 用户要求），点后显示“已复制”；HTTPS 下用剪贴板接口，其他情况选中文字后复制，复制不了时提示手动复制。没有脚本时仍可点一下整段选中。
+  - 口径：只带复制按钮这一段内嵌脚本，内容安全策略按它的 SHA-256 放行（`script-src 'sha256-…'`），不允许其他脚本；不加载任何外部资源，链接只指向 GitHub 上的项目仓库；不显示这台服务器的配置和状态（是否开放注册、有没有账号、版本）；注明服务器由部署者自行运营、与项目方无关；要求搜索引擎不收录。
   - 配色与图标沿用 App，跟随系统的深浅色。
 - **执法规则**：每个请求都检查会话、设备状态、授权有效期和角色。`rotation_required` 为 true 的设备，除轮换恢复码外，其他管理操作一律拒绝。
 - **同步**：返回 `updated_seq > since` 且该设备可见的环境、授权、自己的封装和变量（含墓碑），以及 `headSeq`。失去访问权的环境以“已移除”项下发。
@@ -255,10 +256,12 @@ harmonia export [--format sh|dotenv|json]
 harmonia shell install|uninstall
 harmonia service install|uninstall|status
 harmonia update [--check]
+harmonia skill [install [--dir 目录]]
 harmonia logout
 harmonia uninstall
 ```
 
+- `skill` 输出给 AI 助手的使用说明，`skill install` 把它保存成技能文件，见 5.13。
 - `login` 依次询问服务器、邮箱和配对码（2026-10-13）：不询问密码；配对码留空即扫码方式，之后显示二维码和核对码，等待管理设备批准（5.10）。
 - 本地状态放在 `~/.harmonia/`。CLI 和后台服务通过文件锁协调，不做本地 IPC。
 - 合并规则：激活的环境按顺序叠加，同名变量由排在前面的环境提供；本地覆盖先替换所在环境中的值，再参与合并；授权已过期的环境在本地停用。
@@ -272,7 +275,7 @@ harmonia uninstall
 ### 5.8 rc 文件注入与提示符刷新
 
 - 后台服务把合并结果原子写入 `~/.harmonia/env.sh`（0600），内容是普通的 `export KEY='value'`，值一律使用单引号字面量安全转义。
-- **安装时询问**：安装脚本装好 `harmonia` 后，如果有终端可以交互，依次询问是否安装 shell 集成和后台服务，直接回车即安装（默认 Y）。shell 集成仍会先显示要修改的文件和内容；没有终端（例如在脚本或 CI 中运行）时跳过询问，只提示对应命令。两者在接入账号之前安装也没问题：`env.sh` 不存在时不加载变量，后台服务在接入前等待（2026-10-07 用户确认）。
+- **安装时询问**：安装脚本装好 `harmonia` 后，如果有终端可以交互，依次询问是否安装 shell 集成和后台服务，直接回车即安装（默认 Y）。shell 集成仍会先显示要修改的文件和内容；没有终端（例如在脚本或 CI 中运行）时跳过询问，只提示对应命令。设置 `HARMONIA_YES=1` 时不询问，有没有终端都直接安装两项（2026-10-13，供 AI 助手和脚本使用，见 5.13）；shell 集成仍会显示要修改的文件和内容。两者在接入账号之前安装也没问题：`env.sh` 不存在时不加载变量，后台服务在接入前等待（2026-10-07 用户确认）。
 - `harmonia login` 完成后，只提示还没有安装的 shell 集成或后台服务。
 - `harmonia shell install` 先告诉用户要修改的文件和内容，确认后才写入（默认 Y）；已存在的 Harmonia 标记块直接更新，不重复添加：
   - zsh 写入 `~/.zshenv`，这样非交互的 zsh 也能读到。
@@ -379,7 +382,7 @@ harmonia uninstall
   - 渠道在 App“设置 → 更新渠道”和 `harmonia update channel stable|beta` 中切换，默认正式版；测试版程序默认测试版渠道。安装脚本用 `HARMONIA_CHANNEL=beta` 安装测试版。
 - **CLI**：
   - 后台服务每 24 小时（带随机抖动）检查一次，有更新时在 `status` 中和 stderr 上提示。
-  - `harmonia update` 的步骤：下载 → 验证签名和哈希 → 运行新二进制的 `version` 自检 → 原子替换 `~/.local/bin/harmonia` → 重启用户级服务。旧版本保留为 `.old` 以便手动回退，全程不需要 sudo。
+  - `harmonia update` 的步骤：下载 → 验证签名和哈希 → 运行新二进制的 `version` 自检 → 原子替换 `~/.local/bin/harmonia` → 重启用户级服务 → 用新程序的 `harmonia skill` 输出覆盖已保存的技能文件（5.13）。旧版本保留为 `.old` 以便手动回退，全程不需要 sudo。
 - **Android**：
   - App 在前台时检查，24 小时内最多检查一次。有更新时显示更新说明，提供“下载并安装”和“打开下载页”（2026-10-13 增加）。前者在 App 内下载 APK，验证哈希，然后交给系统安装器（需要 `REQUEST_INSTALL_PACKAGES` 权限）；后者通过系统浏览器打开该版本的 GitHub Release 页面，不检查或申请安装权限，也不触发 App 内下载。无法打开时提示安装或启用浏览器后重试。
   - Android 与 iOS 共用下载进度界面：连接时显示等待状态，接收数据时按实际字节数与已签名清单中的总大小显示进度条、百分比和已下载大小；收完后显示校验状态。校验与缓存写入完成后才进入原有安装或分享步骤，下载失败仍留在 App 内提示重试。
@@ -413,6 +416,34 @@ harmonia uninstall
   - 发信额度用完时显示“验证码发送次数过多，请稍后再试；已经收到的验证码 15 分钟内仍然有效。”
 - **暂不做**：异常请求提醒（管理设备推送和失败记录）；隐藏邮箱是否已注册（匿名查询会区分，已按网络限流；查到的只有账号 ID、是否初始化和账号公钥）。
 ---
+
+### 5.13 给 AI 助手使用（2026-10-13）
+
+目标：用户给 AI 助手（Claude Code、Codex 等）一句提示词，它就能装好 CLI、开启 Shell 集成和后台服务，并知道怎样正确调用 CLI；CLI 升级后，它能拿到新版本的说明。
+
+- **一行安装**：安装脚本支持 `HARMONIA_YES=1`，不询问，直接安装 Shell 集成和后台服务（5.8）。两个平台都用环境变量，因为 PowerShell 的 `irm | iex` 没法传参数：
+
+  ```bash
+  curl -fsSL https://github.com/harmonia-vault/harmonia/releases/download/update-feed/install.sh | HARMONIA_YES=1 sh
+  ```
+
+  ```powershell
+  $env:HARMONIA_YES = '1'; irm https://github.com/harmonia-vault/harmonia/releases/download/update-feed/install.ps1 | iex
+  ```
+
+  - 这时后台服务的 linger 不会询问是否用 sudo 开启，只给出要执行的命令（与没有终端时相同）。
+  - 安装脚本不安装技能文件，由提示词让 AI 助手运行 `harmonia skill`（用户确认）。
+- **使用说明（技能）**：内容是一份 `SKILL.md`（带 `name`、`description` 头部），放在 `cli/internal/skill/SKILL.md`，编译进 CLI，不单独发布。开头写明对应的 harmonia 版本。内容包括：先核对版本、安装、接入账号要用户在手机上批准（用 `--email`、`--code` 参数，等待最长 5 分钟）、用 `harmonia exec` 使用变量、不把变量值打印到对话里、通过标准输入写入变量值、哪些命令需要用户明确同意才能运行。
+- **`harmonia skill`**：把使用说明输出到标准输出，AI 助手直接读取。
+- **`harmonia skill install [--dir 目录]`**：保存成技能文件 `<技能目录>/harmonia/SKILL.md`。
+  - 不给 `--dir` 时，写入 `~/.claude/skills` 和 `~/.agents/skills` 中所在工具目录（`~/.claude`、`~/.agents`）已存在的那些，再加上之前保存过的位置；一个都没有时报错，提示用 `--dir` 指定或改用 `harmonia skill`。
+  - 给 `--dir` 时只写这一处。
+  - 写入过的文件记在 `~/.harmonia/settings.json`（与账号无关，退出登录时保留）。
+- **升级后更新说明**：
+  - `harmonia update` 替换程序后，运行新程序的 `harmonia skill`，用它的输出覆盖记录的技能文件，并提示 AI 助手重新读取。
+  - 用其他方式升级（例如重新运行安装脚本）时不自动覆盖。说明要求 AI 助手开始使用前运行 `harmonia version`，与说明里的版本不同时，运行 `harmonia skill` 读取新说明，保存过的话再运行 `harmonia skill install` 覆盖。
+- **卸载**：`harmonia uninstall` 删除记录的技能文件，`harmonia` 目录为空时一并删除。
+- **README 和实例首页**：优先推荐 AI 助手部署（2026-10-13 用户确认）。给出一段 macOS、Linux、Windows 通用的提示词：开头一句介绍 Harmonia（用户部署的环境变量同步服务，开源、自托管，附这台服务器的地址，说明 AI 助手可以用命令行取用变量、不必让用户把 Key 贴进对话）。提示词对 AI 助手说话，用“用户”称呼使用者，不用“我”，然后同时写两个平台的安装命令，由 AI 助手按系统选用；让 AI 助手向用户要邮箱和配对码。实例首页把它放在“接入电脑”一步、手动安装命令之前（不放在服务器地址和 App 配对之前，2026-10-13 用户调整），已经填好这台服务器的地址，带“复制”按钮。README 在“在电脑上接入”开头给出同一句，手动安装放在后面。
 
 ## 6. 关键流程
 
@@ -645,6 +676,16 @@ harmonia uninstall
 | 接受的风险 | 有人把自己设备的二维码或核对码发给用户，诱导扫码批准（4.2 第 8 条）。靠批准页的设备名、平台、来源 IP，以及只在自己发起时批准来防护 |
 | 密码学 | Argon2id 只用于 App PIN；CLI 的密码派生代码和测试向量删除 |
 
+### 12.6 给 AI 助手使用（2026-10-13）
+
+| 决策 | 结论 |
+| --- | --- |
+| 一行安装的开关 | 环境变量 `HARMONIA_YES=1`，两个平台写法一致 |
+| 使用说明的交付 | `harmonia skill` 输出；`harmonia skill install` 写入 `~/.claude/skills`、`~/.agents/skills`（工具目录存在才写）或 `--dir` 指定的目录 |
+| 安装脚本是否装技能文件 | 不装，提示词让 AI 助手自己运行 `harmonia skill` |
+| 提示词 | 各系统通用一句，放在实例首页“接入电脑”一步的安装命令之前和 README“在电脑上接入”开头；AI 助手部署是推荐方式。首页上可复制的内容都有复制按钮 |
+| 升级 | `harmonia update` 自动覆盖已保存的技能文件；说明里写明版本，不一致时由 AI 助手重新读取 |
+
 ---
 
 ## 14. iOS App（v0.2.0，M10）
@@ -787,7 +828,7 @@ Windows 没有每个终端都会读取的 rc 文件；系统自己的办法是�
   irm https://github.com/harmonia-vault/harmonia/releases/download/update-feed/install.ps1 | iex
   ```
 
-  脚本按更新渠道的清单下载当前处理器架构对应的 `harmonia.exe`，校验 SHA-256，放到安装目录并加入用户的 `Path`；然后依次询问是否开启“写入用户环境变量”、是否安装后台服务，直接回车即同意（默认 Y）。安装测试版时先运行 `$env:HARMONIA_CHANNEL = 'beta'`。
+  脚本按更新渠道的清单下载当前处理器架构对应的 `harmonia.exe`，校验 SHA-256，放到安装目录并加入用户的 `Path`；然后依次询问是否开启“写入用户环境变量”、是否安装后台服务，直接回车即同意（默认 Y）。安装测试版时先运行 `$env:HARMONIA_CHANNEL = 'beta'`；先运行 `$env:HARMONIA_YES = '1'` 时不询问，两项直接开启（5.13）。
 - **发布物**：每个 Release 增加 `harmonia-windows-amd64.exe` 和 `harmonia-windows-arm64.exe`，签名清单的 `assets` 增加 `cli-windows-amd64`、`cli-windows-arm64`；`install.ps1` 与 `install.sh` 一样放在 `update-feed` 中。
 - **不做代码签名**：用安装脚本下载的程序不会被 SmartScreen 拦截；从浏览器手动下载再运行时系统会提示“Windows 已保护你的电脑”，README 说明这种情况以及怎样用清单里的 SHA-256 自行核对。
 - **更新**：`harmonia update` 的步骤与 5.11 相同（下载 → 验证签名和哈希 → 自检 → 替换 → 重启后台服务），旧版本保留为 `harmonia.exe.old`。

@@ -8,6 +8,7 @@ Harmonia 是一个自托管的环境变量同步工具：在手机上集中管�
 - **端到端加密**：变量在手机或电脑上加密后才上传，服务端只保存密文。
 - **手机负责授权**：新电脑扫码配对，由手机决定它能访问哪些环境、只读还是读写、多久到期；随时撤销。
 - **终端中使用**：安装 Shell 集成后自动加载变量；也可以用 `harmonia exec` 只给某个程序注入。
+- **AI 助手一句话部署**：把一句提示词发给 Claude Code、Codex 这类 AI 助手，它在电脑上装好命令行并接入，你只需在手机上批准，见[在电脑上接入](#3-在电脑上接入)。
 - **实时同步**：手机上改一次，几秒内同步到在线的电脑。
 - **自托管**：服务端部署在你自己的 Cloudflare 账号上，开源（MIT）。
 
@@ -46,6 +47,19 @@ Harmonia 没有上架 App Store。Releases 里的 `harmonia-<版本>.ipa` 没有
 - 卸载后重装、从备份恢复、换机迁移之后，同样需要重新接入。
 
 ### 3. 在电脑上接入
+
+**推荐让 AI 助手来做。** 把下面这句话发给 Claude Code、Codex 这类能运行命令的 AI 助手，macOS、Linux、Windows 都用这一句（换成你的服务器地址）。在电脑浏览器里打开服务器地址，首页“接入电脑”一步也有这句话，地址已经填好，点“复制”即可：
+
+```text
+Harmonia（和弦，https://你的服务器地址）是用户部署的环境变量同步服务，开源、自托管：用户在手机 App 上管理 API Key 等环境变量，端到端加密后同步到用户授权的电脑，你可以用它的命令行取用这些变量，不需要用户把 Key 贴进对话。请在这台电脑上安装 Harmonia 命令行：macOS、Linux 运行 curl -fsSL https://github.com/harmonia-vault/harmonia/releases/download/update-feed/install.sh | HARMONIA_YES=1 sh；Windows 在 PowerShell 中运行 $env:HARMONIA_YES = '1'; irm https://github.com/harmonia-vault/harmonia/releases/download/update-feed/install.ps1 | iex。装好后运行 harmonia skill，按输出的说明接入服务器 https://你的服务器地址（邮箱和配对码向用户询问）。
+```
+
+- `HARMONIA_YES=1` 让安装脚本不再询问，直接装好 Shell 集成和后台服务（Windows 上是写入用户环境变量和后台服务）。
+- `harmonia skill` 输出给 AI 助手的使用说明：怎样接入、用 `harmonia exec` 使用变量、不把变量值打印出来、哪些命令要你同意才运行。`harmonia skill install` 把它保存成技能文件，写到 `~/.claude/skills` 和 `~/.agents/skills`（对应的工具目录存在时），或用 `--dir` 指定的目录。
+- 接入时 AI 助手会向你要邮箱和配对码（在 App 的“设备 → 添加设备 → 生成配对码”中获取），并把核对码告诉你，由你在手机上批准。
+- `harmonia update` 会顺带更新保存过的技能文件。说明里写着对应的版本，AI 助手发现版本对不上时会重新读取。
+
+#### 自己安装
 
 macOS、Linux：
 
@@ -107,6 +121,7 @@ harmonia import --env <环境>          从当前终端勾选已有的环境变�
 harmonia override set <环境> <变量名> <值>
                                       设置只在本机生效的值，不上传
 harmonia update                       升级 harmonia
+harmonia skill                        输出给 AI 助手的使用说明（install 保存成技能文件）
 harmonia logout                       退出账号，清除本机数据
 harmonia uninstall                    完全卸载
 ```
