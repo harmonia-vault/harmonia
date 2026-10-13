@@ -59,45 +59,29 @@ class EnvironmentsTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final envs = c.vault.environments;
-    return AppPage(
-      appBar: AppBarSurface(
-        largeTitle: usesGlass(context),
-        title: const Text('环境'),
-        actions: usesGlass(context)
-            ? [IconButton(tooltip: '新建环境', onPressed: () => _create(context), icon: const Icon(Icons.add))]
-            : null,
+    return AppTabPage(
+      title: '环境',
+      actions: [IconButton(tooltip: '新建环境', onPressed: () => _create(context), icon: const Icon(Icons.add))],
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _create(context),
+        icon: const Icon(Icons.add),
+        label: const Text('新建环境'),
       ),
-      floatingActionButton: usesGlass(context)
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: () => _create(context),
-              icon: const Icon(Icons.add),
-              label: const Text('新建环境'),
-            ),
-      body: (context) => RefreshIndicator(
-        onRefresh: c.syncNow,
-        child: envs.isEmpty
-            ? ListView(
-                padding: pagePadding(context, EdgeInsets.zero),
-                children: const [
-                  EmptyState(
-                    icon: Icons.inventory_2_outlined,
-                    title: '还没有环境',
-                    body: '环境是一组变量，例如“OpenAI”或“生产环境”。\n创建环境后添加变量，再授权给电脑使用。',
-                  ),
-                ],
-              )
-            : ListView.separated(
-                padding: pagePadding(context, const EdgeInsets.fromLTRB(Space.lg, Space.sm, Space.lg, 96)),
-                itemCount: envs.length,
-                separatorBuilder: (_, _) => const SizedBox(height: Space.md),
-                itemBuilder: (context, i) {
-                  final e = envs[i];
-                  final count = c.vault.cache.variables[e.id]?.length ?? 0;
-                  final devices = c.vault.devices
-                      .where((d) => !d.isManager && d.grants.any((g) => g.envId == e.id))
-                      .length;
-                  return Card(
+      onRefresh: c.syncNow,
+      padding: envs.isEmpty ? EdgeInsets.zero : const EdgeInsets.fromLTRB(Space.lg, Space.sm, Space.lg, 96),
+      children: envs.isEmpty
+          ? const [
+              EmptyState(
+                icon: Icons.inventory_2_outlined,
+                title: '还没有环境',
+                body: '环境是一组变量，例如“OpenAI”或“生产环境”。\n创建环境后添加变量，再授权给电脑使用。',
+              ),
+            ]
+          : [
+              for (final (i, e) in envs.indexed)
+                Padding(
+                  padding: EdgeInsets.only(top: i == 0 ? 0 : Space.md),
+                  child: Card(
                     child: ListTile(
                       contentPadding: listRowPadding.copyWith(top: Space.sm, bottom: Space.sm),
                       leading: CircleAvatar(
@@ -106,7 +90,10 @@ class EnvironmentsTab extends StatelessWidget {
                         child: Text(e.name.characters.first.toUpperCase()),
                       ),
                       title: Text(e.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                      subtitle: Text('$count 个变量 · $devices 台电脑可访问'),
+                      subtitle: Text(
+                        '${c.vault.cache.variables[e.id]?.length ?? 0} 个变量 · '
+                        '${c.vault.devices.where((d) => !d.isManager && d.grants.any((g) => g.envId == e.id)).length} 台电脑可访问',
+                      ),
                       trailing: const ListRowChevron(),
                       onTap: () => Navigator.push(
                         context,
@@ -115,10 +102,9 @@ class EnvironmentsTab extends StatelessWidget {
                         ),
                       ),
                     ),
-                  );
-                },
-              ),
-      ),
+                  ),
+                ),
+            ],
     );
   }
 }

@@ -32,9 +32,8 @@ class _GlassDialogState extends State<_GlassDialog> {
     );
     final readableTheme = theme.copyWith(
       inputDecorationTheme: theme.inputDecorationTheme.copyWith(
-        // 输入内容使用实色底，标签、计数和多行错误也不受背后页面颜色干扰。
         filled: true,
-        fillColor: p.card,
+        fillColor: glassFrostFill(context),
         enabledBorder: inputBorder,
         focusedBorder: inputBorder.copyWith(borderSide: BorderSide(color: p.accent, width: 2)),
         errorBorder: inputBorder.copyWith(borderSide: BorderSide(color: theme.colorScheme.error)),
@@ -62,18 +61,16 @@ class _GlassDialogState extends State<_GlassDialog> {
     return Dialog(
       backgroundColor: Colors.transparent,
       elevation: 0,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
-      constraints: const BoxConstraints(maxWidth: 360),
-      // 与上游 GlassDialog 一样直接使用 GlassCard，让材质及内容共同参与转场。
-      child: GlassCard(
-        useOwnLayer: true,
-        quality: glassQuality(context),
-        settings: glassSettings(context, readable: true),
-        shape: const LiquidRoundedSuperellipse(borderRadius: 32),
-        padding: EdgeInsets.zero,
+      // 尺寸与间距照系统提醒框量取：面板宽 320，文字左右缩进 30，按钮左右与底部各留 16。
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      constraints: const BoxConstraints(maxWidth: 320),
+      child: AppSurface(
+        color: p.card,
+        radius: 36,
+        panel: true,
         child: Padding(
           key: _contentKey,
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
           child: RepaintBoundary(
             child: Theme(
               data: readableTheme,
@@ -86,51 +83,71 @@ class _GlassDialogState extends State<_GlassDialog> {
                   final body = content == null
                       ? null
                       : Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 14),
                           child: DefaultTextStyle(
-                            style: theme.textTheme.bodyMedium!.copyWith(color: p.ink, fontSize: 15, height: 1.5),
+                            style: theme.textTheme.bodyMedium!.copyWith(color: p.mute, fontSize: 15, height: 20 / 15),
                             child: content,
                           ),
                         );
+                  // 两个操作等宽并排，占满一行；更多操作或大字号时纵向排列，主要操作在上。
+                  final sideBySide = actions?.length == 2 && MediaQuery.textScalerOf(context).scale(14) <= 18;
                   final panel = Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       if (title != null)
                         Padding(
-                          padding: const EdgeInsets.only(bottom: 18),
+                          padding: EdgeInsets.fromLTRB(14, 0, 14, body == null ? 0 : 6),
                           child: DefaultTextStyle(
                             style: theme.textTheme.titleLarge!.copyWith(
                               color: p.ink,
-                              fontSize: 20,
+                              fontSize: 17,
                               fontWeight: FontWeight.w700,
-                              height: 1.3,
+                              height: 22 / 17,
                             ),
-                            textAlign: TextAlign.center,
                             child: title,
                           ),
                         ),
                       if (body != null)
                         if (scrollWhole) body else Flexible(child: SingleChildScrollView(child: body)),
                       if (actions?.isNotEmpty ?? false) ...[
-                        const SizedBox(height: 24),
+                        const SizedBox(height: 20),
                         FilledButtonTheme(
-                          data: FilledButtonThemeData(style: FilledButton.styleFrom(minimumSize: const Size(64, 46))),
+                          // 只改高度，颜色沿用全局实心按钮。
+                          data: FilledButtonThemeData(
+                            style: theme.filledButtonTheme.style?.copyWith(
+                              minimumSize: const WidgetStatePropertyAll(Size(64, 46)),
+                              textStyle: const WidgetStatePropertyAll(
+                                TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                          ),
                           child: TextButtonTheme(
                             data: TextButtonThemeData(
                               style: TextButton.styleFrom(
                                 minimumSize: const Size(64, 46),
-                                backgroundColor: p.ink.withValues(alpha: 0.06),
+                                backgroundColor: p.ink.withValues(alpha: 0.1),
                                 foregroundColor: p.ink,
+                                textStyle: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
                               ),
                             ),
-                            child: OverflowBar(
-                              spacing: 10,
-                              overflowSpacing: 8,
-                              alignment: MainAxisAlignment.end,
-                              overflowAlignment: OverflowBarAlignment.end,
-                              children: actions!,
-                            ),
+                            child: sideBySide
+                                ? Row(
+                                    children: [
+                                      Expanded(child: actions![0]),
+                                      const SizedBox(width: 8),
+                                      Expanded(child: actions[1]),
+                                    ],
+                                  )
+                                : Column(
+                                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                                    children: [
+                                      for (final (i, action) in actions!.reversed.indexed) ...[
+                                        if (i > 0) const SizedBox(height: 8),
+                                        action,
+                                      ],
+                                    ],
+                                  ),
                           ),
                         ),
                       ],

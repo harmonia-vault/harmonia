@@ -33,68 +33,99 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     final c = widget.c;
     final pages = [EnvironmentsTab(c: c), DevicesTab(c: c), SettingsTab(c: c)];
-    // 子页面负责键盘避让，导航外壳不能再扣一次键盘高度。
+    final glass = usesGlass(context);
+    final nav = _NavBar(
+      selected: _tab,
+      onSelect: (i) => setState(() => _tab = i),
+      items: [
+        const _NavItem(Icons.inventory_2_outlined, Icons.inventory_2, '环境'),
+        _NavItem(Icons.devices_outlined, Icons.devices, '设备', badge: c.pendingPairingCount),
+        const _NavItem(Icons.settings_outlined, Icons.settings, '设置'),
+      ],
+    );
+    // 弹窗各自避让键盘，导航外壳不扣键盘高度。
     return GlassBackdropGroup(
-      enabled: usesGlass(context),
+      enabled: glass,
       child: Scaffold(
         resizeToAvoidBottomInset: false,
-        extendBody: usesGlass(context),
-        body: Column(
-          children: [
-            if (!c.online)
-              Material(
-                color: context.palette.warnBox,
-                child: SafeArea(
-                  bottom: false,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: Space.lg, vertical: Space.sm),
-                    child: Row(
-                      children: [
-                        Icon(Icons.cloud_off_outlined, size: 18, color: context.palette.onWarnBox),
-                        const SizedBox(width: Space.sm),
-                        Expanded(
-                          child: Text(
-                            '离线：显示的是上次同步的数据，修改需要联网。',
-                            style: TextStyle(color: context.palette.onWarnBox, fontSize: 13),
+        extendBody: glass,
+        body: Builder(
+          builder: (context) {
+            final media = MediaQuery.of(context);
+            // 离线胶囊浮在正文之上，不占正文的高度。普通模式下只把悬浮按钮抬到它上方：
+            // Scaffold 按 viewPadding 给悬浮按钮留白，正文列表不受影响。
+            // 底栏已经让出系统手势区，在线时这段留白为零，按钮紧贴底栏。
+            final pillExtent = c.online ? 0.0 : media.textScaler.scale(13) * 1.5 + 18 + Space.sm;
+            return Stack(
+              children: [
+                MediaQuery(
+                  data: glass ? media : media.copyWith(viewPadding: media.viewPadding.copyWith(bottom: pillExtent)),
+                  child: IndexedStack(
+                    index: _tab,
+                    children: [
+                      for (var i = 0; i < pages.length; i++)
+                        GlassBackdropGroup(
+                          // IndexedStack 保留页面状态；隐藏页不能占用当前页的采样组。
+                          enabled: i == _tab && glass,
+                          joinEnclosing: true,
+                          child: TickerMode(
+                            enabled: i == _tab,
+                            child: HeroMode(enabled: i == _tab, child: pages[i]),
                           ),
                         ),
-                      ],
-                    ),
+                    ],
                   ),
                 ),
-              ),
-            Expanded(
-              // 横幅已包含状态栏安全区，页面不再重复预留。
-              child: MediaQuery.removePadding(
-                context: context,
-                removeTop: !c.online,
-                child: IndexedStack(
-                  index: _tab,
-                  children: [
-                    for (var i = 0; i < pages.length; i++)
-                      GlassBackdropGroup(
-                        // IndexedStack 保留页面状态；隐藏页不能占用当前页的采样组。
-                        enabled: i == _tab && usesGlass(context),
-                        joinEnclosing: true,
-                        child: TickerMode(
-                          enabled: i == _tab,
-                          child: HeroMode(enabled: i == _tab, child: pages[i]),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          ],
+                if (!c.online)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    // 玻璃模式下正文延伸到底栏后面，这里的 padding 就是底栏的高度。
+                    bottom: glass ? media.padding.bottom : 0,
+                    child: const IgnorePointer(child: _OfflinePill()),
+                  ),
+              ],
+            );
+          },
         ),
-        bottomNavigationBar: _NavBar(
-          selected: _tab,
-          onSelect: (i) => setState(() => _tab = i),
-          items: [
-            const _NavItem(Icons.inventory_2_outlined, Icons.inventory_2, '环境'),
-            _NavItem(Icons.devices_outlined, Icons.devices, '设备', badge: c.pendingPairingCount),
-            const _NavItem(Icons.settings_outlined, Icons.settings, '设置'),
-          ],
+        bottomNavigationBar: nav,
+      ),
+    );
+  }
+}
+
+/// 离线提示：浮在底栏上方的一枚胶囊，两种外观都不占用页面高度。
+class _OfflinePill extends StatelessWidget {
+  const _OfflinePill();
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Space.xl, 0, Space.xl, Space.sm),
+      // heightFactor: 1：只占胶囊自身的高度，不撑满整个页面。
+      child: Center(
+        heightFactor: 1,
+        child: AppSurface(
+          color: p.warnBox,
+          radius: 20,
+          panel: true,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.cloud_off_outlined, size: 16, color: p.onWarnBox),
+                const SizedBox(width: Space.sm),
+                Flexible(
+                  child: Text(
+                    '离线：显示上次同步的数据，修改需要联网',
+                    style: TextStyle(color: p.onWarnBox, fontSize: 13, fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

@@ -13,6 +13,7 @@ RawDialogRoute<T> appDialogRoute<T>({
   final reduceMotion = MediaQuery.disableAnimationsOf(context);
   if (usesGlass(context) && !reduceMotion) {
     return _AppGlassDialogRoute<T>(
+      barrierColor: glassBarrierColor(context),
       barrierDismissible: barrierDismissible,
       barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
       pageBuilder: (context, _, _) => SafeArea(
@@ -31,13 +32,17 @@ RawDialogRoute<T> appDialogRoute<T>({
 }
 
 class _AppGlassDialogRoute<T> extends RawDialogRoute<T> {
-  _AppGlassDialogRoute({required super.pageBuilder, super.barrierDismissible, super.barrierLabel})
+  _AppGlassDialogRoute({required super.pageBuilder, super.barrierColor, super.barrierDismissible, super.barrierLabel})
     : super(
-        barrierColor: Colors.black54,
         traversalEdgeBehavior: TraversalEdgeBehavior.closedLoop,
         transitionDuration: GlassDefaults.materializeDuration,
-        transitionBuilder: (context, animation, _, child) =>
-            GlassMaterializeTransition(animation: animation, child: child),
+        // 与系统提醒框相同（Flutter 的 CupertinoDialogRoute 照此实现）：出现时从 1.3 倍收拢并淡入，
+        // 关闭时原地淡出、不缩放。淡入淡出交给组件库在着色器里做，玻璃不会在动画首尾突然出现。
+        transitionBuilder: (context, animation, _, child) => GlassMaterializeTransition(
+          animation: animation,
+          scaleFrom: animation.status == AnimationStatus.reverse ? 1 : 1.3,
+          child: child,
+        ),
       );
 
   @override

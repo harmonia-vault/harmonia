@@ -31,14 +31,26 @@ enum Stage {
 }
 
 class Prefs {
-  Prefs({this.server, this.email, this.updateChannel});
+  Prefs({this.server, this.email, this.updateChannel, this.developerOptions = false});
   String? server;
   String? email;
   String? updateChannel;
 
-  Map<String, dynamic> toJson() => {'server': server, 'email': email, 'updateChannel': updateChannel};
-  factory Prefs.fromJson(Map<String, dynamic> j) =>
-      Prefs(server: j['server'] as String?, email: j['email'] as String?, updateChannel: j['updateChannel'] as String?);
+  /// 在“关于”页连点版本号 5 次打开，设置页底部才出现开发者选项。
+  bool developerOptions;
+
+  Map<String, dynamic> toJson() => {
+    'server': server,
+    'email': email,
+    'updateChannel': updateChannel,
+    'developerOptions': developerOptions,
+  };
+  factory Prefs.fromJson(Map<String, dynamic> j) => Prefs(
+    server: j['server'] as String?,
+    email: j['email'] as String?,
+    updateChannel: j['updateChannel'] as String?,
+    developerOptions: j['developerOptions'] == true,
+  );
 }
 
 class AppController extends ChangeNotifier {
@@ -68,16 +80,26 @@ class AppController extends ChangeNotifier {
   final AppearanceSettings appearance;
   String? appearanceError;
 
-  /// 调试导航覆盖真实会话时，隐藏真实页面并阻止真实弹窗进入。
+  /// 调试导航覆盖真实会话时，阻止真实弹窗进入。
   bool pageDebugActive = false;
+
+  /// 调试页已经完全盖住真实页面，真实页面可以停止绘制。进出的转场期间保持 false，否则转场里露出的是一片黑。
+  bool pageDebugCovers = false;
 
   void beginPageDebug() {
     pageDebugActive = true;
     refresh();
   }
 
+  void setPageDebugCovers(bool covers) {
+    if (pageDebugCovers == covers) return;
+    pageDebugCovers = covers;
+    refresh();
+  }
+
   void endPageDebug() {
     pageDebugActive = false;
+    pageDebugCovers = false;
     refresh();
   }
 
@@ -254,6 +276,18 @@ class AppController extends ChangeNotifier {
   Future<void> setGlassOpacity(double opacity) async {
     await appearance.setGlassOpacity(opacity);
     appearanceError = null;
+    notifyListeners();
+  }
+
+  Future<void> setDeveloperOptions(bool enabled) async {
+    if (prefs.developerOptions == enabled) return;
+    prefs.developerOptions = enabled;
+    try {
+      await _savePrefs();
+    } catch (_) {
+      prefs.developerOptions = !enabled;
+      rethrow;
+    }
     notifyListeners();
   }
 

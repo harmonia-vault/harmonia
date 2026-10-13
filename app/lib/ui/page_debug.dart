@@ -34,6 +34,9 @@ class _PageDebugState extends State<PageDebug> {
   DebugSession? _session;
   String? _error;
   int _navigationGeneration = 0;
+
+  /// 当前打开的调试页面；在目录时为 null。决定外壳左上角是“返回目录”还是“退出调试”。
+  String? _pageName;
   bool _large = false, _contrast = false, _reduceMotion = false, _pageActive = false;
   GlassQuality? _glassQuality;
   bool _performance = false;
@@ -81,8 +84,10 @@ class _PageDebugState extends State<PageDebug> {
       final generation = ++_navigationGeneration;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || generation != _navigationGeneration) return;
+        final name = _pageName;
         _catalog(cancelFlow: false);
         _push(() => stagePage(_session!.c));
+        setState(() => _pageName = name);
       });
     }
     setState(() {});
@@ -93,6 +98,7 @@ class _PageDebugState extends State<PageDebug> {
     _pageActive = false;
     if (cancelFlow) _session?.cancelPendingFlow();
     _navigator.currentState?.popUntil((route) => route.isFirst);
+    if (mounted && _pageName != null) setState(() => _pageName = null);
   }
 
   bool _followStage = true;
@@ -119,6 +125,7 @@ class _PageDebugState extends State<PageDebug> {
           if (mounted && !(_navigator.currentState?.canPop() ?? false)) {
             _pageActive = false;
             _session?.cancelPendingFlow();
+            if (_pageName != null) setState(() => _pageName = null);
           }
         });
   }
@@ -135,6 +142,7 @@ class _PageDebugState extends State<PageDebug> {
     if (!mounted) return;
     _session!.c.stage = entry.stage;
     _push(() => entry.page(_session!), followStage: entry.followStage);
+    setState(() => _pageName = entry.name);
   }
 
   void _reset(DebugScenario scenario) {
@@ -193,20 +201,29 @@ class _PageDebugState extends State<PageDebug> {
                 child: Scaffold(
                   // 内层页面与弹窗各自避让键盘，调试外壳只保留工具栏。
                   resizeToAvoidBottomInset: false,
+                  // 很多被预览的页面自己没有返回键（一级页面、登录流程等），返回目录统一放在外壳左上角。
                   appBar: AppBar(
-                    title: const Text('页面调试 · 模拟数据', style: TextStyle(fontSize: 16)),
-                    leading: IconButton(
-                      tooltip: '退出调试',
-                      icon: const Icon(Icons.close),
-                      onPressed: () => Navigator.pop(context),
-                    ),
+                    titleSpacing: 0,
+                    title: Text(_pageName ?? '页面调试 · 模拟数据', style: const TextStyle(fontSize: 16)),
+                    leading: _pageName == null
+                        ? IconButton(
+                            tooltip: '退出调试',
+                            icon: const Icon(Icons.close),
+                            onPressed: () => Navigator.pop(context),
+                          )
+                        : IconButton(tooltip: '返回目录', icon: const Icon(Icons.arrow_back), onPressed: _catalog),
                     actions: [
-                      IconButton(tooltip: '返回目录', icon: const Icon(Icons.grid_view), onPressed: _catalog),
                       IconButton(
                         tooltip: '重置示例',
                         icon: const Icon(Icons.restart_alt),
                         onPressed: () => _reset(DebugScenario.normal),
                       ),
+                      if (_pageName != null)
+                        IconButton(
+                          tooltip: '退出调试',
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.pop(context),
+                        ),
                     ],
                   ),
                   body: child,

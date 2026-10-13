@@ -56,8 +56,8 @@ class Palette extends ThemeExtension<Palette> {
     ink: Color(0xFF1E1B16),
     mute: Color(0xFF6E675C),
     line: Color(0xFFDDD4C4),
-    accent: Color(0xFFA83213),
-    accentFill: Color(0xFFE2572B),
+    accent: Color(0xFFB5431F),
+    accentFill: Color(0xFFC94F27),
     ok: Color(0xFF2F7D4F),
     warnBox: Color(0xFFF6D6C2),
     onWarnBox: Color(0xFF5C2611),
@@ -72,7 +72,7 @@ class Palette extends ThemeExtension<Palette> {
     mute: Color(0xFFA69D8D),
     line: Color(0xFF342E25),
     accent: Color(0xFFEC6A3C),
-    accentFill: Color(0xFFEC6A3C),
+    accentFill: Color(0xFFC94F27),
     ok: Color(0xFF79C792),
     warnBox: Color(0xFF4A2A1B),
     onWarnBox: Color(0xFFF6D6C2),
@@ -97,7 +97,7 @@ ThemeData buildTheme(Brightness brightness, {bool liquidGlass = false, double gl
     seedColor: p.accent,
     brightness: brightness,
     primary: p.accent,
-    onPrimary: brightness == Brightness.light ? p.card : p.paper,
+    onPrimary: brightness == Brightness.light ? Colors.white : p.paper,
     surface: p.paper,
     onSurface: p.ink,
     surfaceContainerLowest: p.card,
@@ -153,11 +153,16 @@ ThemeData buildTheme(Brightness brightness, {bool liquidGlass = false, double gl
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         minimumSize: const Size(64, 52),
+        // 实心按钮明暗两种模式同一个橙，白字对比度 4.5:1。
         backgroundColor: p.accentFill,
-        foregroundColor: Palette.light.ink,
+        foregroundColor: Colors.white,
         shape: const StadiumBorder(),
         textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
       ),
+    ),
+    floatingActionButtonTheme: FloatingActionButtonThemeData(
+      backgroundColor: p.accentFill,
+      foregroundColor: Colors.white,
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(

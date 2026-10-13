@@ -168,7 +168,7 @@ class _HarmoniaAppState extends State<HarmoniaApp> with WidgetsBindingObserver {
     ],
     navigatorKey: _navigator,
     home: Offstage(
-      offstage: widget.c.pageDebugActive,
+      offstage: widget.c.pageDebugCovers,
       child: KeyedSubtree(key: ValueKey(widget.c.stage), child: stagePage(widget.c)),
     ),
   );

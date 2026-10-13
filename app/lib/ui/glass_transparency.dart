@@ -167,7 +167,7 @@ class _GlassTransparencyControlState extends State<GlassTransparencyControl> {
                               onChangeStart: _start,
                               onChanged: _change,
                               onChangeEnd: _end,
-                              activeColor: p.accent,
+                              activeColor: p.accentFill,
                               inactiveColor: p.mute.withValues(alpha: 0.35),
                               // 保留上游白色滑块与 defaultStyle 的接触阴影，深色模式同样清晰。
                               thumbColor: Colors.white,

@@ -191,20 +191,30 @@ class _SettingsTabState extends State<SettingsTab> {
     }
   }
 
+  Future<void> _closeDeveloperOptions() async {
+    try {
+      await c.setDeveloperOptions(false);
+      if (mounted) toast(context, '已关闭开发者选项。');
+    } catch (_) {
+      if (mounted) toast(context, '开发者选项未能关闭，请重试。');
+    }
+  }
+
   Future<void> _openPageDebug() async {
     final glass = usesGlass(context);
     c.beginPageDebug();
     try {
-      await Navigator.push(
-        context,
-        MaterialPageRoute<void>(
-          builder: (_) => PageDebug(
-            initialGlass: glass,
-            initialColorMode: c.appearance.colorMode,
-            initialGlassOpacity: c.appearance.glassOpacity,
-          ),
+      final route = MaterialPageRoute<void>(
+        builder: (_) => PageDebug(
+          initialGlass: glass,
+          initialColorMode: c.appearance.colorMode,
+          initialGlassOpacity: c.appearance.glassOpacity,
         ),
       );
+      final closed = Navigator.push(context, route);
+      // 转场结束、调试页完全盖住之后才停止绘制真实页面；开始返回时立刻恢复。
+      route.animation?.addStatusListener((status) => c.setPageDebugCovers(status == AnimationStatus.completed));
+      await closed;
     } finally {
       c.endPageDebug();
     }
@@ -214,150 +224,155 @@ class _SettingsTabState extends State<SettingsTab> {
   Widget build(BuildContext context) {
     final cfg = c.vault.config!;
     final p = context.palette;
-    return AppPage(
-      appBar: AppBarSurface(title: const Text('设置'), largeTitle: usesGlass(context)),
-      body: (context) => ListView(
-        padding: pagePadding(context, EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, usesGlass(context) ? 96 : Space.xxl)),
-        children: [
-          const SectionTitle('账号'),
-          Card(
-            child: Column(
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.alternate_email),
-                  title: Text(cfg.email),
-                  subtitle: const Text('账号'),
-                ),
+    return AppTabPage(
+      title: '设置',
+      padding: EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, usesGlass(context) ? 96 : Space.xxl),
+      children: [
+        const SectionTitle('账号'),
+        Card(
+          child: Column(
+            children: [
+              ListTile(leading: const Icon(Icons.alternate_email), title: Text(cfg.email), subtitle: const Text('账号')),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.dns_outlined),
+                title: Text(cfg.server),
+                subtitle: Text(c.online ? '已连接' : '离线，显示的是上次同步的数据'),
+                trailing: Icon(Icons.circle, size: 10, color: c.online ? p.ok : p.mute),
+              ),
+              const Divider(),
+              ListTile(
+                leading: Icon(platformIcon(c.platform)),
+                title: Text(cfg.deviceName),
+                subtitle: const Text('本机'),
+              ),
+            ],
+          ),
+        ),
+        const SectionTitle('外观'),
+        if (c.appearanceError != null) Banner2(c.appearanceError!, warn: true),
+        Card(
+          child: Column(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.brightness_6_outlined),
+                title: const Text('颜色模式'),
+                subtitle: Text(colorModeLabel(c.appearance.colorMode)),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: _changingAppearance ? null : _pickColorMode,
+              ),
+              const Divider(),
+              AppSwitchTile(
+                icon: const Icon(Icons.blur_on_outlined),
+                title: const Text('液态玻璃'),
+                value: c.appearance.liquidGlass,
+                onChanged: _changingAppearance ? null : _toggleGlass,
+              ),
+              if (c.appearance.liquidGlass) ...[
                 const Divider(),
-                ListTile(
-                  leading: const Icon(Icons.dns_outlined),
-                  title: Text(cfg.server),
-                  subtitle: Text(c.online ? '已连接' : '离线，显示的是上次同步的数据'),
-                  trailing: Icon(Icons.circle, size: 10, color: c.online ? p.ok : p.mute),
-                ),
-                const Divider(),
-                ListTile(
-                  leading: Icon(platformIcon(c.platform)),
-                  title: Text(cfg.deviceName),
-                  subtitle: const Text('本机'),
+                GlassTransparencyControl(
+                  value: c.appearance.glassOpacity,
+                  onChanged: c.setGlassOpacity,
+                  onPreview: c.previewGlassOpacity,
                 ),
               ],
-            ),
+            ],
           ),
-          const SectionTitle('外观'),
-          if (c.appearanceError != null) Banner2(c.appearanceError!, warn: true),
-          Card(
-            child: Column(
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.brightness_6_outlined),
-                  title: const Text('颜色模式'),
-                  subtitle: Text(colorModeLabel(c.appearance.colorMode)),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: _changingAppearance ? null : _pickColorMode,
-                ),
+        ),
+        const SectionTitle('安全'),
+        Card(
+          child: Column(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.pin_outlined),
+                title: const Text('修改 App PIN'),
+                subtitle: const Text('离开 App 超过 5 分钟后，需输入 App PIN'),
+                onTap: _changePin,
+              ),
+              if (_bioAvailable || _bioEnabled) ...[
                 const Divider(),
                 AppSwitchTile(
-                  icon: const Icon(Icons.blur_on_outlined),
-                  title: const Text('液态玻璃'),
-                  value: c.appearance.liquidGlass,
-                  onChanged: _changingAppearance ? null : _toggleGlass,
-                ),
-                if (c.appearance.liquidGlass) ...[
-                  const Divider(),
-                  GlassTransparencyControl(
-                    value: c.appearance.glassOpacity,
-                    onChanged: c.setGlassOpacity,
-                    onPreview: c.previewGlassOpacity,
-                  ),
-                ],
-              ],
-            ),
-          ),
-          const SectionTitle('安全'),
-          Card(
-            child: Column(
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.pin_outlined),
-                  title: const Text('修改 App PIN'),
-                  subtitle: const Text('离开 App 超过 5 分钟后，需输入 App PIN'),
-                  onTap: _changePin,
-                ),
-                if (_bioAvailable || _bioEnabled) ...[
-                  const Divider(),
-                  AppSwitchTile(
-                    icon: Icon(bioIcon(c.identity)),
-                    value: _bioEnabled,
-                    onChanged: _toggleBio,
-                    title: Text(c.identity.bio('解锁')),
-                    subtitle: Text('可以用${c.identity.bio('代替')} App PIN'),
-                  ),
-                ],
-                const Divider(),
-                ListTile(
-                  leading: const Icon(Icons.password_outlined),
-                  title: const Text('修改登录密码'),
-                  onTap: _changePassword,
-                ),
-                const Divider(),
-                ListTile(
-                  leading: const Icon(Icons.key_outlined),
-                  title: const Text('更换恢复码'),
-                  subtitle: const Text('保存并核对新恢复码后，旧恢复码失效'),
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => RotationPage(c: c))),
+                  icon: Icon(bioIcon(c.identity)),
+                  value: _bioEnabled,
+                  onChanged: _toggleBio,
+                  title: Text(c.identity.bio('解锁')),
+                  subtitle: Text('可以用${c.identity.bio('代替')} App PIN'),
                 ),
               ],
-            ),
-          ),
-          const SectionTitle('关于'),
-          Card(
-            child: Column(
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.system_update_outlined),
-                  title: const Text('检查更新'),
-                  subtitle: Text('当前版本 $appVersion'),
-                  onTap: () => checkForUpdate(context, manual: true, channel: c.updateChannel),
-                ),
-                const Divider(),
-                ListTile(
-                  leading: const Icon(Icons.alt_route_outlined),
-                  title: const Text('更新渠道'),
-                  subtitle: Text(c.updateChannel.label),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: _pickChannel,
-                ),
-                const Divider(),
-                ListTile(
-                  leading: const Icon(Icons.info_outline),
-                  title: const Text('关于 Harmonia'),
-                  subtitle: const Text('版本信息和开源项目的版权说明'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AboutPage())),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: Space.xl),
-          OutlinedButton(
-            style: OutlinedButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error),
-            onPressed: _logout,
-            child: const Text('退出登录'),
-          ),
-          if (!AppScope.isSimulated(context)) ...[
-            const SectionTitle('开发者选项'),
-            Card(
-              child: ListTile(
-                leading: const Icon(Icons.developer_mode),
-                title: const Text('页面调试'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: _openPageDebug,
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.password_outlined),
+                title: const Text('修改登录密码'),
+                onTap: _changePassword,
               ),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.key_outlined),
+                title: const Text('更换恢复码'),
+                subtitle: const Text('保存并核对新恢复码后，旧恢复码失效'),
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => RotationPage(c: c))),
+              ),
+            ],
+          ),
+        ),
+        const SectionTitle('关于'),
+        Card(
+          child: Column(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.system_update_outlined),
+                title: const Text('检查更新'),
+                subtitle: Text('当前版本 $appVersion'),
+                onTap: () => checkForUpdate(context, manual: true, channel: c.updateChannel),
+              ),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.alt_route_outlined),
+                title: const Text('更新渠道'),
+                subtitle: Text(c.updateChannel.label),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: _pickChannel,
+              ),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.info_outline),
+                title: const Text('关于 Harmonia'),
+                subtitle: const Text('版本信息和开源项目的版权说明'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AboutPage(c: c))),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: Space.xl),
+        OutlinedButton(
+          style: OutlinedButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error),
+          onPressed: _logout,
+          child: const Text('退出登录'),
+        ),
+        if (c.prefs.developerOptions && !AppScope.isSimulated(context)) ...[
+          const SectionTitle('开发者选项'),
+          Card(
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.developer_mode),
+                  title: const Text('页面调试'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: _openPageDebug,
+                ),
+                const Divider(),
+                ListTile(
+                  leading: const Icon(Icons.visibility_off_outlined),
+                  title: const Text('关闭开发者选项'),
+                  subtitle: const Text('在“关于”页连点 5 次版本号可以再次打开'),
+                  onTap: _closeDeveloperOptions,
+                ),
+              ],
             ),
-          ],
+          ),
         ],
-      ),
+      ],
     );
   }
 }

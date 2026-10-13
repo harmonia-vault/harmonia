@@ -261,7 +261,6 @@ Future<void> _offerIpa(BuildContext context, UpdateInfo info) async {
     version: info.version,
     current: appVersion,
     notes: info.notes,
-    hint: '下载后会弹出分享面板，请在里面选择安装 Harmonia 时使用的签名工具，用它签名安装，数据会保留。',
     primary: '下载并导入签名工具',
     secondary: '打开下载页',
   );

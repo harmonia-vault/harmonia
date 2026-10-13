@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
+import 'app_icon.dart';
 import 'theme.dart';
 import 'glass.dart';
 import 'widgets.dart';
@@ -26,7 +27,7 @@ Future<UpdateChoice?> showUpdateSheet(
   required String version,
   required String current,
   required String notes,
-  required String hint,
+  String? hint,
   required String primary,
   String? secondary,
 }) {
@@ -38,7 +39,7 @@ Future<UpdateChoice?> showUpdateSheet(
     useSafeArea: true,
     showDragHandle: !usesGlass(context),
     backgroundColor: usesGlass(context) ? Colors.transparent : context.palette.paper,
-    barrierColor: usesGlass(context) ? Colors.black54 : null,
+    barrierColor: usesGlass(context) ? glassBarrierColor(context) : null,
     sheetAnimationStyle: MediaQuery.disableAnimationsOf(context) ? AnimationStyle.noAnimation : null,
     builder: (c) {
       final content = _UpdateSheet(
@@ -56,12 +57,10 @@ Future<UpdateChoice?> showUpdateSheet(
         scaleFrom: 1,
         child: Padding(
           padding: EdgeInsets.fromLTRB(12, 12, 12, MediaQuery.paddingOf(c).bottom + 12),
-          child: GlassCard(
-            useOwnLayer: true,
-            quality: glassQuality(c),
-            settings: glassSettings(c, readable: true),
-            shape: const LiquidRoundedSuperellipse(borderRadius: 36),
-            padding: EdgeInsets.zero,
+          child: AppSurface(
+            color: c.palette.card,
+            radius: 36,
+            panel: true,
             child: RepaintBoundary(
               key: contentKey,
               child: Column(
@@ -94,13 +93,13 @@ class _UpdateSheet extends StatelessWidget {
     required this.version,
     required this.current,
     required this.notes,
-    required this.hint,
+    this.hint,
     required this.primary,
     this.secondary,
   });
 
-  final String version, current, hint, primary;
-  final String? secondary;
+  final String version, current, primary;
+  final String? hint, secondary;
   final List<_Note> notes;
 
   @override
@@ -118,15 +117,19 @@ class _UpdateSheet extends StatelessWidget {
       children: [
         Text(
           '发现新版本',
-          style: TextStyle(color: p.ink, fontSize: glass ? 24 : 20, fontWeight: FontWeight.w700),
+          style: TextStyle(color: p.ink, fontSize: glass ? 22 : 20, fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 6),
-        Text('Harmonia $version · 当前 $current', style: TextStyle(color: glass ? p.ink : p.mute, fontSize: 13)),
+        if (glass)
+          _VersionChange(current: current, version: version)
+        else
+          Text('Harmonia $version · 当前 $current', style: TextStyle(color: p.mute, fontSize: 13)),
       ],
     );
     final header = Row(
       children: [
-        if (!glass) ...[const BrandMark(), const SizedBox(width: Space.md)],
+        if (glass) const AppIcon() else const BrandMark(),
+        const SizedBox(width: Space.md),
         Expanded(child: heading),
         if (glass)
           IconButton.filledTonal(
@@ -137,25 +140,43 @@ class _UpdateSheet extends StatelessWidget {
           ),
       ],
     );
+    // 玻璃模式下雾面本身就是滚动窗口：圆角始终完整，说明滚到头也不会被操作区切掉一截。
+    Widget notesCard({required bool scrolls}) => Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: glass ? glassFrostFill(context) : p.card,
+        borderRadius: BorderRadius.circular(glass ? 24 : 18),
+        border: glass ? null : Border.all(color: p.line, width: 1.2),
+      ),
+      child: scrolls
+          // 上下各留一段与内边距等高的渐隐：滚动中的文字淡出，停在两端时不受影响。
+          ? ShaderMask(
+              blendMode: BlendMode.dstIn,
+              shaderCallback: (bounds) => LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: const [Colors.transparent, Colors.black, Colors.black, Colors.transparent],
+                stops: [0, Space.lg / bounds.height, 1 - Space.xl / bounds.height, 1],
+              ).createShader(bounds),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(Space.lg, Space.lg, Space.lg, Space.xl),
+                child: notesBody,
+              ),
+            )
+          : Padding(padding: const EdgeInsets.all(Space.lg), child: notesBody),
+    );
+    final hintText = hint == null
+        ? null
+        : Text(tidy(hint!), style: TextStyle(color: glass ? p.ink : p.mute, fontSize: 13, height: 1.5));
     final body = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (notes.isNotEmpty) ...[
           if (!glass) const SectionTitle('更新内容'),
-          glass
-              ? notesBody
-              : Container(
-                  decoration: BoxDecoration(
-                    color: p.card,
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: p.line, width: 1.2),
-                  ),
-                  padding: const EdgeInsets.all(Space.lg),
-                  child: notesBody,
-                ),
-          const SizedBox(height: 20),
+          notesCard(scrolls: false),
+          if (hintText != null) const SizedBox(height: 20),
         ],
-        Text(tidy(hint), style: TextStyle(color: glass ? p.ink : p.mute, fontSize: 13, height: 1.5)),
+        ?hintText,
       ],
     );
     final actions = Column(
@@ -166,7 +187,11 @@ class _UpdateSheet extends StatelessWidget {
         if (secondary != null) ...[
           const SizedBox(height: Space.sm),
           if (glass)
-            TextButton(onPressed: () => Navigator.pop(context, UpdateChoice.secondary), child: Text(secondary!))
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: p.ink.withValues(alpha: 0.06), foregroundColor: p.accent),
+              onPressed: () => Navigator.pop(context, UpdateChoice.secondary),
+              child: Text(secondary!),
+            )
           else
             OutlinedButton(onPressed: () => Navigator.pop(context, UpdateChoice.secondary), child: Text(secondary!)),
         ],
@@ -198,11 +223,57 @@ class _UpdateSheet extends StatelessWidget {
                       children: [
                         header,
                         const SizedBox(height: 24),
-                        Flexible(child: SingleChildScrollView(child: body)),
+                        if (glass && notes.isNotEmpty) ...[
+                          Flexible(child: notesCard(scrolls: true)),
+                          if (hintText != null) ...[const SizedBox(height: Space.lg), hintText],
+                        ] else
+                          Flexible(child: SingleChildScrollView(child: body)),
                         actions,
                       ],
                     );
             },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// “当前版本 → 新版本”，放在标题下方的小胶囊里。
+class _VersionChange extends StatelessWidget {
+  const _VersionChange({required this.current, required this.version});
+  final String current, version;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    return Semantics(
+      label: '当前 $current，新版本 $version',
+      child: ExcludeSemantics(
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(color: p.ink.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(999)),
+            child: Text.rich(
+              TextSpan(
+                style: TextStyle(color: p.ink, fontSize: 13),
+                children: [
+                  TextSpan(text: current),
+                  WidgetSpan(
+                    alignment: PlaceholderAlignment.middle,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      child: Icon(Icons.arrow_forward_rounded, size: 14, color: p.ink),
+                    ),
+                  ),
+                  TextSpan(
+                    text: version,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -227,7 +298,7 @@ class _NoteLine extends StatelessWidget {
           child: Container(
             width: 6,
             height: 6,
-            decoration: BoxDecoration(color: p.accent, shape: BoxShape.circle),
+            decoration: BoxDecoration(color: p.accentFill, shape: BoxShape.circle),
           ),
         ),
         Expanded(child: text),

@@ -2,6 +2,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../app/controller.dart';
 import '../app/updater.dart';
 import 'app_icon.dart';
 import 'theme.dart';
@@ -15,13 +16,37 @@ class _Project {
 }
 
 class AboutPage extends StatefulWidget {
-  const AboutPage({super.key});
+  const AboutPage({super.key, required this.c});
+  final AppController c;
   @override
   State<AboutPage> createState() => _AboutPageState();
 }
 
 class _AboutPageState extends State<AboutPage> {
   late final Future<List<_Project>> _projects = _load();
+  int _versionTaps = 0;
+  DateTime? _lastVersionTap;
+
+  /// 连点版本号 5 次打开开发者选项；两次点击间隔超过 2 秒重新计数。
+  Future<void> _tapVersion() async {
+    final c = widget.c;
+    if (c.prefs.developerOptions) return toast(context, '开发者选项已经打开，在设置页最底部。');
+    final now = DateTime.now();
+    if (_lastVersionTap == null || now.difference(_lastVersionTap!) > const Duration(seconds: 2)) _versionTaps = 0;
+    _lastVersionTap = now;
+    _versionTaps++;
+    if (_versionTaps < 5) {
+      if (_versionTaps >= 3) toast(context, '再点 ${5 - _versionTaps} 次打开开发者选项');
+      return;
+    }
+    _versionTaps = 0;
+    try {
+      await c.setDeveloperOptions(true);
+      if (mounted) toast(context, '已打开开发者选项，在设置页最底部。');
+    } catch (_) {
+      if (mounted) toast(context, '开发者选项未能打开，请重试。');
+    }
+  }
 
   /// 把登记的许可证按项目名归并，按名称排序。
   static Future<List<_Project>> _load() async {
@@ -58,7 +83,11 @@ class _AboutPageState extends State<AboutPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text('和弦 Harmonia', style: Theme.of(context).textTheme.titleLarge),
-                        Text('版本 $appVersion', style: TextStyle(color: p.mute)),
+                        GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: _tapVersion,
+                          child: Text('版本 $appVersion', style: TextStyle(color: p.mute)),
+                        ),
                       ],
                     ),
                   ),

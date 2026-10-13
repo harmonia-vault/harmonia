@@ -67,90 +67,76 @@ class _DevicesTabState extends State<DevicesTab> {
     }
     final devices = [...c.vault.devices]..sort((a, b) => (a.isManager ? 0 : 1).compareTo(b.isManager ? 0 : 1));
     final me = c.vault.config!.deviceId;
-    return AppPage(
-      appBar: AppBarSurface(
-        largeTitle: usesGlass(context),
-        title: const Text('设备'),
-        actions: usesGlass(context)
-            ? [IconButton(tooltip: '添加设备', onPressed: _addDevice, icon: const Icon(Icons.add))]
-            : null,
+    return AppTabPage(
+      title: '设备',
+      actions: [IconButton(tooltip: '添加设备', onPressed: _addDevice, icon: const Icon(Icons.add))],
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _addDevice,
+        icon: const Icon(Icons.qr_code_scanner),
+        label: const Text('添加设备'),
       ),
-      floatingActionButton: usesGlass(context)
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: _addDevice,
-              icon: const Icon(Icons.qr_code_scanner),
-              label: const Text('添加设备'),
+      onRefresh: () async {
+        await c.syncNow();
+        await _loadPending();
+      },
+      padding: const EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, 96),
+      children: [
+        if (_pending.isNotEmpty) ...[
+          const SectionTitle('等待批准'),
+          for (final p in _pending)
+            Padding(
+              padding: const EdgeInsets.only(bottom: Space.sm),
+              child: Card(
+                color: context.palette.yellow.withValues(alpha: 0.35),
+                child: ListTile(
+                  contentPadding: listRowPadding,
+                  leading: Icon(platformIcon(p.platform)),
+                  title: Text(p.name),
+                  subtitle: Text('${platformName(p.platform)} · 请求接入'),
+                  trailing: const ListRowChevron(),
+                  onTap: () async {
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ReviewPairingPage(c: c, request: p, scanned: false),
+                      ),
+                    );
+                    _loadPending();
+                  },
+                ),
+              ),
             ),
-      body: (context) => RefreshIndicator(
-        onRefresh: () async {
-          await c.syncNow();
-          await _loadPending();
-        },
-        child: ListView(
-          padding: pagePadding(context, const EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, 96)),
-          children: [
-            if (_pending.isNotEmpty) ...[
-              const SectionTitle('等待批准'),
-              for (final p in _pending)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: Space.sm),
-                  child: Card(
-                    color: context.palette.yellow.withValues(alpha: 0.35),
-                    child: ListTile(
-                      contentPadding: listRowPadding,
-                      leading: Icon(platformIcon(p.platform)),
-                      title: Text(p.name),
-                      subtitle: Text('${platformName(p.platform)} · 请求接入'),
-                      trailing: const ListRowChevron(),
-                      onTap: () async {
-                        await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => ReviewPairingPage(c: c, request: p, scanned: false),
-                          ),
-                        );
-                        _loadPending();
-                      },
+        ],
+        const SectionTitle('已授权的设备'),
+        Card(
+          child: Column(
+            children: [
+              for (final (i, d) in devices.indexed) ...[
+                if (i > 0) const Divider(),
+                ListTile(
+                  contentPadding: listRowPadding,
+                  leading: Icon(platformIcon(d.platform)),
+                  title: Text(d.id == me ? '${d.name}（本机）' : d.name),
+                  subtitle: Text(
+                    d.isManager
+                        ? '管理设备 · ${formatTime(d.lastSeenAt)}活动'
+                        : '${d.grants.length} 个环境 · ${formatTime(d.lastSeenAt)}活动',
+                  ),
+                  trailing: const ListRowChevron(),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => DevicePage(c: c, deviceId: d.id),
                     ),
                   ),
                 ),
+              ],
             ],
-            const SectionTitle('已授权的设备'),
-            Card(
-              child: Column(
-                children: [
-                  for (final (i, d) in devices.indexed) ...[
-                    if (i > 0) const Divider(),
-                    ListTile(
-                      contentPadding: listRowPadding,
-                      leading: Icon(platformIcon(d.platform)),
-                      title: Text(d.id == me ? '${d.name}（本机）' : d.name),
-                      subtitle: Text(
-                        d.isManager
-                            ? '管理设备 · ${formatTime(d.lastSeenAt)}活动'
-                            : '${d.grants.length} 个环境 · ${formatTime(d.lastSeenAt)}活动',
-                      ),
-                      trailing: const ListRowChevron(),
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => DevicePage(c: c, deviceId: d.id),
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            const SizedBox(height: Space.md),
-            Text(
-              '在电脑上运行 harmonia login 后，点击“添加设备”扫描终端里的二维码。',
-              style: TextStyle(color: context.palette.mute, height: 1.5),
-            ),
-          ],
+          ),
         ),
-      ),
+        const SizedBox(height: Space.md),
+        Text('在电脑上运行 harmonia login 后，点击“添加设备”扫描终端里的二维码。', style: TextStyle(color: context.palette.mute, height: 1.5)),
+      ],
     );
   }
 }

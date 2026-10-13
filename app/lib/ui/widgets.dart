@@ -34,7 +34,7 @@ void toast(BuildContext context, String msg) {
               content: AppSurface(
                 color: context.palette.card,
                 radius: 24,
-                tintAlpha: 0.76,
+                panel: true,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                   child: Text(tidy(msg), style: TextStyle(color: context.palette.ink, height: 1.45)),
