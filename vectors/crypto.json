@@ -2,7 +2,7 @@
   "box": {
     "plain": "environment-key-0123456789abcdef",
     "pub": "2AKgsNn2QueLyPryEL9zjXrpGjE7A__CwRyEudgB0Hg",
-    "sealed": "1YwIekx-JSg_qjPVlB2LcTZ-Xnxd-q4O-bXH3_xBCgZQvBzWKOXhPjN2jUhXPqOdaEo9pZFJ-_G3ADcOwKWI7n-h2bROUfYOhXwiAPS0gfo",
+    "sealed": "v_7vb5zyOinb-ReLAB1UY6iUsF67M0teQAYnPVEzBFzhzd0MhRl2o3R18JuaWQ1IstdOEqnZC3u8JtH5zPpHn_rpNOMKaNQBQzIP6ZAC0Hg",
     "seed": "AgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4fICE"
   },
   "canonical": {
@@ -23,8 +23,8 @@
   },
   "minisign": {
     "message": "{\"version\":\"9.9.9\"}",
-    "publicKey": "untrusted comment: minisign public key: 3758814B89B39E09\nRWQJnrOJS4FYN+4iTQS+F0EBA2kH7JrsWycaoS9u5tYQ0YM/w01gPXU5",
-    "signature": "untrusted comment: test\nRWQJnrOJS4FYNy+V9ZvZaDEoQPWtI9H/55Z6U4cMQillKgD69+CXT4F96LXDjmhmrXU9NyZjqzYe8tVxkCqXug/2ghWcuEUXTAc=\ntrusted comment: timestamp:0\naCLfn7jTZfUzc89oUo27u7ZsDda9j1NI5z7SqWsoa/ifD9pUv7iTfid31DnD1nNPr6QRVL4CcuIAqqVLYD1ICQ==\n"
+    "publicKey": "untrusted comment: minisign public key: 8377CBE8E040E41F\nRWQf5EDg6Mt3g5A9pFHqQlddjkaalhrzj4yPlZTRnvH5WFfs63r/XAjp",
+    "signature": "untrusted comment: test\nRWQf5EDg6Mt3g7Dt4tW20zPQwMHAy+YW+JNoGivVzzuE9TOvO779A68Rj7tDzvkou2UBfcwL3RxgXQ0YpaOkdq4vRff4FGRpXws=\ntrusted comment: timestamp:0\nt1E2hDNJ7s7lB1rBiKOygyEmm4ZbvjjfyNVSonsS0c9Arlbqtjd/90yxhUYN5er734p94iIY+lhAT2j+WM0JBw==\n"
   },
   "pairing": {
     "boxPub": "2AKgsNn2QueLyPryEL9zjXrpGjE7A__CwRyEudgB0Hg",
@@ -34,11 +34,6 @@
     "qr": "harmonia-pair:CCCCCCCCCCCCCCCCCCCCCC:tpdIIZHZ9aD5mqvroNu3wHmDUynXXXnNAV2gYVDONAM",
     "rootPub": "vfFpTqMA4G--_XgEwUFjt9EYD9j0wMMERHreyFaaoY4",
     "signPub": "ebVWLo_mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ"
-  },
-  "password": {
-    "key": "JyKd57S7C0tZfNKkCcgyymm6s9Gg8Im2dsSYhemGS5s",
-    "password": "correct horse 电池",
-    "salt": "BQYHCAkKCwwNDg8QERITFA"
   },
   "recovery": {
     "boxPub": "qgXqGHvmYkgJOifqHUPuCB1PjL4hrnhn338c7ddiLVk",
@@ -53,7 +48,7 @@
     "sig": "4JfiYKNw1eVh5bBUu-mw6wT7TamLzE4M2BoTwZ4-cNPuFiTyAlkCnN-gMCRsprIjc3lA6Y8i1l0YybTqPLKKAA"
   },
   "value": {
-    "ciphertext": "ijB3AgfbXxz4iZm71D472vKxUDMa-rgzV6ZVaBrdwHJAUd6npN2osy_BLeXWXtqDVlORky2EOYpWVdZ_W2dMp7WndZ0",
+    "ciphertext": "6Ka3BzB4rP3QEdWUBhU8mJrQu-uxYnq2-ryTYMBfYX3mLVwSCUKjRDJzxBvrOwbzezsDwYF4hcJyhKh814ejwdURoa8",
     "envId": "BBBBBBBBBBBBBBBBBBBBBB",
     "key": "AwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISI",
     "keyVersion": 1,
