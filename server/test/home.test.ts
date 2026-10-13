@@ -11,31 +11,45 @@ describe("实例首页", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
     const html = await res.text();
-    expect(html).toContain("<code>http://localhost:8787</code>");
+    expect(html).toContain("<code data-copy>http://localhost:8787</code>");
     expect(html).toContain("harmonia login http://localhost:8787</code>");
     expect(html).toMatch(/<svg viewBox="-3 -3 \d+ \d+" class="qr"/);
   });
 
-  it("最上面给出各个系统通用的 AI 助手提示词，带上这台服务器的地址", async () => {
-    const html = await homePage("https://vault.example.com").text();
-    const prompt = html.match(/<p class="prompt">(.*?)<\/p>/)?.[1] ?? "";
+  it("接入电脑一步在安装命令之前给出各个系统通用的 AI 助手提示词，带上这台服务器的地址", async () => {
+    const html = await (await homePage("https://vault.example.com")).text();
+    const prompt = html.match(/<p class="prompt" data-copy>(.*?)<\/p>/)?.[1] ?? "";
     expect(prompt).toContain("install.sh | HARMONIA_YES=1 sh；");
     expect(prompt).toContain("$env:HARMONIA_YES = &#39;1&#39;; irm https://github.com/harmonia-vault/harmonia/releases/download/update-feed/install.ps1 | iex。");
     expect(prompt).toContain("运行 harmonia skill，按输出的说明接入服务器 https://vault.example.com（邮箱和配对码问我）。");
     expect(html.match(/class="prompt"/g)).toHaveLength(1);
-    expect(html.indexOf('class="ai"')).toBeLessThan(html.indexOf('class="addr"'));
+    expect(html.indexOf('class="addr"')).toBeLessThan(html.indexOf('class="ai"'));
+    expect(html.indexOf('class="ai"')).toBeLessThan(html.indexOf('class="term"'));
   });
 
-  it("不带脚本，不加载外部资源", async () => {
+  it("服务器地址、提示词和每条命令都有复制按钮", async () => {
+    const html = await (await homePage("https://vault.example.com")).text();
+    expect(html.match(/ data-copy>/g)).toHaveLength(5);
+    expect(html).toContain('<code data-copy>https://vault.example.com</code>');
+    expect(html).toContain('<code data-copy>harmonia login https://vault.example.com</code>');
+  });
+
+  it("只带一段内嵌的复制脚本，内容安全策略按哈希放行，不加载外部资源", async () => {
     const res = await open(new TestServer(), "GET", "http://localhost/");
-    expect(res.headers.get("content-security-policy")).toContain("default-src 'none'");
+    const csp = res.headers.get("content-security-policy")!;
+    expect(csp).toContain("default-src 'none'");
     const html = await res.text();
-    expect(html).not.toMatch(/<script|<img|<iframe|<form|@import|url\(\s*["']?https?:/i);
+    const scripts = [...html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/g)];
+    expect(scripts).toHaveLength(1);
+    expect(scripts[0]![1]).toBe("");
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(scripts[0]![2]));
+    expect(csp).toContain(`script-src 'sha256-${Buffer.from(digest).toString("base64")}'`);
+    expect(html).not.toMatch(/<img|<iframe|<form|@import|url\(\s*["']?https?:/i);
     expect([...html.matchAll(/(?:src|href)="([^"]+)"/g)].map((m) => m[1]).filter((u) => !/^(https:\/\/github\.com\/harmonia-vault\/|data:image\/svg\+xml,)/.test(u!))).toEqual([]);
   });
 
   it("地址里的特殊字符不会变成页面内容", async () => {
-    const html = await homePage(`https://a"><b>&'`).text();
+    const html = await (await homePage(`https://a"><b>&'`)).text();
     expect(html).toContain("https://a&quot;&gt;&lt;b&gt;&amp;&#39;");
     expect(html).not.toContain(`a"><b>`);
   });

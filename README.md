@@ -48,7 +48,7 @@ Harmonia 没有上架 App Store。Releases 里的 `harmonia-<版本>.ipa` 没有
 
 ### 3. 在电脑上接入
 
-**推荐让 AI 助手来做。** 把下面这句话发给 Claude Code、Codex 这类能运行命令的 AI 助手，macOS、Linux、Windows 都用这一句（换成你的服务器地址）。在电脑浏览器里打开服务器地址，首页最上面也有这句话，地址已经填好：
+**推荐让 AI 助手来做。** 把下面这句话发给 Claude Code、Codex 这类能运行命令的 AI 助手，macOS、Linux、Windows 都用这一句（换成你的服务器地址）。在电脑浏览器里打开服务器地址，首页“接入电脑”一步也有这句话，地址已经填好，点“复制”即可：
 
 ```text
 在这台电脑上安装 Harmonia 命令行：macOS、Linux 运行 curl -fsSL https://github.com/harmonia-vault/harmonia/releases/download/update-feed/install.sh | HARMONIA_YES=1 sh；Windows 在 PowerShell 中运行 $env:HARMONIA_YES = '1'; irm https://github.com/harmonia-vault/harmonia/releases/download/update-feed/install.ps1 | iex。装好后运行 harmonia skill，按输出的说明接入服务器 https://你的服务器地址（邮箱和配对码问我）。
