@@ -133,3 +133,18 @@ func TestForgedEnvelopeRejected(t *testing.T) {
 		t.Fatal("envelope signed by a different root must be rejected")
 	}
 }
+
+func TestKnownIncludesAllEnvironmentsAndOverrides(t *testing.T) {
+	f := newFixture(t)
+	s := f.sync(t, 0, map[string]map[string]string{
+		"low":  {"A": "low-a", "B": "low-b"},
+		"high": {"A": "high-a"},
+	})
+	if err := Apply(f.cache, s, 0, hc.B64(f.root.Pub), f.dev.ID); err != nil {
+		t.Fatal(err)
+	}
+	got := Known(f.cache, f.dev, state.Overrides{"low": {"B": "local-b"}})
+	if !got["A"]["low-a"] || !got["A"]["high-a"] || !got["B"]["low-b"] || !got["B"]["local-b"] || len(got) != 2 {
+		t.Fatalf("应包含每个环境的值和本机覆盖值：%v", got)
+	}
+}

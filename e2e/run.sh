@@ -171,6 +171,21 @@ expect_eq "$(manager phone devices | grep e2e-laptop | cut -f3)" "OpenAI:rw,Othe
 cli env deactivate Other >/dev/null
 expect_eq "$(manager phone devices | grep e2e-laptop | cut -f3)" "OpenAI:rw,Other:ro:off" "手机看到电脑停用的环境"
 
+step "exec --env：只用指定的环境，终端里其他环境的变量不传给命令"
+# 本地测试的请求都来自同一个网络，设备登录挑战每分钟最多 30 次：先等过这一分钟。
+sleep 61
+manager phone var-set OpenAI ONLY_OPENAI "only-openai" >/dev/null
+START=$(date +%s)
+until grep -q "only-openai" "$TMP/cli/env.sh"; do
+  [ $(( $(date +%s) - START )) -le 5 ] || fail "env.sh 没有收到 ONLY_OPENAI"
+  sleep 0.2
+done
+expect_eq "$(cli exec --env Other --env OpenAI -- printenv OPENAI_API_KEY 2>/dev/null)" "from-other" "--env 可以使用已停用的环境，重复给出时先列出的优先"
+# 模拟开启了 Shell 集成的终端：先加载 env.sh，再用 --env 只选 Other。
+expect_eq "$(bash -c ". '$TMP/cli/env.sh'; export MINE=kept; HARMONIA_HOME='$TMP/cli' '$TMP/harmonia' exec --env Other -- sh -c 'printf \"%s %s\" \"\${ONLY_OPENAI-unset}\" \"\$MINE\"'" 2>/dev/null)" "unset kept" "--env 时不带上终端里其他环境的变量，保留用户自己的变量"
+# 终端里是旧值时，不加 --env 也以最新值为准（同名变量只传一份）。
+expect_eq "$(bash -c "export OPENAI_API_KEY=stale; HARMONIA_HOME='$TMP/cli' '$TMP/harmonia' exec -- sh -c 'env | grep -c ^OPENAI_API_KEY=; printenv OPENAI_API_KEY'" 2>/dev/null | tr '\n' ' ')" "1 sk-second " "同名变量只传最新值"
+
 step "“写入系统变量”开关：手机修改后随同步下发到电脑"
 manager phone system-vars e2e-laptop on >/dev/null
 expect_eq "$(manager phone devices | grep e2e-laptop | cut -f4)" "system-vars" "手机看到开关已打开"

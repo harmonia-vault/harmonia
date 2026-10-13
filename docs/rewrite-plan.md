@@ -252,7 +252,7 @@ harmonia var list [--env] | set <env> <KEY> | rm <env> <KEY>
 harmonia import --env <env>
 harmonia override set|rm|list
 harmonia exec [--env a,b] -- <cmd...>
-harmonia export [--format sh|dotenv|json]
+harmonia export [--env a,b] [--format sh|dotenv|json]
 harmonia shell install|uninstall
 harmonia service install|uninstall|status
 harmonia update [--check]
@@ -261,6 +261,7 @@ harmonia logout
 harmonia uninstall
 ```
 
+- `exec --env`、`export --env` 只用指定的环境（2026-10-13 补充）：可以用逗号分隔，也可以重复给出，按列出的顺序合并，靠前的优先；已停用的环境也能指定，到期的跳过并提示。`exec --env` 时，终端里由其他环境写入的变量（开启了 Shell 集成，或 Windows 上写入了用户环境变量）不传给命令：值与这台设备某个环境（或本机覆盖）给的值相同的变量会去掉，用户自己设的不同值和系统必需的变量（`PATH`、`HOME` 等）保留。不论是否指定 `--env`，与要注入的变量同名的已有条目都先去掉，子进程只收到一份最新值（同名出现两次时，多数程序读到的是第一个，也就是终端里的旧值）。
 - `skill` 输出给 AI 助手的使用说明，`skill install` 把它保存成技能文件，见 5.13。
 - `login` 依次询问服务器、邮箱和配对码（2026-10-13）：不询问密码；配对码留空即扫码方式，之后显示二维码和核对码，等待管理设备批准（5.10）。
 - 本地状态放在 `~/.harmonia/`。CLI 和后台服务通过文件锁协调，不做本地 IPC。
