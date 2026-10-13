@@ -44,7 +44,7 @@ Map<String, List<DebugPageEntry>> debugPages() => {
     DebugPageEntry('玻璃透明度与折射对照', (s) => GlassDebugPage(c: s.c)),
     DebugPageEntry('通知默认动效与下载进度', (_) => const FeedbackDebugPage()),
     DebugPageEntry('环境列表与行尾间距', (s) => EnvironmentsTab(c: s.c)),
-    DebugPageEntry('设备列表与行尾间距', (s) => s.vault.paired ? DevicesTab(c: s.c) : SignInPage(c: s.c)),
+    DebugPageEntry('设备列表、添加设备菜单与行尾间距', (s) => s.vault.paired ? DevicesTab(c: s.c) : SignInPage(c: s.c)),
     DebugPageEntry('设置、白色滑块与输入弹窗', (s) => s.vault.paired ? SettingsTab(c: s.c) : SignInPage(c: s.c)),
     DebugPageEntry('关于、连点版本号与开源许可', (s) => AboutPage(c: s.c)),
     DebugPageEntry('环境详情、复制间距与菜单', (s) => _environment(s, edit: false)),
@@ -60,7 +60,6 @@ Map<String, List<DebugPageEntry>> debugPages() => {
           ? const Center(child: Text('当前没有示例设备，请切换到正常数据。'))
           : DevicePage(c: s.c, deviceId: s.vault.devices.last.id),
     ),
-    DebugPageEntry('添加设备：选择扫码或生成配对码', (s) => DebugOverlay(show: (c) => addDevice(c, s.c))),
     DebugPageEntry('扫码添加与核对码弹窗', (s) => AddDevicePage(c: s.c)),
     DebugPageEntry('生成配对码与剩余时间', (s) => DebugOverlay(show: (c) => showPairingCode(c, s.c))),
     DebugPageEntry(
