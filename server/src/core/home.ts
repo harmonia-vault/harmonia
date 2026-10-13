@@ -87,8 +87,7 @@ h1 em{font-style:normal;text-decoration:underline var(--yellow);text-decoration-
 .addr{display:flex;align-items:center;gap:20px;margin-top:32px;padding:18px 20px;border:1.5px solid var(--ink);border-radius:18px;background:var(--card);box-shadow:4px 4px 0 var(--yellow)}
 .ai{position:relative;margin:0 0 20px;padding:14px 16px;border:1.5px solid var(--ink);border-radius:14px;background:var(--card);box-shadow:4px 4px 0 var(--accent)}
 .ai span{display:block;font-size:12px;color:var(--mute)}
-.ai p{margin:0;font-size:14px;color:var(--mute)}
-.ai .prompt{margin:6px 0 10px;padding:10px 12px;border:1.5px dashed var(--ink);border-radius:10px;color:var(--ink);font-size:15px;overflow-wrap:anywhere;-webkit-user-select:all;user-select:all}
+.ai .prompt{margin:6px 0 0;padding:10px 12px;border:1.5px dashed var(--ink);border-radius:10px;color:var(--ink);font-size:15px;overflow-wrap:anywhere;-webkit-user-select:all;user-select:all}
 .copy{position:absolute;top:10px;right:12px;padding:1px 10px;border:1.5px solid currentColor;border-radius:8px;background:transparent;color:inherit;font:inherit;font-size:12px;line-height:20px;cursor:pointer}
 .copy:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .addr div{position:relative;flex:1;min-width:0}
@@ -156,10 +155,11 @@ function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 }
 
-/** 复制给 AI 助手的一句话，各个系统通用：安装命令行，读取 harmonia skill 的说明，接入这台服务器。address 已转义。 */
+/** 复制给 AI 助手的提示词，各个系统通用：先介绍 Harmonia，再让它安装命令行、读取 harmonia skill 的说明、接入这台服务器。address 已转义。 */
 function aiPrompt(address: string): string {
   return escapeHtml(
-    `在这台电脑上安装 Harmonia 命令行：macOS、Linux 运行 curl -fsSL ${FEED}/install.sh | HARMONIA_YES=1 sh；` +
+    `Harmonia（和弦，${REPO}）是一个开源、自托管的环境变量同步工具：我在手机 App 上管理 API Key 等环境变量，端到端加密后同步到我授权的电脑，你可以用它的命令行取用这些变量，不用我把 Key 贴进对话。` +
+      `请在这台电脑上安装 Harmonia 命令行：macOS、Linux 运行 curl -fsSL ${FEED}/install.sh | HARMONIA_YES=1 sh；` +
       `Windows 在 PowerShell 中运行 $env:HARMONIA_YES = '1'; irm ${FEED}/install.ps1 | iex。` +
       `装好后运行 harmonia skill，按输出的说明接入服务器 `,
   ) + address + "（邮箱和配对码问我）。";
@@ -229,13 +229,12 @@ ${qrCode(origin)}
 </li>
 <li>
 <h3>接入电脑</h3>
-<p>在电脑上安装命令行，再接入这台服务器。推荐让 AI 助手来做，接入时你在 App 上批准即可。</p>
+<p>在电脑上安装命令行，再接入这台服务器。</p>
 <div class="ai">
-<span>让 AI 助手安装（推荐）</span>
+<span>让 AI 助手安装</span>
 <p class="prompt" data-copy>${aiPrompt(address)}</p>
-<p>这句话 macOS、Linux、Windows 通用，复制发给 Claude Code、Codex 这类能运行命令的 AI 助手。它会装好命令行、Shell 集成和后台服务，再向你要邮箱和配对码（在 App 的“设备 → 添加设备”中生成），并把核对码告诉你。</p>
 </div>
-<p class="or">也可以自己安装：终端会显示二维码，用 App 扫码批准后，变量就会同步过来。</p>
+<p class="or">或者自己安装，用 App 扫终端里的二维码批准：</p>
 <div class="term"><span>macOS、Linux</span><code data-copy>curl -fsSL ${FEED}/install.sh | sh</code></div>
 <div class="term"><span>Windows（PowerShell）</span><code data-copy>irm ${FEED}/install.ps1 | iex</code></div>
 <div class="term"><span>安装后接入</span><code data-copy>harmonia login ${address}</code></div>
