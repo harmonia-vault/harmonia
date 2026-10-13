@@ -101,7 +101,19 @@ class PairingRequest {
   String get ip => json['ip'] as String? ?? '';
   /// 发起方的客户端具备管理功能，才能被批准为管理设备。
   bool get canManage => json['canManage'] as bool? ?? false;
+  /// 由配对码创建：出现在待批准列表中，前台时自动弹出批准页。匿名请求只能扫码或手输核对码取到（协议 3.2）。
+  bool get authorized => json['authorized'] as bool? ?? false;
   int get expiresAt => json['expiresAt'] as int;
+}
+
+/// 管理设备生成的一次性配对码：8 位，5 分钟内有效，用一次即作废（协议 3.2）。
+class PairingCode {
+  PairingCode(this.code, this.expiresAt);
+  final String code;
+  final DateTime expiresAt;
+
+  /// 按 4 位一组显示。
+  String get formatted => code.length == 8 ? '${code.substring(0, 4)}-${code.substring(4)}' : code;
 }
 
 /// 本机持久化的同步缓存（只含密文与封装，没有明文）。

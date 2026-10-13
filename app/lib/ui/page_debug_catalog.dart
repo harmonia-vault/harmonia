@@ -6,8 +6,8 @@ import 'package:flutter/material.dart';
 import '../app/controller.dart';
 import '../app/debug_session.dart';
 import '../app/updater.dart';
-import '../core/account.dart';
 import '../core/crypto.dart';
+import '../core/debug_account.dart';
 import 'about.dart';
 import 'auth_pages.dart';
 import 'devices.dart';
@@ -20,6 +20,7 @@ import 'home.dart';
 import 'lock.dart';
 import 'lock_debug.dart';
 import 'pairing.dart';
+import 'pairing_code.dart';
 import 'pin_setup.dart';
 import 'recovery_actions.dart';
 import 'recovery_pages.dart';
@@ -59,9 +60,10 @@ Map<String, List<DebugPageEntry>> debugPages() => {
           ? const Center(child: Text('当前没有示例设备，请切换到正常数据。'))
           : DevicePage(c: s.c, deviceId: s.vault.devices.last.id),
     ),
-    DebugPageEntry('扫码添加与核对码弹窗', (s) => AddDevicePage(c: s.c)),
+    DebugPageEntry('扫码添加、核对码弹窗与生成配对码', (s) => AddDevicePage(c: s.c)),
+    DebugPageEntry('生成配对码与剩余时间', (s) => DebugOverlay(show: (c) => showPairingCode(c, s.c))),
     DebugPageEntry(
-      '批准与拒绝设备',
+      '批准与拒绝设备（用配对码发起）',
       (s) => s.vault.requests.isEmpty
           ? const Center(child: Text('当前没有待批准请求，请重置示例。'))
           : ReviewPairingPage(c: s.c, request: s.vault.requests.first, scanned: false),
@@ -70,20 +72,12 @@ Map<String, List<DebugPageEntry>> debugPages() => {
   '账号接入': [
     DebugPageEntry('连接服务器', (s) => ConnectPage(c: s.c), stage: Stage.connect),
     DebugPageEntry('扫描服务器', (_) => const ScanServerPage()),
-    DebugPageEntry('登录与注册', (s) => SignInPage(c: s.c), stage: Stage.signedOut),
-    DebugPageEntry(
-      '登录验证码弹窗',
-      (s) => SignInPage(c: s.c),
-      stage: Stage.signedOut,
-      prepare: (s) async {
-        s.account.requireCode = true;
-      },
-    ),
+    DebugPageEntry('输入邮箱、注册与重新设置确认', (s) => SignInPage(c: s.c), stage: Stage.signedOut),
     DebugPageEntry(
       '验证邮箱',
       (s) => VerifyEmailPage(c: s.c),
       stage: Stage.verifyEmail,
-      prepare: (s) => s.c.register('demo@example.invalid', 'preview-password'),
+      prepare: (s) => s.c.register('new@example.invalid'),
     ),
     DebugPageEntry(
       '设置 PIN 与生物识别',
@@ -100,23 +94,25 @@ Map<String, List<DebugPageEntry>> debugPages() => {
       prepare: (s) async => s.prepareAccount(),
     ),
     DebugPageEntry(
-      '等待批准',
+      '接入这台手机：输入配对码',
+      (s) => DebugOverlay(
+        background: UnpairedPage(c: s.c),
+        show: askPairingCode,
+      ),
+      stage: Stage.unpaired,
+      prepare: (s) async => s.prepareAccount(),
+    ),
+    DebugPageEntry(
+      '等待批准（扫码）',
       (s) => PairingWaitPage(c: s.c),
       stage: Stage.pairing,
-      prepare: (s) async {
-        s.c.pendingPairing = await s.account.startPairing(
-          s.c.session ??
-              PasswordSession(
-                'https://debug.invalid',
-                'demo@example.invalid',
-                'debug-token',
-                'debug-account',
-                true,
-                'debug-root',
-              ),
-          '示例手机',
-        );
-      },
+      prepare: (s) => _waiting(s),
+    ),
+    DebugPageEntry(
+      '等待批准（用配对码发起）',
+      (s) => PairingWaitPage(c: s.c),
+      stage: Stage.pairing,
+      prepare: (s) => _waiting(s, code: DebugAccount.pairingCode),
     ),
   ],
   '恢复与安全': [
@@ -133,7 +129,6 @@ Map<String, List<DebugPageEntry>> debugPages() => {
       },
     ),
     DebugPageEntry('用恢复码恢复', (s) => RecoverPage(c: s.c, email: 'demo@example.invalid')),
-    DebugPageEntry('找回密码', (s) => ForgotPasswordPage(c: s.c, email: 'demo@example.invalid')),
     DebugPageEntry('重置账号', (s) => AccountResetPage(c: s.c, email: 'demo@example.invalid')),
     DebugPageEntry('更换恢复码', (s) => s.vault.paired ? RotationPage(c: s.c) : SignInPage(c: s.c)),
     DebugPageEntry(
@@ -224,6 +219,11 @@ Map<String, List<DebugPageEntry>> debugPages() => {
   ],
 };
 
+Future<void> _waiting(DebugSession s, {String? code}) async {
+  s.prepareAccount();
+  s.c.pendingPairing = await s.account.startPairing(s.c.session!, '示例手机', code: code);
+}
+
 Widget _environment(DebugSession s, {required bool edit}) {
   if (s.vault.environments.isEmpty) return const Center(child: Text('当前没有示例环境，请先在首页创建环境。'));
   final id = s.vault.environments.first.id;
@@ -241,21 +241,15 @@ class DebugCatalog extends StatelessWidget {
   Widget build(BuildContext context) => ListView(
     padding: const EdgeInsets.all(16),
     children: [
-      const Banner2('这里全部是模拟数据，退出后丢弃；初始 PIN 为 123456，密码为 preview-password，邮箱验证码为 12345678。'),
+      const Banner2(
+        '这里全部是模拟数据，退出后丢弃；初始 PIN 为 123456，邮箱验证码为 12345678，配对码为 7K3M-9Q2P。\n'
+        '输入邮箱页：demo@example.invalid 是已设置的账号，setup@example.invalid 是未完成设置的账号，其他邮箱按未注册处理。',
+      ),
       if (error != null) Banner2(error!, warn: true),
       ExpansionTile(title: const Text('显示与数据场景'), children: options),
-      if (session.vault.requests.isNotEmpty) ...[
-        const SectionTitle('示例核对码'),
-        CodeBox(
-          pairingCode(
-            pairingFingerprint(
-              session.vault.requests.first.id,
-              session.vault.requests.first.signPub,
-              session.vault.requests.first.boxPub,
-              session.vault.requests.first.rootPub,
-            ),
-          ),
-        ),
+      for (final r in session.vault.requests) ...[
+        SectionTitle(r.authorized ? '示例核对码（用配对码发起）' : '示例核对码（只能扫码或手输找到）'),
+        CodeBox(pairingCode(pairingFingerprint(r.id, r.signPub, r.boxPub, r.rootPub))),
       ],
       for (final group in debugPages().entries) ...[
         SectionTitle(group.key),

@@ -39,11 +39,11 @@ void main() {
 
   test('设备管理通过 Vault 类型调用仍然只修改模拟状态', () async {
     final Vault operations = vault;
-    final request = (await operations.pendingPairings()).single;
+    final request = (await operations.pendingPairings()).singleWhere((p) => p.authorized);
     final qr = pairingQr(request.id, pairingFingerprint(request.id, request.signPub, request.boxPub, request.rootPub));
     expect((await operations.pairingFromQr(qr)).id, request.id);
     await operations.approvePairing(request, asManager: false, grants: [Grant('debug-env-1', 'ro', 0)]);
-    expect(await operations.pendingPairings(), isEmpty);
+    expect((await operations.pendingPairings()).where((p) => p.authorized), isEmpty);
     await operations.renameDevice(request.id, '已批准电脑');
     await operations.setSystemVars(request.id, true);
     await operations.setActivation(request.id, [Grant('debug-env-1', 'ro', 0, active: false)]);
@@ -76,20 +76,15 @@ void main() {
     final AccountService account = DebugAccount(crypto, vault);
     const server = 'https://must-not-be-contacted.example.com';
     expect((await account.instance(server)).server, 'https://debug.invalid');
-    await account.register(server, 'test@example.invalid', 'new-password');
+    expect(await account.lookup(server, 'test@example.invalid'), isNull);
+    expect((await account.register(server, 'test@example.invalid')).flow, isNotNull);
     await expectLater(
       account.verifyEmail(server, 'test@example.invalid', 'flow', 'bad'),
       throwsA(isA<VaultException>()),
     );
-    await account.verifyEmail(server, 'test@example.invalid', 'flow', '12345678');
-    final session = await account.login(server, 'test@example.invalid', 'new-password');
+    final session = await account.verifyEmail(server, 'test@example.invalid', 'flow', '12345678');
     expect(session.initialized, isFalse);
-    await account.completePasswordReset(server, session.email, 'flow', '12345678', 'changed-password');
-    await expectLater(account.login(server, session.email, 'new-password'), throwsA(isA<VaultException>()));
-    expect((await account.login(server, session.email, 'changed-password')).email, session.email);
-    await vault.changePassword('settings-password');
-    await expectLater(account.login(server, session.email, 'changed-password'), throwsA(isA<VaultException>()));
-    expect((await account.login(server, session.email, 'settings-password')).email, session.email);
+    expect(session.token, isNotNull);
     final rotation = await vault.rotateRecovery(Uint8List(16));
     expect(await vault.rotationCompleted(rotation.key), isTrue);
     await account.completeAccountReset(server, session.email, 'flow', '12345678');

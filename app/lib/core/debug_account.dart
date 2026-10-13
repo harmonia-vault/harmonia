@@ -11,24 +11,28 @@ class DebugAccount extends AccountService {
   DebugAccount(super.crypto, this.vault)
     : super(clientFactory: (base) => ApiClient(base, client: DebugNetworkClient()));
   final DebugVault vault;
+
+  /// 模拟的已设置账号；[unfinishedEmail] 是注册了但还没有完成设置的账号，其他邮箱按未注册处理。
+  static const readyEmail = 'demo@example.invalid';
+  static const unfinishedEmail = 'setup@example.invalid';
+
+  /// 模拟配对码，按 4 位一组显示为 7K3M-9Q2P。
+  static const pairingCode = '7K3M9Q2P';
+
   bool _initialized = true;
-  bool requireCode = false;
-  void reset() {
-    _initialized = true;
-    requireCode = false;
-  }
+  void reset() => _initialized = true;
 
   void _code(String code) {
     if (code.replaceAll('-', '').trim() != '12345678') throw VaultException('模拟验证码不正确，请输入 12345678。');
   }
 
-  PasswordSession _session(String email) => PasswordSession(
+  AccountSession _session(String email, {bool? initialized, String? token}) => AccountSession(
     'https://debug.invalid',
-    email.trim(),
-    'debug-token',
+    email.trim().toLowerCase(),
     'debug-account',
-    _initialized,
-    'debug-root',
+    initialized ?? _initialized,
+    (initialized ?? _initialized) ? 'debug-root' : null,
+    token: token,
   );
 
   @override
@@ -38,53 +42,33 @@ class DebugAccount extends AccountService {
   }
 
   @override
-  Future<String?> register(String server, String email, String password) async {
+  Future<AccountSession?> lookup(String server, String email) async {
     vault.check();
-    _initialized = false;
-    vault.password = password;
-    return 'debug-verification';
+    return switch (email.trim().toLowerCase()) {
+      readyEmail => _session(email),
+      unfinishedEmail => _session(email, initialized: false),
+      _ => null,
+    };
   }
 
   @override
-  Future<void> verifyEmail(String server, String email, String flow, String code) async {
+  Future<Registration> register(String server, String email) async {
+    vault.check();
+    _initialized = false;
+    return Registration(flow: 'debug-verification');
+  }
+
+  @override
+  Future<AccountSession> verifyEmail(String server, String email, String flow, String code) async {
     vault.check();
     _code(code);
+    return _session(email, token: 'debug-registration');
   }
 
   @override
   Future<String> resendVerification(String server, String email) async {
     vault.check();
     return 'debug-verification';
-  }
-
-  @override
-  Future<PasswordSession> login(
-    String server,
-    String email,
-    String password, {
-    Future<String?> Function(String)? askCode,
-  }) async {
-    vault.check();
-    if (password != vault.password) throw VaultException('模拟密码不正确，请重试或重置示例。');
-    if (requireCode && askCode != null) {
-      final code = await askCode('请输入模拟验证码 12345678。');
-      if (code == null) throw VaultException('已取消模拟登录。');
-      _code(code);
-    }
-    return _session(email);
-  }
-
-  @override
-  Future<String> requestPasswordReset(String server, String email) async {
-    vault.check();
-    return 'debug-password-reset';
-  }
-
-  @override
-  Future<void> completePasswordReset(String server, String email, String flow, String code, String newPassword) async {
-    vault.check();
-    _code(code);
-    vault.password = newPassword;
   }
 
   @override
@@ -104,15 +88,19 @@ class DebugAccount extends AccountService {
   @override
   SetupDraft prepareSetup() => SetupDraft(Uint8List(16), Uint8List(32), Uint8List(32), Uint8List(32), 'debug-phone');
   @override
-  Future<LocalConfig> completeSetup(PasswordSession s, SetupDraft d, String deviceName) async {
+  Future<LocalConfig> completeSetup(AccountSession s, SetupDraft d, String deviceName) async {
     vault.check();
     _initialized = true;
     return vault.sampleConfig;
   }
 
   @override
-  Future<PendingPairing> startPairing(PasswordSession s, String deviceName) async {
+  Future<PendingPairing> startPairing(AccountSession s, String deviceName, {String? code}) async {
     vault.check();
+    final withCode = code != null && code.trim().isNotEmpty;
+    if (withCode && normalizeCode(code) != pairingCode) {
+      throw VaultException('模拟配对码不对，请输入 7K3M-9Q2P，或者留空改用扫码。');
+    }
     return PendingPairing(
       s,
       'debug-wait',
@@ -121,8 +109,9 @@ class DebugAccount extends AccountService {
       Uint8List(32),
       pairingQr('debug-wait', Uint8List(32)),
       '0000 0000 0000 0000',
-      DateTime.now().add(const Duration(minutes: 10)),
+      DateTime.now().add(const Duration(minutes: 5)),
       '示例手机',
+      authorized: withCode,
     );
   }
 

@@ -338,16 +338,10 @@ class Vault with VaultDevices {
 
   bool get isLastManager => devices.where((d) => d.isManager).length <= 1;
 
-  Future<void> changePassword(String newPassword) async {
-    final salt = crypto.random(16);
-    final authKey = await passwordKeyInIsolate(newPassword, salt);
-    await api!.device('PUT', '/api/v1/account/password', body: {'kdfSalt': b64(salt), 'authKey': b64(authKey)});
-  }
-
   // ---- 恢复码轮换 ----
 
   /// 用新恢复码轮换。全部环境钥与账号根密钥重新封装给新恢复钥，提交成功后旧恢复码失效。
-  Future<RotationAttempt> rotateRecovery(Uint8List newCode, {String? newPassword, String? key}) async {
+  Future<RotationAttempt> rotateRecovery(Uint8List newCode, {String? key}) async {
     final r = _root();
     final rec = crypto.deriveRecovery(newCode);
     final generation = int.parse((cache.manager!['recovery'] as Map)['generation'] as String) + 1;
@@ -367,10 +361,6 @@ class Vault with VaultDevices {
           _envelope(e.id, e.keyVersion, 'recovery', rec.box.pub, _envKeys[e.id]!)..remove('recipient'),
       ],
     };
-    if (newPassword != null) {
-      final salt = crypto.random(16);
-      body['password'] = {'kdfSalt': b64(salt), 'authKey': b64(await passwordKeyInIsolate(newPassword, salt))};
-    }
     await api!.device('POST', '/api/v1/recovery/rotate', body: body);
     await sync();
     return attempt;

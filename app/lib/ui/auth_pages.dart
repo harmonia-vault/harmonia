@@ -1,12 +1,11 @@
-// 未接入账号时的页面：连接服务器、登录、注册、验证邮箱、找回密码、重置账号。
+// 未接入账号时的页面：连接服务器、输入邮箱（注册或接入）、验证邮箱、重置账号。
 import 'package:flutter/material.dart';
 
 import '../app/controller.dart';
-import '../core/api.dart';
+import '../core/account.dart';
 import 'recovery_pages.dart';
 import 'scanner.dart';
 import 'theme.dart';
-import 'glass_overlays.dart';
 import 'widgets.dart';
 import 'app_scope.dart';
 
@@ -60,6 +59,7 @@ class _ConnectPageState extends State<ConnectPage> {
   );
 }
 
+/// 输入邮箱：按查询结果注册新账号、重新开始未完成的设置，或接入已有账号。账号没有密码。
 class SignInPage extends StatefulWidget {
   const SignInPage({super.key, required this.c});
   final AppController c;
@@ -70,82 +70,40 @@ class SignInPage extends StatefulWidget {
 class _SignInPageState extends State<SignInPage> {
   final _form = GlobalKey<FormState>();
   late final _email = TextEditingController(text: widget.c.prefs.email ?? '');
-  final _password = TextEditingController();
-  final _confirm = TextEditingController();
-  bool _register = false;
-  bool _show = false;
 
   AppController get c => widget.c;
 
-  @override
-  void initState() {
-    super.initState();
-    // 服务器上还没有任何账号时默认显示注册；已有账号时默认显示登录，开放注册的服务器仍可以点“注册新账号”。
-    final inst = c.instance;
-    if (inst != null && inst.firstAccount && c.prefs.email == null) _register = true;
-  }
-
   Future<void> _submit() async {
     if (!_form.currentState!.validate()) return;
-    final email = _email.text.trim(), password = _password.text;
+    final email = _email.text.trim();
     // 先收起键盘：否则下一页换成数字键盘时，页面会被顶上去一截，标题被遮住。
     FocusManager.instance.primaryFocus?.unfocus();
-    await runBusy(context, () async {
-      try {
-        if (_register) {
-          await c.register(email, password);
-        } else {
-          await c.login(email, password, askCode: _askCode);
-        }
-      } on ApiException catch (e) {
-        if (e.code == 'email_unverified') {
-          await c.startVerification(email, password);
-          return;
-        }
-        rethrow;
-      }
-    });
-  }
-
-  /// 账号正受到异常登录尝试时，服务端在密码正确后要求邮件验证码。返回 null 表示取消。
-  Future<String?> _askCode(String message) {
-    final ctl = TextEditingController();
-    return showAppDialog<String>(
-      context: context,
-      useRootNavigator: false,
-      barrierDismissible: false,
-      builder: (ctx) => AppAlertDialog(
-        title: const Text('输入邮箱验证码'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(message),
-            const SizedBox(height: Space.md),
-            TextField(
-              controller: ctl,
-              autofocus: true,
-              autofillHints: AppScope.isSimulated(context) ? null : const [AutofillHints.oneTimeCode],
-              textCapitalization: TextCapitalization.characters,
-              decoration: const InputDecoration(labelText: '邮箱验证码', helperText: '输入邮件中的 8 位验证码'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, ctl.text.trim()), child: const Text('登录')),
-        ],
-      ),
-    );
+    AccountSession? found;
+    if (!await runBusy(context, () async => found = await c.findAccount(email)) || !mounted) return;
+    final info = found;
+    if (info != null && info.initialized) {
+      await runBusy(context, () => c.useAccount(info));
+      return;
+    }
+    if (info == null && c.instance?.registrationOpen == false) {
+      toast(context, '这个邮箱还没有注册，这台服务器也没有开放注册。请检查邮箱是否输错，或联系服务器管理员。');
+      return;
+    }
+    final ok = info == null
+        ? await confirmDialog(context, title: '创建新账号？', body: '$email 还没有注册。要用它在这台服务器上创建一个新账号吗？\n请先确认邮箱没有输错。', ok: '创建')
+        : await confirmDialog(context, title: '重新开始设置？', body: '$email 已经注册，但还没有完成设置，账号里没有任何数据。要从头开始设置吗？', ok: '重新设置');
+    if (!ok || !mounted) return;
+    await runBusy(context, () => c.register(email));
   }
 
   @override
   Widget build(BuildContext context) {
-    final inst = c.instance;
-    final canRegister = inst?.registrationOpen ?? true;
+    final first = c.instance?.firstAccount ?? false;
     return AuthScaffold(
-      title: _register ? '创建账号' : '登录',
-      subtitle: _register ? '用邮箱注册一个 Harmonia 账号。' : '登录你的 Harmonia 账号。',
+      title: first ? '创建账号' : '输入邮箱',
+      subtitle: first
+          ? '这台服务器上还没有账号，输入邮箱创建第一个账号。\nHarmonia 没有密码，数据由手机上的密钥和恢复码保护。'
+          : '新邮箱会创建账号；已有账号时，这台手机由管理设备批准接入，或者用恢复码恢复。\nHarmonia 没有密码。',
       children: [
         if (c.notice != null) ...[Banner2(c.notice!, warn: true), const SizedBox(height: Space.lg)],
         Row(
@@ -163,95 +121,48 @@ class _SignInPageState extends State<SignInPage> {
           onDisposeAction: AppScope.isSimulated(context) ? AutofillContextAction.cancel : AutofillContextAction.commit,
           child: Form(
             key: _form,
-            child: Column(
-              children: [
-                TextFormField(
-                  controller: _email,
-                  keyboardType: TextInputType.emailAddress,
-                  autocorrect: false,
-                  autofillHints: AppScope.isSimulated(context) ? null : const [AutofillHints.email],
-                  decoration: const InputDecoration(labelText: '邮箱'),
-                  validator: validateEmail,
-                ),
-                const SizedBox(height: Space.md),
-                TextFormField(
-                  controller: _password,
-                  obscureText: !_show,
-                  autofillHints: AppScope.isSimulated(context)
-                      ? null
-                      : [_register ? AutofillHints.newPassword : AutofillHints.password],
-                  decoration: InputDecoration(
-                    labelText: '密码',
-                    suffixIcon: IconButton(
-                      icon: Icon(_show ? Icons.visibility_off_outlined : Icons.visibility_outlined),
-                      onPressed: () => setState(() => _show = !_show),
-                    ),
-                  ),
-                  validator: _register ? validatePassword : (v) => (v ?? '').isEmpty ? '请输入密码' : null,
-                ),
-                if (_register) ...[
-                  const SizedBox(height: Space.md),
-                  TextFormField(
-                    autofillHints: null,
-                    controller: _confirm,
-                    obscureText: !_show,
-                    decoration: const InputDecoration(labelText: '再次输入密码'),
-                    validator: (v) => v != _password.text ? '两次输入的密码不一致' : null,
-                  ),
-                  const SizedBox(height: Space.md),
-                  Banner2(
-                    inst?.emailVerification ?? true
-                        ? '注册后需要输入邮件中的验证码。\n密码只用于登录，不能用来解密数据；数据由手机上的密钥和恢复码保护。'
-                        : '密码只用于登录，不能用来解密数据；数据由手机上的密钥和恢复码保护。',
-                  ),
-                ],
-              ],
+            child: TextFormField(
+              controller: _email,
+              keyboardType: TextInputType.emailAddress,
+              autocorrect: false,
+              autofillHints: AppScope.isSimulated(context) ? null : const [AutofillHints.email],
+              decoration: const InputDecoration(labelText: '邮箱'),
+              validator: validateEmail,
+              onFieldSubmitted: (_) => _submit(),
             ),
           ),
         ),
-        const SizedBox(height: Space.xl),
-        FilledButton(onPressed: _submit, child: Text(_register ? '注册' : '登录')),
-        const SizedBox(height: Space.md),
-        if (_register)
-          OutlinedButton(onPressed: () => setState(() => _register = false), child: const Text('已有账号？登录'))
-        else if (canRegister)
-          OutlinedButton(onPressed: () => setState(() => _register = true), child: const Text('注册新账号')),
-        if (!_register) ...[
-          const SizedBox(height: Space.lg),
-          Wrap(
-            alignment: WrapAlignment.center,
-            spacing: Space.sm,
-            children: [
-              TextButton(
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => ForgotPasswordPage(c: c, email: _email.text),
-                  ),
-                ),
-                child: const Text('忘记密码'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => RecoverPage(c: c, email: _email.text),
-                  ),
-                ),
-                child: const Text('用恢复码恢复'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => AccountResetPage(c: c, email: _email.text),
-                  ),
-                ),
-                child: const Text('重置账号'),
-              ),
-            ],
-          ),
+        if (c.instance?.emailVerification ?? false) ...[
+          const SizedBox(height: Space.md),
+          const Banner2('注册新账号时需要输入邮件中的验证码。'),
         ],
+        const SizedBox(height: Space.xl),
+        FilledButton(onPressed: _submit, child: const Text('继续')),
+        const SizedBox(height: Space.lg),
+        Wrap(
+          alignment: WrapAlignment.center,
+          spacing: Space.sm,
+          children: [
+            TextButton(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => RecoverPage(c: c, email: _email.text),
+                ),
+              ),
+              child: const Text('用恢复码恢复'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => AccountResetPage(c: c, email: _email.text),
+                ),
+              ),
+              child: const Text('重置账号'),
+            ),
+          ],
+        ),
       ],
     );
   }
@@ -293,100 +204,6 @@ class _VerifyEmailPageState extends State<VerifyEmailPage> {
   );
 }
 
-class ForgotPasswordPage extends StatefulWidget {
-  const ForgotPasswordPage({super.key, required this.c, required this.email});
-  final AppController c;
-  final String email;
-  @override
-  State<ForgotPasswordPage> createState() => _ForgotPasswordPageState();
-}
-
-class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
-  final _form = GlobalKey<FormState>();
-  late final _email = TextEditingController(text: widget.email);
-  final _code = TextEditingController();
-  final _password = TextEditingController();
-  bool _sent = false;
-
-  /// 验证码绑定的流程凭证，发送验证码时由服务端返回。
-  String? _flow;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = widget.c;
-    return AuthScaffold(
-      title: '找回密码',
-      subtitle: '通过邮件验证码设置新密码。\n保险库中的数据和已授权的设备不受影响。',
-      onBack: () => Navigator.pop(context),
-      children: [
-        AutofillGroup(
-          onDisposeAction: AppScope.isSimulated(context) ? AutofillContextAction.cancel : AutofillContextAction.commit,
-          child: Form(
-            key: _form,
-            child: Column(
-              children: [
-                TextFormField(
-                  autofillHints: AppScope.isSimulated(context) ? null : const [AutofillHints.email],
-                  controller: _email,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(labelText: '邮箱'),
-                  validator: validateEmail,
-                  enabled: !_sent,
-                ),
-                if (_sent) ...[
-                  const SizedBox(height: Space.md),
-                  TextFormField(
-                    autofillHints: null,
-                    controller: _code,
-                    textCapitalization: TextCapitalization.characters,
-                    decoration: const InputDecoration(labelText: '邮件中的 8 位验证码'),
-                    validator: (v) => (v ?? '').trim().length < 8 ? '请输入 8 位验证码' : null,
-                  ),
-                  const SizedBox(height: Space.md),
-                  TextFormField(
-                    autofillHints: AppScope.isSimulated(context) ? null : const [AutofillHints.newPassword],
-                    controller: _password,
-                    obscureText: true,
-                    decoration: const InputDecoration(labelText: '新密码'),
-                    validator: validatePassword,
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: Space.xl),
-        if (!_sent)
-          FilledButton(
-            onPressed: () async {
-              if (!_form.currentState!.validate()) return;
-              final ok = await runBusy(
-                context,
-                () async => _flow = await c.account.requestPasswordReset(c.server, _email.text),
-                done: '验证码已发送',
-              );
-              if (ok) setState(() => _sent = true);
-            },
-            child: const Text('发送验证码'),
-          )
-        else
-          FilledButton(
-            onPressed: () async {
-              if (!_form.currentState!.validate()) return;
-              final ok = await runBusy(
-                context,
-                () => c.account.completePasswordReset(c.server, _email.text, _flow!, _code.text, _password.text),
-                done: '密码已更新，请用新密码登录',
-              );
-              if (ok && context.mounted) Navigator.pop(context);
-            },
-            child: const Text('设置新密码'),
-          ),
-      ],
-    );
-  }
-}
-
 class AccountResetPage extends StatefulWidget {
   const AccountResetPage({super.key, required this.c, required this.email});
   final AppController c;
@@ -409,7 +226,7 @@ class _AccountResetPageState extends State<AccountResetPage> {
     final c = widget.c;
     return AuthScaffold(
       title: '重置账号',
-      subtitle: '只有在密码、恢复码和所有管理设备都丢失时才需要重置。',
+      subtitle: '只有在恢复码和所有管理设备都丢失时才需要重置。',
       onBack: () => Navigator.pop(context),
       children: [
         const Banner2('重置会永久删除这个账号的全部环境、变量和已授权设备，无法撤销，也无法找回数据。\n之后可以用同一个邮箱重新注册。', warn: true),

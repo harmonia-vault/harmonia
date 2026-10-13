@@ -1,4 +1,4 @@
-// 设置：账号、本机保护、密码与恢复码、更新、退出。
+// 设置：账号、本机保护、恢复码、更新、退出。
 import 'package:flutter/material.dart';
 
 import '../app/controller.dart';
@@ -67,47 +67,6 @@ class _SettingsTabState extends State<SettingsTab> {
     final pin = await askNewPin(context);
     if (pin == null || !mounted) return;
     await runBusy(context, () => c.identity.keyring.changePin(key, pin), done: 'App PIN 已修改');
-  }
-
-  Future<void> _changePassword() async {
-    final a = TextEditingController(), b = TextEditingController();
-    final ok = await showAppDialog<bool>(
-      context: context,
-      useRootNavigator: false,
-      builder: (ctx) => AppAlertDialog(
-        title: const Text('修改登录密码'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('登录密码只用于在新设备上登录，修改后已授权的设备不受影响。'),
-            const SizedBox(height: Space.md),
-            TextField(
-              controller: a,
-              obscureText: true,
-              autofillHints: AppScope.isSimulated(context) ? null : const [AutofillHints.newPassword],
-              decoration: const InputDecoration(labelText: '新密码', helperText: '至少 8 位'),
-            ),
-            const SizedBox(height: Space.lg),
-            TextField(
-              controller: b,
-              obscureText: true,
-              autofillHints: null,
-              decoration: const InputDecoration(labelText: '再次输入'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('修改')),
-        ],
-      ),
-    );
-    if (ok != true || !mounted) return;
-    if (validatePassword(a.text) != null) return toast(context, '新密码至少 8 位');
-    if (a.text != b.text) return toast(context, '两次输入的密码不一致');
-    if (!await confirmIdentity(context, '验证身份以修改登录密码')) return;
-    if (!mounted) return;
-    await runBusy(context, () => c.guard(() => c.vault.changePassword(a.text)), done: '登录密码已修改');
   }
 
   Future<void> _pickChannel() async {
@@ -299,12 +258,6 @@ class _SettingsTabState extends State<SettingsTab> {
                   subtitle: Text('可以用${c.identity.bio('代替')} App PIN'),
                 ),
               ],
-              const Divider(),
-              ListTile(
-                leading: const Icon(Icons.password_outlined),
-                title: const Text('修改登录密码'),
-                onTap: _changePassword,
-              ),
               const Divider(),
               ListTile(
                 leading: const Icon(Icons.key_outlined),

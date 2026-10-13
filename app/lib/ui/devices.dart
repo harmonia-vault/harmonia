@@ -39,10 +39,10 @@ class _DevicesTabState extends State<DevicesTab> {
 
   Future<void> _loadPending() async {
     try {
-      final list = await c.vault.pendingPairings();
-      c.pairings = list;
+      c.pairings = await c.vault.pendingPairings();
       c.refresh();
-      if (mounted) setState(() => _pending = list);
+      // 匿名请求不列出：只能扫码或手输核对码取到。
+      if (mounted) setState(() => _pending = c.authorizedPairings);
     } catch (_) {
       // 离线时不显示待处理请求。
     }
@@ -135,7 +135,10 @@ class _DevicesTabState extends State<DevicesTab> {
           ),
         ),
         const SizedBox(height: Space.md),
-        Text('在电脑上运行 harmonia login 后，点击“添加设备”扫描终端里的二维码。', style: TextStyle(color: context.palette.mute, height: 1.5)),
+        Text(
+          tidy('在电脑上运行 harmonia login 后，点击“添加设备”扫描终端里的二维码；用配对码发起的请求会出现在上面的“等待批准”中。'),
+          style: TextStyle(color: context.palette.mute, height: 1.5),
+        ),
       ],
     );
   }

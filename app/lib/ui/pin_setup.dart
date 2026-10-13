@@ -1,4 +1,4 @@
-// 登录后设置 App PIN；手机支持指纹（iOS 上是面容 ID / 触控 ID）时接着直接开启，可以跳过。
+// 确定账号后设置 App PIN；手机支持指纹（iOS 上是面容 ID / 触控 ID）时接着直接开启，可以跳过。
 import 'package:flutter/material.dart';
 
 import '../app/controller.dart';

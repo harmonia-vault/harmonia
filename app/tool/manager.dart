@@ -1,6 +1,7 @@
 // 无界面的“管理设备”，供端到端测试使用：与 App 共用 lib/core 的全部逻辑。
 // ignore_for_file: avoid_print
 // 用法：dart run tool/manager.dart --home <目录> <命令> [参数...]
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:harmonia/core/account.dart';
@@ -44,18 +45,30 @@ Future<void> main(List<String> argv) async {
   DeviceInfo device(String name) =>
       vault.devices.firstWhere((d) => d.name == name || d.id == name);
 
+  // 注册会话在 register / verify 与 setup 之间保存在测试目录中。
+  Future<void> saveRegistration(AccountSession s) => store.write(
+      'registration', jsonEncode({'server': s.server, 'email': s.email, 'accountId': s.accountId, 'token': s.token}));
+  Future<AccountSession> loadRegistration() async {
+    final j = (jsonDecode((await store.read('registration'))!) as Map).cast<String, dynamic>();
+    return AccountSession(j['server'] as String, j['email'] as String, j['accountId'] as String, false, null,
+        token: j['token'] as String);
+  }
+
   switch (cmd) {
     case 'register':
       // 需要验证邮箱时同时输出验证码绑定的流程凭证，供 verify 使用。
-      final flow = await account.register(opt('server'), opt('email'), opt('password'));
-      print(flow != null ? 'verification-required\t$flow' : 'registered');
+      final r = await account.register(opt('server'), opt('email'));
+      if (r.session != null) await saveRegistration(r.session!);
+      print(r.flow != null ? 'verification-required\t${r.flow}' : 'registered');
     case 'verify':
-      await account.verifyEmail(opt('server'), opt('email'), opt('flow'), opt('code'));
+      await saveRegistration(await account.verifyEmail(opt('server'), opt('email'), opt('flow'), opt('code')));
       print('verified');
+    case 'lookup':
+      final a = await account.lookup(opt('server'), opt('email'));
+      print(a == null ? 'not-registered' : (a.initialized ? 'initialized' : 'uninitialized'));
     case 'setup':
-      final s = await account.login(opt('server'), opt('email'), opt('password'));
       final draft = account.prepareSetup();
-      await vault.adopt(await account.completeSetup(s, draft, opt('name', '测试手机')));
+      await vault.adopt(await account.completeSetup(await loadRegistration(), draft, opt('name', '测试手机')));
       print(draft.formattedCode);
     case 'env-create':
       await (await loaded()).createEnvironment(args[0]);
@@ -65,6 +78,14 @@ Future<void> main(List<String> argv) async {
       print('ok');
     case 'var-get':
       print((await loaded()).values(envId(args[0]))[args[1]] ?? '');
+    case 'pairing-code':
+      // 生成配对码，输出 8 位码。
+      print((await (await loaded()).createPairingCode()).code);
+    case 'pending':
+      // 列出发起方仍在等待的请求：名称和是否由配对码创建。
+      for (final p in await (await loaded()).pendingPairings()) {
+        print('${p.name}\t${p.authorized ? 'authorized' : 'anonymous'}');
+      }
     case 'approve':
       // approve <核对码> <manager|环境:权限...>
       final v = await loaded();
@@ -109,9 +130,11 @@ Future<void> main(List<String> argv) async {
         print('${d.name}\t${d.kind}\t${grants.join(',')}\t${d.systemVars ? 'system-vars' : ''}');
       }
     case 'pair':
-      // 作为新的管理设备发起配对，等待管理设备批准。
-      final s = await account.login(opt('server'), opt('email'), opt('password'));
-      final p = await account.startPairing(s, opt('name', '第二台手机'));
+      // 作为新的管理设备发起配对（可选带配对码），等待管理设备批准。
+      final s = await account.lookup(opt('server'), opt('email'));
+      if (s == null || !s.initialized) throw StateError('账号不存在或还没有初始化');
+      final code = args.contains('--code') ? opt('code') : null;
+      final p = await account.startPairing(s, opt('name', '第二台手机'), code: code);
       await vault.adopt(await account.waitPairing(p, onReady: () => stderr.writeln('核对码：${p.code}')));
       print(vault.isManager ? 'manager' : 'client');
     case 'recover':

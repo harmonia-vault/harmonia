@@ -1,4 +1,4 @@
-// 添加设备（扫码 / 核对码 → 核对 → 选择权限 → 批准），以及收到配对请求时弹出的批准页。
+// 添加设备（扫码 / 核对码 → 核对 → 选择权限 → 批准；生成配对码），以及收到用配对码发起的请求时弹出的批准页。
 import 'package:flutter/material.dart';
 
 import '../app/controller.dart';
@@ -7,6 +7,7 @@ import '../core/crypto.dart';
 import '../core/models.dart';
 import 'devices.dart' show GrantEditor, expiryFrom, platformIcon, platformName;
 import 'lock.dart';
+import 'pairing_code.dart';
 import 'scanner.dart';
 import 'theme.dart';
 import 'glass_overlays.dart';
@@ -73,9 +74,10 @@ class _AddDevicePageState extends State<AddDevicePage> {
         const Text('扫描电脑终端或另一台手机上显示的二维码。'),
         const SizedBox(height: Space.md),
         QrScannerView(
+          // 页面调试中扫到的是只能扫码找到的示例请求。
           simulatedCode: pairingQr(
-            'debug-pairing',
-            pairingFingerprint('debug-pairing', 'debug-sign', 'debug-box', 'debug-root'),
+            'debug-anonymous',
+            pairingFingerprint('debug-anonymous', 'debug-sign-2', 'debug-box-2', 'debug-root'),
           ),
           onCode: (raw) => _found(() => widget.c.vault.pairingFromQr(raw), scanned: true),
           blocked: '无法打开相机。请在系统设置中允许 Harmonia 使用相机，或改用核对码。',
@@ -85,6 +87,17 @@ class _AddDevicePageState extends State<AddDevicePage> {
           onPressed: _manual,
           icon: const Icon(Icons.keyboard_outlined),
           label: const Text('无法扫码？输入核对码'),
+        ),
+        const SectionTitle('用配对码发起'),
+        Text(
+          tidy('对方输入配对码后，请求会直接弹出在这台手机上，省去扫码；批准前仍要核对核对码。配对码 5 分钟内有效，只能用一次。'),
+          style: TextStyle(color: context.palette.mute, height: 1.5),
+        ),
+        const SizedBox(height: Space.md),
+        OutlinedButton.icon(
+          onPressed: () => showPairingCode(context, widget.c),
+          icon: const Icon(Icons.password_outlined),
+          label: const Text('生成配对码'),
         ),
       ],
     ),
@@ -237,7 +250,7 @@ class _ReviewPairingPageState extends State<ReviewPairingPage> {
           ),
         ),
         const SizedBox(height: Space.sm),
-        const Banner2('如果你此刻没有在电脑或其他手机上登录 Harmonia，请点“拒绝”，并尽快修改账号密码。', warn: true),
+        const Banner2('只批准你自己刚刚发起的请求。如果你此刻没有在电脑或其他手机上发起接入，或者是别人发来的二维码、核对码，请点“拒绝”并勾选阻止这个网络。', warn: true),
       ],
       // 只有具备管理功能的客户端（目前只有 App）才能作为管理设备。
       if (p.canManage) ...[

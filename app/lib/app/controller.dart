@@ -19,11 +19,11 @@ part 'onboarding.dart';
 enum Stage {
   loading,
   connect, // 填写服务器地址
-  signedOut, // 登录 / 注册 / 找回密码
+  signedOut, // 输入邮箱：注册、接入或恢复
   verifyEmail, // 注册后验证邮箱
-  setPin, // 登录后设置 App PIN（可选开启指纹）
+  setPin, // 确定账号后设置 App PIN（可选开启指纹）
   setup, // 首次初始化：保存恢复码
-  unpaired, // 已登录，本机还不是管理设备
+  unpaired, // 账号已初始化，本机还不是管理设备
   pairing, // 等待管理设备批准
   locked, // App 锁
   rotation, // 恢复后必须更换恢复码
@@ -106,7 +106,7 @@ class AppController extends ChangeNotifier {
   Stage stage = Stage.loading;
   Prefs prefs = Prefs();
   InstanceInfo? instance;
-  PasswordSession? session;
+  AccountSession? session;
   SetupDraft? setupDraft;
 
   /// 首次初始化已提交成功，正在显示完成页。
@@ -119,20 +119,23 @@ class AppController extends ChangeNotifier {
 
   /// 邮箱验证码绑定的流程凭证（协议 3.0）。
   String? verifyFlow;
-  String? _pendingPassword;
 
-  /// 从登录页直接用恢复码恢复时，设置 App PIN 之前暂存的设备信息。
+  /// 从输入邮箱页直接用恢复码恢复时，设置 App PIN 之前暂存的设备信息。
   LocalConfig? _pendingRecovery;
 
-  /// 显示在登录页顶部的一次性提示（例如“这台手机已被移除”）。
+  /// 显示在输入邮箱页顶部的一次性提示（例如“这台手机已被移除”）。
   String? notice;
 
   /// 推送连接状态：false 时界面显示“离线”。
   bool online = false;
 
-  /// 待批准的配对请求（只有管理设备会有）。
+  /// 发起方仍在等待的配对请求（只有管理设备会有），包括匿名请求。
   List<PairingRequest> pairings = [];
-  int get pendingPairingCount => pairings.length;
+
+  /// 用配对码发起的请求：只有它们出现在待批准列表、角标和自动弹出的批准页中。
+  /// 匿名请求只能扫码或手输核对码取到（协议 3.2）。
+  List<PairingRequest> get authorizedPairings => pairings.where((p) => p.authorized).toList();
+  int get pendingPairingCount => authorizedPairings.length;
   DateTime? _backgroundAt;
   Timer? _lockTimer;
   bool _foreground = true;
@@ -193,7 +196,7 @@ class AppController extends ChangeNotifier {
       try {
         instance = await account.instance(prefs.server!);
       } catch (_) {
-        // 离线时仍进入登录页，提交时再报告网络错误。
+        // 离线时仍进入输入邮箱页，提交时再报告网络错误。
       }
       _go(Stage.signedOut);
     } else {
@@ -210,13 +213,13 @@ class AppController extends ChangeNotifier {
     await files.write(_installedKey, '1');
   }
 
-  /// 旧版本把设备密钥直接存在安全存储里，没有 App PIN 保护。1.0 之前不做迁移：清除后重新登录。
+  /// 旧版本把设备密钥直接存在安全存储里，没有 App PIN 保护。1.0 之前不做迁移：清除后重新接入。
   Future<void> _dropOldFormat() async {
     if (await secure.read('config') == null) return;
     await secure.delete('config');
     await secure.delete('pin');
     await files.delete('cache');
-    notice = 'Harmonia 更新了本机数据的保护方式，请重新登录并设置 App PIN。';
+    notice = 'Harmonia 更新了本机数据的保护方式，请重新接入并设置 App PIN。';
   }
 
   Stage _afterUnlock() => vault.cache.rotationRequired ? Stage.rotation : Stage.home;
@@ -250,12 +253,12 @@ class AppController extends ChangeNotifier {
 
   bool get _lockable => vault.paired && {Stage.home, Stage.rotation}.contains(stage);
 
-  /// 忘记 PIN：清除本机数据和本机密钥，回到登录页。
+  /// 忘记 PIN：清除本机数据和本机密钥，回到输入邮箱页。
   Future<void> forgetDevice() async {
     _stopPush();
     await identity.keyring.wipe();
     await vault.wipe();
-    notice = '已清除本机数据，请重新登录。\n这台手机原来的设备记录，请在管理设备上移除。';
+    notice = '已清除本机数据，请重新接入。\n这台手机原来的设备记录，请在管理设备上移除。';
     cancelToSignIn();
   }
 

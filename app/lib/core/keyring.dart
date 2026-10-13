@@ -31,7 +31,7 @@ class PinResult {
 class Keyring {
   Keyring(this.crypto, this.secure, this.hw,
       {Future<Uint8List> Function(String, Uint8List)? derive, DateTime Function()? now})
-      : _derive = derive ?? passwordKeyInIsolate,
+      : _derive = derive ?? pinKeyInIsolate,
         _now = now ?? DateTime.now;
 
   final HCrypto crypto;

@@ -60,7 +60,7 @@ class DebugSession {
       Uint8List(32),
       pairingQr('debug-wait', Uint8List(32)),
       '0000 0000 0000 0000',
-      DateTime.now().add(const Duration(minutes: 10)),
+      DateTime.now().add(const Duration(minutes: 5)),
       '示例手机',
     );
     c.refresh();
@@ -68,13 +68,13 @@ class DebugSession {
 
   void prepareAccount({bool initialized = true}) {
     final config = vault.sampleConfig;
-    c.session = PasswordSession(
+    c.session = AccountSession(
       config.server,
       config.email,
-      'debug-token',
       config.accountId,
       initialized,
-      config.rootPub,
+      initialized ? config.rootPub : null,
+      token: initialized ? null : 'debug-registration',
     );
   }
 
