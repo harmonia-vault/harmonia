@@ -22,9 +22,9 @@ describe("实例首页", () => {
     expect(prompt).toMatch(/^Harmonia（和弦，https:\/\/vault\.example\.com）是用户部署的环境变量同步服务/);
     expect(prompt).toContain("不需要用户把 Key 贴进对话。请在这台电脑上安装 Harmonia 命令行：");
     expect(prompt).not.toContain("我");
-    expect(prompt).toContain("install.sh | HARMONIA_YES=1 sh；");
-    expect(prompt).toContain("$env:HARMONIA_YES = &#39;1&#39;; irm https://github.com/harmonia-vault/harmonia/releases/download/update-feed/install.ps1 | iex。");
-    expect(prompt).toContain("运行 harmonia skill，按输出的说明接入服务器 https://vault.example.com（邮箱和配对码向用户询问）。");
+    expect(prompt).toContain("install.sh | HARMONIA_YES=0 sh；");
+    expect(prompt).toContain("$env:HARMONIA_YES = &#39;0&#39;; irm https://github.com/harmonia-vault/harmonia/releases/download/update-feed/install.ps1 | iex。");
+    expect(prompt).toContain("运行 harmonia skill，按输出的说明接入服务器 https://vault.example.com（邮箱和配对码向用户询问），并询问用户是否开启 Shell 集成和后台服务。");
     expect(html.match(/class="prompt"/g)).toHaveLength(1);
     expect(html.indexOf('class="addr"')).toBeLessThan(html.indexOf('class="ai"'));
     expect(html.indexOf('class="ai"')).toBeLessThan(html.indexOf('class="term"'));

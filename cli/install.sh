@@ -3,7 +3,8 @@
 #   curl -fsSL https://github.com/harmonia-vault/harmonia/releases/download/update-feed/install.sh | sh
 #   没有 curl 时：wget -qO- <同一个地址> | sh
 #   安装测试版：在 sh 前加上 HARMONIA_CHANNEL=beta
-#   不询问、直接安装 shell 集成和后台服务（供 AI 助手和脚本使用）：在 sh 前加上 HARMONIA_YES=1
+#   不询问、直接安装 shell 集成和后台服务：在 sh 前加上 HARMONIA_YES=1
+#   不询问、两项都不装（供 AI 助手使用，装好后由它询问用户）：在 sh 前加上 HARMONIA_YES=0
 set -eu
 
 FEED="${HARMONIA_FEED:-https://github.com/harmonia-vault/harmonia/releases/download/update-feed}"
@@ -77,7 +78,7 @@ case ":$PATH:" in
   *":$DEST:"*) ;;
   *) echo "提示：$DEST 不在 PATH 中，请在 shell 配置文件中加入：export PATH=\"$DEST:\$PATH\"" ;;
 esac
-# HARMONIA_YES=1 时不询问，直接安装 shell 集成和后台服务；
+# HARMONIA_YES=1 时不询问，直接安装 shell 集成和后台服务；HARMONIA_YES=0 时不询问，两项都不装；
 # 否则有终端可以交互时询问，直接回车即安装；没有终端时只提示命令。
 if [ "${HARMONIA_YES:-}" = 1 ]; then
   echo
@@ -89,7 +90,7 @@ if [ "${HARMONIA_YES:-}" = 1 ]; then
   echo
   "$DEST/harmonia" service install </dev/null || echo "后台服务没有安装成功，可以稍后运行 harmonia service install 重试。"
   echo
-elif (exec </dev/tty) 2>/dev/null; then
+elif [ "${HARMONIA_YES:-}" != 0 ] && (exec </dev/tty) 2>/dev/null; then
   echo
   echo "[1/2] Shell 集成：在终端中自动加载和更新变量。"
   echo
