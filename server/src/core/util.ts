@@ -47,6 +47,21 @@ export async function sha256(data: Uint8Array | string): Promise<Uint8Array> {
 export const randomB64 = (n: number) => b64(crypto.getRandomValues(new Uint8Array(n)));
 export const newId = () => randomB64(16);
 
+/** Crockford Base32 字母表：不含 I、L、O、U，避免手抄时混淆（docs/protocol.md 2.1）。 */
+const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+/** 8 位人工输入的码（邮件验证码、配对码）。 */
+export const CODE_PATTERN = /^[0-9A-HJKMNP-TV-Z]{8}$/;
+
+/** 生成 8 位随机码；256 是 32 的整数倍，取模后每个字符等概率。 */
+export const randomCode = () => Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => CROCKFORD[b % 32]).join("");
+
+/** 按协议 2.1 解析人工输入的码：去掉 - 和空白，转为大写，O 视为 0，I、L 视为 1。格式不对时返回 null。 */
+export function parseCode(input: unknown): string | null {
+  if (typeof input !== "string") return null;
+  const s = input.toUpperCase().replace(/[\s-]/g, "").replace(/O/g, "0").replace(/[IL]/g, "1");
+  return CODE_PATTERN.test(s) ? s : null;
+}
+
 export async function verifyEd25519(pubB64: string, msg: Uint8Array, sigB64: string): Promise<boolean> {
   try {
     const pub = unb64(pubB64);

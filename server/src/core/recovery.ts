@@ -12,8 +12,6 @@ import {
   type Deps,
 } from "./context";
 import { insertEnvelopes, parseEnvelopes, requireAllEnvironments, verifyCert } from "./keys";
-import { parsePassword } from "./auth";
-import { rejectPendingPairings } from "./pairing";
 import {
   bad,
   bin,
@@ -138,7 +136,6 @@ export function recoveryRoutes(app: Hono, deps: Deps) {
       throw bad("新恢复码的签名无效。");
     }
     const envelopes = await parseEnvelopes(a.root_pub, "recovery", body.envelopes);
-    const password = body.password === undefined ? null : await parsePassword(body.password);
     const response = { state: "complete", generation: String(generation) };
     sql.transaction(() => {
       const cur = requireInitialized(sql);
@@ -155,15 +152,6 @@ export function recoveryRoutes(app: Hono, deps: Deps) {
       );
       sql.run(`DELETE FROM envelopes WHERE recipient = 'recovery'`);
       insertEnvelopes(sql, envelopes);
-      if (password) {
-        sql.run(
-          `UPDATE account SET kdf_salt = ?, auth_salt = ?, auth_hash = ? WHERE id = 1`,
-          password.kdfSalt,
-          password.authSalt,
-          password.authHash,
-        );
-        sql.run(`DELETE FROM sessions WHERE kind = 'password'`);
-      }
       sql.run(`UPDATE devices SET rotation_required = 0 WHERE id = ?`, d.id);
       sql.run(`DELETE FROM sessions WHERE kind = 'recovery'`);
       sql.run(`DELETE FROM challenges WHERE kind = 'recovery'`);
@@ -176,7 +164,6 @@ export function recoveryRoutes(app: Hono, deps: Deps) {
       );
       bump(sql);
     });
-    if (password) rejectPendingPairings(deps);
     deps.notifier.send("all", { type: "changed", seq: headSeq(sql) });
     return c.json(response);
   });

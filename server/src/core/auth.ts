@@ -1,4 +1,5 @@
-// 账号生命周期（注册、验证、登录、找回密码、重置账号）与设备会话。运行在单个账号的 Durable Object 内。
+// 账号生命周期（注册、验证、匿名查询、重置账号）与设备会话。运行在单个账号的 Durable Object 内。
+// 账号没有密码（docs/protocol.md 3.0）：注册会话只能完成首次初始化，新设备通过配对或恢复接入。
 import type { Context, Hono } from "hono";
 import { bump, one, wipe } from "./db";
 import {
@@ -15,42 +16,23 @@ import {
   type Deps,
 } from "./context";
 import { checkCode, sendCode } from "./email";
-import { checkWait, clearFailures, recordFailure, resetGuard, underAttack } from "./guard";
-import { rejectPendingPairings } from "./pairing";
 import { verifyCert } from "./keys";
 import {
   ApiError,
   authMsg,
-  b64,
   bad,
   bin,
   conflict,
-  constantTimeEqual,
   decimal,
   id,
   label,
   obj,
   randomB64,
   rootRecoveryMsg,
-  sha256,
   str,
   unauthorized,
-  utf8,
   verifyEd25519,
 } from "./util";
-
-async function authHash(salt: string, authKey: string) {
-  return b64(await sha256(new Uint8Array([...utf8(salt), ...utf8(authKey)])));
-}
-
-/** 解析 {kdfSalt, authKey}，返回要写入的 kdf_salt / auth_salt / auth_hash。 */
-export async function parsePassword(raw: unknown) {
-  const p = obj(raw, "密码信息");
-  const kdfSalt = bin(p.kdfSalt, "密码盐", 16);
-  const authKey = bin(p.authKey, "登录密钥", 32);
-  const authSalt = randomB64(16);
-  return { kdfSalt, authSalt, authHash: await authHash(authSalt, authKey) };
-}
 
 export function normalizeEmail(v: unknown): string {
   const s = str(v, "邮箱", 254).trim().toLowerCase();
@@ -63,118 +45,64 @@ export const ACCOUNT_HEADER = "x-harmonia-account";
 /** 由 Worker 写入的内部请求头：注册时是否需要验证邮箱。 */
 export const VERIFY_HEADER = "x-harmonia-verify";
 
-function updatePassword(deps: Deps, p: Awaited<ReturnType<typeof parsePassword>>) {
-  deps.sql.run(`UPDATE account SET kdf_salt = ?, auth_salt = ?, auth_hash = ? WHERE id = 1`, p.kdfSalt, p.authSalt, p.authHash);
-  deps.sql.run(`DELETE FROM sessions WHERE kind = 'password'`);
-  rejectPendingPairings(deps);
-  resetGuard(deps);
-}
-
-/** 邮件中显示的邮箱：只保留首字母和域名。 */
-const maskEmail = (email: string) => email.replace(/^(.)[^@]*@/, "$1***@");
-
-function activeAccount(deps: Deps) {
-  const a = requireAccount(deps.sql);
-  if (a.status !== "active") throw new ApiError(403, "email_unverified", "邮箱还没有验证，请先完成邮箱验证。");
-  return a;
-}
+const IN_USE = "这个邮箱已经注册并完成了设置。新设备请选择接入，由管理设备批准；丢失了所有管理设备时，请用恢复码恢复。";
 
 export function authRoutes(app: Hono, deps: Deps) {
   const { sql } = deps;
 
   // ---- 注册与邮箱验证 ----
 
+  // 已注册但还没有初始化的账号没有任何数据，按新注册处理：原来的注册会话和验证码一并作废。
   app.post("/api/v1/register", async (c) => {
     const body = await readJson(c);
     const email = normalizeEmail(body.email);
-    const password = await parsePassword(body);
     const accountId = id(c.req.header(ACCOUNT_HEADER), "账号 ID");
     const verify = c.req.header(VERIFY_HEADER) === "1";
     if (verify && !deps.mailer.available) {
       throw new ApiError(503, "email_unavailable", "服务器没有配置发信，暂时无法注册。请联系服务器管理员。");
     }
-    const existing = account(sql);
-    if (existing?.status === "active") throw conflict("这个邮箱已经注册，请直接登录。");
+    if (account(sql)?.root_pub) throw conflict(IN_USE);
     sql.transaction(() => {
       sql.run(`DELETE FROM account`);
+      sql.run(`DELETE FROM sessions`);
       sql.run(`DELETE FROM email_flows`);
       sql.run(
-        `INSERT INTO account (id, account_id, email, status, kdf_salt, auth_salt, auth_hash, created_at)
-         VALUES (1, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO account (id, account_id, email, status, created_at) VALUES (1, ?, ?, ?, ?)`,
         accountId,
         email,
         verify ? "pending" : "active",
-        password.kdfSalt,
-        password.authSalt,
-        password.authHash,
         deps.now(),
       );
     });
-    const flow = verify ? await sendCode(deps, email, "verification", await requesterNet(c, deps)) : undefined;
-    return c.json({ accountId, verificationRequired: verify, ...(flow ? { flow } : {}) });
+    if (verify) {
+      const flow = await sendCode(deps, email, "verification", await requesterNet(c, deps));
+      return c.json({ accountId, verificationRequired: true, flow });
+    }
+    return c.json({ accountId, verificationRequired: false, ...(await createSession(deps, "registration", null)) });
   });
 
+  // 每次都要校验验证码：注册会话只发给验证过邮箱的人。
   app.post("/api/v1/register/verify", async (c) => {
     const body = await readJson(c);
     const a = requireAccount(sql);
-    if (a.status === "active") return c.json({ ok: true });
+    if (a.root_pub) throw conflict(IN_USE);
     await checkCode(deps, "verification", body.flow, body.code);
     sql.run(`UPDATE account SET status = 'active' WHERE id = 1`);
-    return c.json({ ok: true });
+    return c.json({ accountId: a.account_id, ...(await createSession(deps, "registration", null)) });
   });
 
   app.post("/api/v1/register/resend", async (c) => {
     const a = requireAccount(sql);
-    if (a.status === "active") throw conflict("邮箱已经验证，请直接登录。");
+    if (a.status === "active") throw conflict("邮箱已经验证过了，请重新开始注册。");
     return c.json({ flow: await sendCode(deps, a.email, "verification", await requesterNet(c, deps)) });
   });
 
-  // ---- 登录 ----
+  // ---- 匿名查询账号 ----
 
-  app.get("/api/v1/auth/prelogin", (c) => {
+  // 返回的 rootPub 只用于新设备钉住；服务器谎报时配对指纹对不上，管理设备批准前会发现（docs/protocol.md 2.3）。
+  app.get("/api/v1/accounts/lookup", (c) => {
     const a = requireAccount(sql);
-    return c.json({ kdfSalt: a.kdf_salt, opsLimit: 3, memLimit: 64 * 1024 * 1024 });
-  });
-
-  // 风控见 guard.ts：等待期内不校验密码；受攻击且配置了发信时，密码正确后还要邮件验证码。
-  app.post("/api/v1/auth/login", async (c) => {
-    const body = await readJson(c);
-    const authKey = bin(body.authKey, "登录密钥", 32);
-    const a = requireAccount(sql);
-    sweep(deps);
-    const attack = underAttack(deps);
-    const net = await requesterNet(c, deps, attack);
-    checkWait(deps, net);
-    if (!constantTimeEqual(await authHash(a.auth_salt, authKey), a.auth_hash)) {
-      recordFailure(deps, net, attack);
-      throw unauthorized("邮箱或密码不对。");
-    }
-    activeAccount(deps);
-    if (attack && deps.mailer.available) {
-      if (body.flow === undefined) {
-        const flow = await sendCode(deps, a.email, "login", net);
-        throw new ApiError(401, "code_required", `这次登录需要邮箱验证码，已发送到 ${maskEmail(a.email)}。`, { flow });
-      }
-      await checkCode(deps, "login", body.flow, body.code);
-    }
-    clearFailures(deps, net);
-    return c.json({ ...(await createSession(deps, "password", null)), accountId: a.account_id });
-  });
-
-  // ---- 找回密码（数据保留） ----
-
-  app.post("/api/v1/password-reset/request", async (c) => {
-    const a = activeAccount(deps);
-    return c.json({ flow: await sendCode(deps, a.email, "password", await requesterNet(c, deps)) });
-  });
-
-  app.post("/api/v1/password-reset/complete", async (c) => {
-    const body = await readJson(c);
-    activeAccount(deps);
-    const p = await parsePassword(body);
-    await checkCode(deps, "password", body.flow, body.code);
-    updatePassword(deps, p);
-    return c.json({ ok: true });
+    return c.json({ accountId: a.account_id, initialized: !!a.root_pub, ...(a.root_pub ? { rootPub: a.root_pub } : {}) });
   });
 
   // ---- 重置账号（删除全部数据） ----
@@ -201,7 +129,7 @@ export function authRoutes(app: Hono, deps: Deps) {
   app.get("/api/v1/account", async (c) => {
     const s = await session(c, deps);
     if (s.kind === "device") await requireDevice(c, deps, { allowRotation: true });
-    else if (s.kind !== "password") throw unauthorized();
+    else if (s.kind !== "registration") throw unauthorized();
     const a = requireAccount(sql);
     return c.json({
       accountId: a.account_id,
@@ -213,7 +141,7 @@ export function authRoutes(app: Hono, deps: Deps) {
 
   app.post("/api/v1/account/setup", async (c) => {
     const s = await session(c, deps);
-    if (s.kind !== "password") throw unauthorized();
+    if (s.kind !== "registration") throw unauthorized("注册已过期，请重新注册。");
     const body = await readJson(c);
     const rootPub = bin(body.rootPub, "账号公钥", 32);
     const d = obj(body.device, "设备信息");
@@ -259,14 +187,9 @@ export function authRoutes(app: Hono, deps: Deps) {
         now,
         now,
       );
+      sql.run(`DELETE FROM sessions WHERE kind = 'registration'`);
       bump(sql);
     });
-    return c.json({ ok: true });
-  });
-
-  app.put("/api/v1/account/password", async (c) => {
-    await requireDevice(c, deps, { manager: true });
-    updatePassword(deps, await parsePassword(await readJson(c)));
     return c.json({ ok: true });
   });
 

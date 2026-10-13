@@ -1,22 +1,26 @@
-// 配对：新设备发起请求并保持等待连接，管理设备核对后批准（docs/protocol.md 3.3、3.5.1，5.10）。
+// 配对：新设备发起请求并保持等待连接，管理设备核对后批准（docs/protocol.md 3.2、3.3、3.5.1，设计 5.10）。
+// 发起不需要会话。不带配对码的是匿名请求：不推送、不弹出，管理设备只能扫码或手输核对码取到；
+// 带有效配对码的请求（authorized）才推送给管理设备。
 import type { Hono } from "hono";
 import { bump, headSeq, one } from "./db";
 import {
   clientIp,
   readJson,
   rateLimit,
+  requesterNet,
   requireDevice,
   requireInitialized,
-  session,
   sweep,
   tokenHash,
   type Deps,
   type PairingResult,
 } from "./context";
+import { clearFailures } from "./guard";
+import { checkPairingCode, consumePairingCode, createPairingCode } from "./pairing-codes";
 import { insertEnvelopes, parseEnvelopes, requireAllEnvironments, checkKeyVersions, verifyCert } from "./keys";
 import { network } from "./net";
 import { parseGrants, writeGrants } from "./grants";
-import { ApiError, bad, bin, conflict, id, label, notFound, randomB64, rateLimited, unauthorized } from "./util";
+import { ApiError, bad, bin, conflict, id, label, notFound, randomB64, rateLimited } from "./util";
 
 type Pairing = {
   id: string;
@@ -30,14 +34,19 @@ type Pairing = {
   ip: string;
   /** 发起方的客户端具备管理功能，才能被批准为管理设备。 */
   can_manage: number;
+  /** 由配对码创建：推送给管理设备、自动弹出批准页。 */
+  authorized: number;
   created_at: number;
   expires_at: number;
 };
 
-const PAIRING_TTL = 10 * 60_000;
+const PAIRING_TTL = 5 * 60_000;
 const BLOCK_TTL = 30 * 60_000;
-/** 每个网络同时等待批准的请求上限。 */
+/** 每个网络同时等待批准的请求上限（匿名和配对码创建的都算）。 */
 const PER_NETWORK = 2;
+/** 整个账号同时待处理的请求上限，匿名与配对码创建的分开计数：匿名请求被占满时，用配对码仍然可以发起。 */
+export const MAX_ANONYMOUS = 20;
+export const MAX_AUTHORIZED = 5;
 /** 超过这么久没有收到发起方的心跳，就当作对方已经离开。 */
 export const WAITER_TIMEOUT = 25_000;
 
@@ -50,6 +59,7 @@ const view = (p: Pairing) => ({
   rootPub: p.root_pub,
   ip: p.ip,
   canManage: p.can_manage === 1,
+  authorized: p.authorized === 1,
   createdAt: p.created_at,
   expiresAt: p.expires_at,
 });
@@ -57,21 +67,17 @@ const view = (p: Pairing) => ({
 const pairingById = (deps: Deps, pairingId: string) =>
   one<Pairing>(deps.sql, `SELECT * FROM pairings WHERE id = ?`, pairingId);
 
+/** 匿名请求自身的变化不推送给管理设备：它们不出现在待批准列表里。 */
+function notifyManagers(deps: Deps, p: Pairing | undefined) {
+  if (p?.authorized === 1) deps.notifier.send("managers", { type: "pairing" });
+}
+
 /** 发起方离开：仍在等待的请求作废，并通知管理设备刷新。 */
 export function pairingLeft(deps: Deps, pairingId: string) {
   const p = pairingById(deps, pairingId);
   if (p?.status !== "pending") return;
   deps.sql.run(`UPDATE pairings SET status = 'cancelled' WHERE id = ?`, pairingId);
-  deps.notifier.send("managers", { type: "pairing" });
-}
-
-/** 修改密码后，所有待处理的请求一并作废。 */
-export function rejectPendingPairings(deps: Deps) {
-  const rows = deps.sql.all<{ id: string }>(`SELECT id FROM pairings WHERE status = 'pending'`);
-  if (!rows.length) return;
-  deps.sql.run(`UPDATE pairings SET status = 'rejected' WHERE status = 'pending'`);
-  for (const r of rows) deps.waiters.close(r.id, "rejected");
-  deps.notifier.send("managers", { type: "pairing" });
+  notifyManagers(deps, p);
 }
 
 /**
@@ -92,7 +98,7 @@ export function checkWaiters(deps: Deps): boolean {
     }
     const result = p && ["approved", "rejected", "expired"].includes(p.status) ? (p.status as PairingResult) : undefined;
     deps.waiters.close(w.pairingId, result);
-    changed ||= result === "expired";
+    changed ||= result === "expired" && p?.authorized === 1;
   }
   if (changed) deps.notifier.send("managers", { type: "pairing" });
   return deps.waiters.list().length > 0;
@@ -118,10 +124,14 @@ export function pairingRoutes(app: Hono, deps: Deps) {
     return p;
   };
 
+  app.post("/api/v1/pairing-codes", async (c) => {
+    await requireDevice(c, deps, { manager: true });
+    requireInitialized(sql);
+    return c.json(await createPairingCode(deps));
+  });
+
   app.post("/api/v1/pairings", async (c) => {
     await rateLimit(c, deps, "pairing", 10);
-    const s = await session(c, deps);
-    if (s.kind !== "password") throw unauthorized();
     const a = requireInitialized(sql);
     const ip = clientIp(c);
     const net = network(ip);
@@ -137,44 +147,71 @@ export function pairingRoutes(app: Hono, deps: Deps) {
     const body = await readJson(c);
     const rootPub = bin(body.rootPub, "账号公钥", 32);
     if (typeof body.canManage !== "boolean") throw bad("canManage 字段格式不对。");
+    const name = label(body.name, "设备名");
+    const platform = label(body.platform, "平台");
+    const signPub = bin(body.signPub, "签名公钥", 32);
+    const boxPub = bin(body.boxPub, "加密公钥", 32);
     if (rootPub !== a.root_pub) {
       throw conflict("服务器返回的账号公钥与本机记录不一致，已停止配对。请确认服务器地址是否正确。");
     }
-    const pending = one<{ n: number }>(sql, `SELECT COUNT(*) AS n FROM pairings WHERE status = 'pending'`)!.n;
-    if (pending >= 20) throw new ApiError(429, "rate_limited", "待处理的配对请求太多，请稍后再试。");
+    const codeNet = await requesterNet(c, deps);
+    const withCode = body.code !== undefined && body.code !== null && body.code !== "";
+    const codeHash = withCode ? await checkPairingCode(deps, codeNet, body.code) : null;
+    const authorized = codeHash ? 1 : 0;
+    const pending = one<{ n: number }>(
+      sql,
+      `SELECT COUNT(*) AS n FROM pairings WHERE status = 'pending' AND authorized = ?`,
+      authorized,
+    )!.n;
+    if (authorized && pending >= MAX_AUTHORIZED) {
+      throw new ApiError(429, "rate_limited", "用配对码发起的请求太多，请先在管理设备上处理等待中的请求。");
+    }
+    if (!authorized && pending >= MAX_ANONYMOUS) {
+      throw new ApiError(
+        429,
+        "rate_limited",
+        "这个账号等待批准的请求太多。请在管理设备的“设备 → 添加设备”中生成配对码，用配对码发起。",
+      );
+    }
     const secret = randomB64(32);
     const now = deps.now();
     const p: Pairing = {
       id: randomB64(16),
       secret_hash: await tokenHash(secret),
-      name: label(body.name, "设备名"),
-      platform: label(body.platform, "平台"),
-      sign_pub: bin(body.signPub, "签名公钥", 32),
-      box_pub: bin(body.boxPub, "加密公钥", 32),
+      name,
+      platform,
+      sign_pub: signPub,
+      box_pub: boxPub,
       root_pub: rootPub,
       status: "pending",
       ip,
       can_manage: body.canManage ? 1 : 0,
+      authorized,
       created_at: now,
       expires_at: now + PAIRING_TTL,
     };
-    sql.run(
-      `INSERT INTO pairings (id, secret_hash, name, platform, sign_pub, box_pub, root_pub, status, ip, can_manage, created_at, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      p.id,
-      p.secret_hash,
-      p.name,
-      p.platform,
-      p.sign_pub,
-      p.box_pub,
-      p.root_pub,
-      p.status,
-      p.ip,
-      p.can_manage,
-      p.created_at,
-      p.expires_at,
-    );
-    return c.json({ id: p.id, secret, expiresAt: p.expires_at });
+    sql.transaction(() => {
+      if (codeHash) consumePairingCode(deps, codeHash);
+      sql.run(
+        `INSERT INTO pairings (id, secret_hash, name, platform, sign_pub, box_pub, root_pub, status, ip, can_manage, authorized, created_at, expires_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        p.id,
+        p.secret_hash,
+        p.name,
+        p.platform,
+        p.sign_pub,
+        p.box_pub,
+        p.root_pub,
+        p.status,
+        p.ip,
+        p.can_manage,
+        p.authorized,
+        p.created_at,
+        p.expires_at,
+      );
+    });
+    if (codeHash) clearFailures(deps, codeNet);
+    return c.json({ id: p.id, secret, expiresAt: p.expires_at, authorized: authorized === 1 });
   });
 
   app.get("/api/v1/pairings/:id/events", async (c) => {
@@ -183,7 +220,7 @@ export function pairingRoutes(app: Hono, deps: Deps) {
     if (c.req.header("upgrade")?.toLowerCase() !== "websocket") throw bad("等待批准需要使用 WebSocket 连接。");
     if (deps.waiters.waiting(p.id)) throw conflict("这个配对请求已经在另一处等待批准。");
     const res = deps.waiters.accept(p.id);
-    deps.notifier.send("managers", { type: "pairing" });
+    notifyManagers(deps, p);
     return res;
   });
 

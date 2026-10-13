@@ -150,6 +150,21 @@ const MIGRATIONS: string[][] = [
     `CREATE TABLE login_events (at INTEGER NOT NULL)`,
   ],
   [`ALTER TABLE devices ADD COLUMN system_vars INTEGER NOT NULL DEFAULT 0`],
+  // 去掉账号密码；配对请求区分匿名与配对码创建；配对码与输错计数（docs/protocol.md 3.2、3.8）。
+  [
+    `DELETE FROM sessions WHERE kind = 'password'`,
+    `ALTER TABLE account DROP COLUMN kdf_salt`,
+    `ALTER TABLE account DROP COLUMN auth_salt`,
+    `ALTER TABLE account DROP COLUMN auth_hash`,
+    `DROP TABLE login_failures`,
+    `DROP TABLE login_events`,
+    `DELETE FROM kv WHERE key = 'login_attack'`,
+    `DELETE FROM email_flows WHERE purpose IN ('login', 'password')`,
+    `DELETE FROM mail_log WHERE kind = 'login'`,
+    `ALTER TABLE pairings ADD COLUMN authorized INTEGER NOT NULL DEFAULT 0`,
+    `CREATE TABLE pairing_codes (id INTEGER PRIMARY KEY CHECK (id = 1), code_hash TEXT NOT NULL, expires_at INTEGER NOT NULL)`,
+    `CREATE TABLE code_failures (net TEXT PRIMARY KEY, count INTEGER NOT NULL, window_start INTEGER NOT NULL, next_at INTEGER NOT NULL)`,
+  ],
 ];
 
 export function migrate(sql: Sql): void {

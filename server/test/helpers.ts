@@ -202,8 +202,6 @@ export class FakeDevice {
 export class TestAccount {
   email = "";
   accountId = "";
-  authKey = b64(rand(32));
-  kdfSalt = b64(rand(16));
   root!: Ed;
   recovery!: Ed;
   phone!: FakeDevice;
@@ -211,18 +209,14 @@ export class TestAccount {
   static async create(s: TestServer, email = `u${Math.random().toString(36).slice(2)}@example.com`) {
     const a = new TestAccount();
     a.email = email;
-    const reg = await s.ok("POST", "/api/v1/register", { body: { email, kdfSalt: a.kdfSalt, authKey: a.authKey } });
+    const reg = await register(s, email);
     a.accountId = reg.accountId;
-    if (reg.verificationRequired) {
-      await s.ok("POST", "/api/v1/register/verify", { body: { email, flow: reg.flow, code: s.lastCode("verification") } });
-    }
-    const login = await a.passwordLogin(s);
     a.root = await Ed.create();
     a.recovery = await Ed.create();
     a.phone = await FakeDevice.create();
     const recSealed = b64(rand(80));
     await s.ok("POST", "/api/v1/account/setup", {
-      token: login.token,
+      token: reg.token,
       body: {
         rootPub: a.root.pub,
         device: {
@@ -247,8 +241,9 @@ export class TestAccount {
     return a;
   }
 
-  async passwordLogin(s: TestServer) {
-    return s.ok("POST", "/api/v1/auth/login", { body: { email: this.email, authKey: this.authKey } });
+  /** 管理设备生成配对码。 */
+  async pairingCode(s: TestServer): Promise<string> {
+    return (await s.ok("POST", "/api/v1/pairing-codes", { token: this.phone.token, body: {} })).code;
   }
 
   async envelope(envId: string, recipient: string, keyVersion = 1) {
@@ -274,6 +269,36 @@ export class TestAccount {
   }
 }
 
+/** 注册（需要时完成邮箱验证），返回账号 ID 和注册会话。 */
+export async function register(s: TestServer, email: string) {
+  const reg = await s.ok("POST", "/api/v1/register", { body: { email } });
+  if (!reg.verificationRequired) return reg as { accountId: string; token: string };
+  const v = await s.ok("POST", "/api/v1/register/verify", { body: { email, flow: reg.flow, code: s.lastCode("verification") } });
+  return v as { accountId: string; token: string };
+}
+
+/** 新设备发起配对请求（不需要会话）；code 为配对码，不给时是匿名请求。 */
+export async function requestPairing(
+  s: TestServer,
+  a: TestAccount,
+  opts: { ip?: string; canManage?: boolean; code?: string; device?: FakeDevice; name?: string } = {},
+) {
+  const d = opts.device ?? (await FakeDevice.create());
+  return s.call("POST", "/api/v1/pairings", {
+    ip: opts.ip,
+    headers: { "x-harmonia-account": a.accountId },
+    body: {
+      name: opts.name ?? "笔记本",
+      platform: opts.canManage ? "android" : "linux",
+      signPub: d.sign.pub,
+      boxPub: d.boxPub,
+      rootPub: a.root.pub,
+      canManage: opts.canManage ?? false,
+      ...(opts.code === undefined ? {} : { code: opts.code }),
+    },
+  });
+}
+
 /** 发起方连上等待连接（docs/protocol.md 3.5.1）。 */
 export async function waitApproval(s: TestServer, a: TestAccount, req: Record<string, any>) {
   return s.call("GET", `/api/v1/pairings/${req.id}/events`, {
@@ -284,11 +309,9 @@ export async function waitApproval(s: TestServer, a: TestAccount, req: Record<st
 /** 电脑发起配对并由手机以指定授权批准。 */
 export async function pairClient(s: TestServer, a: TestAccount, grants: { envId: string; role: string; expiresAt?: number }[]) {
   const cli = await FakeDevice.create();
-  const pw = await a.passwordLogin(s);
-  const req = await s.ok("POST", "/api/v1/pairings", {
-    token: pw.token,
-    body: { name: "笔记本", platform: "darwin", signPub: cli.sign.pub, boxPub: cli.boxPub, rootPub: a.root.pub, canManage: false },
-  });
+  const r = await requestPairing(s, a, { device: cli });
+  if (r.status !== 200) throw new Error(`发起配对失败：${JSON.stringify(r.json)}`);
+  const req = r.json;
   cli.id = req.id;
   await waitApproval(s, a, req);
   const list = await s.ok("GET", "/api/v1/pairings", { token: a.phone.token });

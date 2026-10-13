@@ -1,6 +1,7 @@
-// 验证码邮件模板（沿用旧项目版式）。
+// 验证码邮件模板（沿用旧项目版式）：只有注册验证和重置账号两种用途。
+import { CODE_PATTERN } from "./util";
 
-export type CodeEmailPurpose = "verification" | "login" | "password" | "reset";
+export type CodeEmailPurpose = "verification" | "reset";
 export interface Email { to: string; subject: string; text: string; html?: string }
 export interface CodeEmailInput { purpose: CodeEmailPurpose; email: string; code: string; minutes: number }
 
@@ -17,20 +18,6 @@ const copy = {
     ignore: "如果您没有注册 Harmonia，请忽略此邮件。",
     accent: "#1C1917", bar: "#FAFAF9", barMuted: "#D6D3D1", dash: "#D6D3D1",
   },
-  login: {
-    subject: "Harmonia 登录验证码", title: "确认这次登录", label: "登录验证",
-    lead: "有人正在登录您的 Harmonia 账号，并且输入了正确的密码。如确认是您本人操作，请输入以下验证码完成登录。",
-    preheader: "请输入验证码完成登录。",
-    ignore: "如果这不是您本人的操作，说明您的密码可能已经泄露，请尽快在管理设备上修改密码。",
-    accent: "#1C1917", bar: "#FAFAF9", barMuted: "#D6D3D1", dash: "#D6D3D1",
-  },
-  password: {
-    subject: "Harmonia 找回密码验证码", title: "重设登录密码", label: "找回密码",
-    lead: "我们收到了重设您 Harmonia 登录密码的请求。请在 App 中输入以下验证码，然后设置新密码。保险库中的数据不受影响。",
-    preheader: "请在 App 中输入验证码，然后设置新密码。",
-    ignore: "如果这不是您本人的操作，请忽略此邮件，您的密码不会改变。",
-    accent: "#1C1917", bar: "#FAFAF9", barMuted: "#D6D3D1", dash: "#D6D3D1",
-  },
   reset: {
     subject: "Harmonia 账号重置验证码", title: "重置您的账号", label: "账号重置",
     lead: "我们收到了重置您 Harmonia 账号的请求。如确认是您本人操作，请在 App 中输入以下验证码继续。",
@@ -42,9 +29,6 @@ const copy = {
 const warning = { title: "重置后数据无法找回", body: "保险库中的全部数据、已授权的设备和恢复设置都将被永久删除。" };
 const caution = "为保障账号安全，请勿将验证码透露给他人。";
 const footer = "此邮件由 Harmonia 服务自动发送，请勿直接回复。";
-
-/** 邮件验证码：8 个 Crockford Base32 字符（不含 I、L、O、U）。 */
-export const CODE_PATTERN = /^[0-9A-HJKMNP-TV-Z]{8}$/;
 
 function escape(value: string): string {
   return value.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);

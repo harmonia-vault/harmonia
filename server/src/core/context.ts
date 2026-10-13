@@ -59,9 +59,6 @@ export type Account = {
   account_id: string;
   email: string;
   status: "pending" | "active";
-  kdf_salt: string;
-  auth_salt: string;
-  auth_hash: string;
   root_pub: string | null;
   recovery_generation: number | null;
   recovery_sign_pub: string | null;
@@ -80,7 +77,8 @@ export type InitializedAccount = Account & {
   root_recovery_sig: string;
 };
 
-export const SESSION_TTL = { password: 15 * 60_000, device: 60 * 60_000, recovery: 15 * 60_000 } as const;
+/** 注册会话只能查看账号信息和首次初始化；设备会话按设备权限；恢复会话只能读取恢复材料和登记本机。 */
+export const SESSION_TTL = { registration: 15 * 60_000, device: 60 * 60_000, recovery: 15 * 60_000 } as const;
 export type SessionKind = keyof typeof SESSION_TTL;
 
 export async function readJson(c: Context): Promise<Record<string, unknown>> {
@@ -194,8 +192,8 @@ function networkSecret(sql: Sql): string {
   return secret;
 }
 
-/** 请求方所在网络的标识（只保存 HMAC）。wide 时 IPv6 按 /48 计。 */
-export const requesterNet = (c: Context, deps: Deps, wide = false) => networkId(networkSecret(deps.sql), clientIp(c), wide);
+/** 请求方所在网络的标识（只保存 HMAC）。 */
+export const requesterNet = (c: Context, deps: Deps) => networkId(networkSecret(deps.sql), clientIp(c));
 
 /** 按网络的固定窗口限流（每分钟）。 */
 export async function rateLimit(c: Context, deps: Deps, bucket: string, max: number) {

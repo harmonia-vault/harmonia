@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { b64, recoveryAuthMsg, rootRecoveryMsg } from "../src/core/util";
-import { Ed, FakeDevice, newId, pairClient, rand, TestAccount, TestServer, waitApproval } from "./helpers";
+import { Ed, FakeDevice, newId, pairClient, rand, requestPairing, TestAccount, TestServer, waitApproval } from "./helpers";
 
 const value = () => b64(rand(60));
 const put = (s: TestServer, token: string, env: string, name: string, key = newId()) =>
@@ -132,13 +132,12 @@ describe("配对与权限", () => {
     expect(relogin.json.error).toBe("device_revoked");
   });
 
-  it("账号公钥不一致时拒绝配对；配对码只能用一次", async () => {
+  it("账号公钥不一致时拒绝配对；同一配对请求只能批准一次", async () => {
     const s = new TestServer();
     const a = await TestAccount.create(s);
-    const pw = await a.passwordLogin(s);
     const fake = await Ed.create();
     const r = await s.call("POST", "/api/v1/pairings", {
-      token: pw.token,
+      headers: { "x-harmonia-account": a.accountId },
       body: { name: "x", platform: "linux", signPub: fake.pub, boxPub: b64(rand(32)), rootPub: fake.pub, canManage: false },
     });
     expect(r.status).toBe(409);
@@ -155,11 +154,8 @@ describe("配对与权限", () => {
     expect((await s.call("POST", "/api/v1/devices/self/revoke", { token: a.phone.token, body: {} })).status).toBe(409);
 
     const phone2 = await FakeDevice.create();
-    const pw = await a.passwordLogin(s);
-    const req = await s.ok("POST", "/api/v1/pairings", {
-      token: pw.token,
-      body: { name: "新手机", platform: "android", signPub: phone2.sign.pub, boxPub: phone2.boxPub, rootPub: a.root.pub, canManage: true },
-    });
+    const req = (await requestPairing(s, a, { device: phone2, canManage: true, name: "新手机", code: await a.pairingCode(s) })).json;
+    expect(req.authorized).toBe(true);
     phone2.id = req.id;
     await waitApproval(s, a, req);
     const incomplete = await s.call("POST", `/api/v1/pairings/${req.id}/approve`, {
@@ -237,7 +233,6 @@ describe("恢复", () => {
     const newRec = await Ed.create();
     const sealed = b64(rand(80));
     const key = newId();
-    const newAuth = b64(rand(32));
     const rotate = {
       idempotencyKey: key,
       generation: "2",
@@ -245,7 +240,6 @@ describe("恢复", () => {
       boxPub: b64(rand(32)),
       rootEnvelope: { sealed, sig: await newRec.sign(await rootRecoveryMsg(2, sealed)) },
       envelopes: [await a.envelope(env, "recovery")],
-      password: { kdfSalt: b64(rand(16)), authKey: newAuth },
     };
     expect((await s.ok("GET", `/api/v1/recovery/rotate/${key}`, { token: phone2.token })).state).toBe("absent");
     await s.ok("POST", "/api/v1/recovery/rotate", { token: phone2.token, body: rotate });
@@ -255,6 +249,5 @@ describe("恢复", () => {
     expect((await put(s, phone2.token, env, "OK")).status).toBe(200);
     expect((await start(a.recovery)).status).toBe(401);
     expect((await start(newRec)).status).toBe(200);
-    await s.ok("POST", "/api/v1/auth/login", { body: { email: a.email, authKey: newAuth } });
   });
 });
