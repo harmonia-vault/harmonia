@@ -7,6 +7,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../app/controller.dart';
 import '../core/crypto.dart';
 import 'device_review.dart';
+import 'glass_controls.dart';
 import 'lock.dart';
 import 'pairing_code.dart';
 import 'recovery_actions.dart';
@@ -43,10 +44,9 @@ class _RecoveryCodeConfirmState extends State<RecoveryCodeConfirm> {
           const Banner2('请把恢复码抄在纸上或存进密码管理器，妥善保管；提交成功后还可以下载 PDF 打印。\n丢失所有手机时，只能用它找回数据；它不会再次显示，服务器也没有副本。', warn: true),
           const SizedBox(height: Space.md),
           Card(
-            child: CheckboxListTile(
+            child: AppCheckboxTile(
               value: _written,
-              onChanged: (v) => setState(() => _written = v ?? false),
-              controlAffinity: ListTileControlAffinity.leading,
+              onChanged: (v) => setState(() => _written = v),
               title: const Text('我已经妥善保存了恢复码'),
             ),
           ),

@@ -9,6 +9,7 @@ import 'lock.dart';
 import 'pairing.dart';
 import 'theme.dart';
 import 'glass.dart';
+import 'glass_controls.dart';
 import 'widgets.dart';
 import 'list_row.dart';
 
@@ -191,31 +192,30 @@ class GrantEditor extends StatelessWidget {
               children: [
                 Text(e.name, style: const TextStyle(fontWeight: FontWeight.w600)),
                 const SizedBox(height: Space.sm),
-                SegmentedButton<String>(
-                  showSelectedIcon: false,
-                  segments: const [
-                    ButtonSegment(value: 'none', label: Text('无')),
-                    ButtonSegment(value: 'ro', label: Text('只读')),
-                    ButtonSegment(value: 'rw', label: Text('读写')),
-                    ButtonSegment(value: 'admin', label: Text('管理')),
+                AppSegmented<String>(
+                  options: const [
+                    (value: 'none', label: '无'),
+                    (value: 'ro', label: '只读'),
+                    (value: 'rw', label: '读写'),
+                    (value: 'admin', label: '管理'),
                   ],
-                  selected: {roles[e.id] ?? 'none'},
-                  onSelectionChanged: (s) {
-                    roles[e.id] = s.first == 'none' ? null : s.first;
+                  value: roles[e.id] ?? 'none',
+                  onChanged: (v) {
+                    roles[e.id] = v == 'none' ? null : v;
                     onChanged();
                   },
                 ),
                 if (roles[e.id] != null) ...[
                   const SizedBox(height: Space.sm),
-                  DropdownButton<String>(
+                  AppSelect<String>(
+                    semanticLabel: '“${e.name}”的有效期',
                     value: expiry[e.id] ?? '长期有效',
-                    isDense: true,
-                    items: [
+                    options: [
                       for (final k in {..._expiryChoices.keys, if (expiry[e.id] != null) expiry[e.id]!})
-                        DropdownMenuItem(value: k, child: Text(k)),
+                        (value: k, label: k),
                     ],
                     onChanged: (v) {
-                      expiry[e.id] = v!;
+                      expiry[e.id] = v;
                       onChanged();
                     },
                   ),
@@ -364,7 +364,7 @@ class _DevicePageState extends State<DevicePage> {
             if (d.platform == 'windows') ...[
               const SectionTitle('系统变量'),
               Card(
-                child: SwitchListTile(
+                child: AppSwitchTile(
                   title: const Text('写入系统变量'),
                   subtitle: Text(tidy('Path、TEMP 这类 Windows 自身使用的变量，默认不写入这台电脑。')),
                   value: d.systemVars,

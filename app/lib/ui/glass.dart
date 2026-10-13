@@ -361,13 +361,13 @@ class AppSwitchTile extends StatelessWidget {
   const AppSwitchTile({
     super.key,
     required this.title,
-    required this.icon,
+    this.icon,
     required this.value,
     required this.onChanged,
     this.subtitle,
   });
-  final Widget title, icon;
-  final Widget? subtitle;
+  final Widget title;
+  final Widget? icon, subtitle;
   final bool value;
   final ValueChanged<bool>? onChanged;
 

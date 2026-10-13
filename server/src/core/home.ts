@@ -87,7 +87,9 @@ h1 em{font-style:normal;text-decoration:underline var(--yellow);text-decoration-
 .addr{display:flex;align-items:center;gap:20px;margin-top:32px;padding:18px 20px;border:1.5px solid var(--ink);border-radius:18px;background:var(--card);box-shadow:4px 4px 0 var(--yellow)}
 .ai{position:relative;margin:0 0 20px;padding:14px 16px;border:1.5px solid var(--ink);border-radius:14px;background:var(--card);box-shadow:4px 4px 0 var(--accent)}
 .ai span{display:block;font-size:12px;color:var(--mute)}
-.ai .prompt{margin:6px 0 0;padding:10px 12px;border:1.5px dashed var(--ink);border-radius:10px;color:var(--ink);font-size:15px;overflow-wrap:anywhere;-webkit-user-select:all;user-select:all}
+.ai .prompt{max-height:9.4em;max-height:calc(5lh + 20px);margin:6px 0 0;padding:10px 12px;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:var(--mute) transparent;border:1.5px dashed var(--ink);border-radius:10px;color:var(--ink);font-size:15px;line-height:1.6;overflow-wrap:anywhere;-webkit-user-select:all;user-select:all}
+.ai .prompt::-webkit-scrollbar{width:6px}
+.ai .prompt::-webkit-scrollbar-thumb{border-radius:3px;background:var(--mute)}
 .copy{position:absolute;top:10px;right:12px;padding:1px 10px;border:1.5px solid currentColor;border-radius:8px;background:transparent;color:inherit;font:inherit;font-size:12px;line-height:20px;cursor:pointer}
 .copy:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .addr div{position:relative;flex:1;min-width:0}

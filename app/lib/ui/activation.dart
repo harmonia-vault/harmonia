@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../app/controller.dart';
 import '../core/models.dart';
+import 'glass_controls.dart';
 import 'theme.dart';
 import 'widgets.dart';
 
@@ -86,7 +87,7 @@ class _ActivationEditorState extends State<ActivationEditor> {
                   leading: ReorderableDragStartListener(index: i, child: const Icon(Icons.drag_handle)),
                   title: Text(widget.c.vault.environment(g.envId).name),
                   subtitle: g.expiresAt != 0 && g.expiresAt <= now ? const Text('授权已到期') : null,
-                  trailing: Switch(value: g.active, onChanged: (v) => _toggle(i, v)),
+                  trailing: AppSwitch(value: g.active, onChanged: (v) => _toggle(i, v)),
                 ),
             ],
           ),
