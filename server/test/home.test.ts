@@ -19,11 +19,12 @@ describe("实例首页", () => {
   it("接入电脑一步在安装命令之前给出各个系统通用的 AI 助手提示词，带上这台服务器的地址", async () => {
     const html = await (await homePage("https://vault.example.com")).text();
     const prompt = html.match(/<p class="prompt" data-copy>(.*?)<\/p>/)?.[1] ?? "";
-    expect(prompt).toMatch(/^Harmonia（和弦，https:\/\/github\.com\/harmonia-vault\/harmonia）是一个开源、自托管的环境变量同步工具：/);
-    expect(prompt).toContain("不用我把 Key 贴进对话。请在这台电脑上安装 Harmonia 命令行：");
+    expect(prompt).toMatch(/^Harmonia（和弦，https:\/\/vault\.example\.com）是用户部署的环境变量同步服务/);
+    expect(prompt).toContain("不需要用户把 Key 贴进对话。请在这台电脑上安装 Harmonia 命令行：");
+    expect(prompt).not.toContain("我");
     expect(prompt).toContain("install.sh | HARMONIA_YES=1 sh；");
     expect(prompt).toContain("$env:HARMONIA_YES = &#39;1&#39;; irm https://github.com/harmonia-vault/harmonia/releases/download/update-feed/install.ps1 | iex。");
-    expect(prompt).toContain("运行 harmonia skill，按输出的说明接入服务器 https://vault.example.com（邮箱和配对码问我）。");
+    expect(prompt).toContain("运行 harmonia skill，按输出的说明接入服务器 https://vault.example.com（邮箱和配对码向用户询问）。");
     expect(html.match(/class="prompt"/g)).toHaveLength(1);
     expect(html.indexOf('class="addr"')).toBeLessThan(html.indexOf('class="ai"'));
     expect(html.indexOf('class="ai"')).toBeLessThan(html.indexOf('class="term"'));

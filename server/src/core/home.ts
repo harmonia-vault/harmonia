@@ -155,14 +155,14 @@ function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 }
 
-/** 复制给 AI 助手的提示词，各个系统通用：先介绍 Harmonia，再让它安装命令行、读取 harmonia skill 的说明、接入这台服务器。address 已转义。 */
-function aiPrompt(address: string): string {
+/** 复制给 AI 助手的提示词，各个系统通用：先介绍 Harmonia，再让它安装命令行、读取 harmonia skill 的说明、接入这台服务器。用第三人称称呼用户，地址都用这台服务器的地址。 */
+function aiPrompt(origin: string): string {
   return escapeHtml(
-    `Harmonia（和弦，${REPO}）是一个开源、自托管的环境变量同步工具：我在手机 App 上管理 API Key 等环境变量，端到端加密后同步到我授权的电脑，你可以用它的命令行取用这些变量，不用我把 Key 贴进对话。` +
+    `Harmonia（和弦，${origin}）是用户部署的环境变量同步服务，开源、自托管：用户在手机 App 上管理 API Key 等环境变量，端到端加密后同步到用户授权的电脑，你可以用它的命令行取用这些变量，不需要用户把 Key 贴进对话。` +
       `请在这台电脑上安装 Harmonia 命令行：macOS、Linux 运行 curl -fsSL ${FEED}/install.sh | HARMONIA_YES=1 sh；` +
       `Windows 在 PowerShell 中运行 $env:HARMONIA_YES = '1'; irm ${FEED}/install.ps1 | iex。` +
-      `装好后运行 harmonia skill，按输出的说明接入服务器 `,
-  ) + address + "（邮箱和配对码问我）。";
+      `装好后运行 harmonia skill，按输出的说明接入服务器 ${origin}（邮箱和配对码向用户询问）。`,
+  );
 }
 
 // 复制按钮：给每个带 data-copy 的元素加一个按钮，复制它的文字。没有脚本时文字仍可点一下整段选中。
@@ -232,7 +232,7 @@ ${qrCode(origin)}
 <p>在电脑上安装命令行，再接入这台服务器。</p>
 <div class="ai">
 <span>让 AI 助手安装</span>
-<p class="prompt" data-copy>${aiPrompt(address)}</p>
+<p class="prompt" data-copy>${aiPrompt(origin)}</p>
 </div>
 <p class="or">或者自己安装，用 App 扫终端里的二维码批准：</p>
 <div class="term"><span>macOS、Linux</span><code data-copy>curl -fsSL ${FEED}/install.sh | sh</code></div>
