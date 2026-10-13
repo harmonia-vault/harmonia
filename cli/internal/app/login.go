@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/harmonia-vault/harmonia/cli/internal/api"
@@ -12,25 +13,30 @@ import (
 	"github.com/harmonia-vault/harmonia/cli/internal/state"
 )
 
-// PairingPrompt 负责向用户展示配对信息，以及在需要时询问邮件验证码。
+// PairingPrompt 负责向用户展示配对信息。
 type PairingPrompt interface {
-	AskCode(message string) (string, error)
-	ShowPairing(qr, code, deviceName string, expiresAt time.Time)
+	// ShowPairing 显示二维码和核对码；authorized 表示请求由配对码创建，管理设备会直接弹出批准页。
+	ShowPairing(qr, code, deviceName string, expiresAt time.Time, authorized bool)
 	Waiting()
 }
 
 type LoginInput struct {
-	Server     string
-	Email      string
-	Password   string
-	DeviceName string
+	Server string
+	Email  string
+	// PairingCode 是管理设备上生成的配对码；为空时是扫码方式（docs/protocol.md 3.2）。
+	PairingCode string
+	DeviceName  string
 }
 
-// Login 用邮箱和密码登录，然后发起配对并等待管理设备批准。
+// Login 查询账号后发起配对，等待管理设备核对并批准。账号没有密码。
 func Login(ctx context.Context, in LoginInput, prompt PairingPrompt) (*App, int, error) {
 	server, err := api.NormalizeServer(in.Server)
 	if err != nil {
 		return nil, 0, err
+	}
+	email := strings.ToLower(strings.TrimSpace(in.Email))
+	if email == "" {
+		return nil, 0, errors.New("请输入注册 Harmonia 时使用的邮箱")
 	}
 	d, err := state.Open()
 	if err != nil {
@@ -47,46 +53,20 @@ func Login(ctx context.Context, in LoginInput, prompt PairingPrompt) (*App, int,
 	if _, err := c.Instance(ctx); err != nil {
 		return nil, 0, err
 	}
-	pre, err := c.Prelogin(ctx, in.Email)
-	if err != nil {
-		return nil, 0, err
+	acct, err := c.Lookup(ctx, email)
+	if api.IsCode(err, "not_found") {
+		return nil, 0, errors.New("这个邮箱还没有注册。请先在 Harmonia App 中用它注册并完成设置，或检查邮箱是否输错")
 	}
-	salt, err := hc.UnB64(pre.KdfSalt)
-	if err != nil {
-		return nil, 0, errors.New("服务器返回的登录参数不对")
-	}
-	authKey := hc.B64(hc.PasswordKey(in.Password, salt))
-	sess, err := c.Login(ctx, in.Email, authKey, "", "")
-	// 账号正受到异常登录尝试时，密码正确后还需要邮件验证码（docs/protocol.md 3.8）。
-	var need *api.Error
-	if errors.As(err, &need) && need.Code == "code_required" {
-		message := need.Message
-		for attempt := 0; attempt < 5; attempt++ {
-			code, perr := prompt.AskCode(message)
-			if perr != nil {
-				return nil, 0, perr
-			}
-			sess, err = c.Login(ctx, in.Email, authKey, need.Flow, code)
-			if !api.IsCode(err, "invalid_request") {
-				break
-			}
-			message = err.Error()
-		}
-	}
-	if err != nil {
-		return nil, 0, err
-	}
-	c.AccountID = sess.AccountID
-	acct, err := c.Account(ctx, sess.Token)
 	if err != nil {
 		return nil, 0, err
 	}
 	if !acct.Initialized {
-		return nil, 0, errors.New("这个账号还没有在手机上完成初始化。请先在 Harmonia App 中登录并完成设置")
+		return nil, 0, errors.New("这个账号还没有在手机上完成设置。请先在 Harmonia App 中输入这个邮箱，完成设置后再运行 harmonia login")
 	}
 	if cfg.AccountID == acct.AccountID && cfg.RootPub != "" && cfg.RootPub != acct.RootPub {
 		return nil, 0, errors.New("服务器返回的账号公钥与本机之前记录的不一致，已停止。请确认服务器地址是否正确")
 	}
+	c.AccountID = acct.AccountID
 
 	keys := state.NewDeviceKeys()
 	signPub, boxPub := hc.B64(keys.Sign.Pub), hc.B64(keys.Box.Pub[:])
@@ -94,16 +74,20 @@ func Login(ctx context.Context, in LoginInput, prompt PairingPrompt) (*App, int,
 	if name == "" {
 		name = defaultDeviceName()
 	}
-	req, err := c.CreatePairing(ctx, sess.Token, map[string]any{
+	body := map[string]any{
 		"name": name, "platform": runtime.GOOS, "signPub": signPub, "boxPub": boxPub, "rootPub": acct.RootPub,
 		"canManage": false, // CLI 还不具备管理功能，不能被批准为管理设备
-	})
+	}
+	if code := strings.TrimSpace(in.PairingCode); code != "" {
+		body["code"] = code
+	}
+	req, err := c.CreatePairing(ctx, body)
 	if err != nil {
 		return nil, 0, err
 	}
 	fp := hc.PairingFingerprint(req.ID, signPub, boxPub, acct.RootPub)
 	status, err := c.WaitPairing(ctx, req.ID, req.Secret, func() {
-		prompt.ShowPairing(hc.PairingQR(req.ID, fp), hc.PairingCode(fp), name, time.UnixMilli(req.ExpiresAt))
+		prompt.ShowPairing(hc.PairingQR(req.ID, fp), hc.PairingCode(fp), name, time.UnixMilli(req.ExpiresAt), req.Authorized)
 		prompt.Waiting()
 	})
 	if ctx.Err() != nil {
@@ -118,7 +102,7 @@ func Login(ctx context.Context, in LoginInput, prompt PairingPrompt) (*App, int,
 	case "rejected":
 		return nil, 0, errors.New("这次配对被拒绝或已作废。如需重试，请重新运行 harmonia login")
 	case "expired":
-		return nil, 0, errors.New("配对请求已过期（10 分钟），请重新运行 harmonia login")
+		return nil, 0, errors.New("配对请求已过期（5 分钟），请重新运行 harmonia login")
 	default:
 		return nil, 0, errors.New("与服务器的连接中断，这次配对已作废。请检查网络后重新运行 harmonia login")
 	}
@@ -128,7 +112,7 @@ func Login(ctx context.Context, in LoginInput, prompt PairingPrompt) (*App, int,
 		return nil, 0, err
 	}
 	cfg = &state.Config{
-		Server: server, AccountID: acct.AccountID, Email: acct.Email, RootPub: acct.RootPub,
+		Server: server, AccountID: acct.AccountID, Email: email, RootPub: acct.RootPub,
 		DeviceID: req.ID, DeviceName: name,
 	}
 	if err := d.SaveConfig(cfg); err != nil {

@@ -16,19 +16,9 @@ type Instance struct {
 	} `json:"registration"`
 }
 
-type Prelogin struct {
-	KdfSalt string `json:"kdfSalt"`
-}
-
-type Session struct {
-	Token     string `json:"token"`
-	ExpiresAt int64  `json:"expiresAt"`
-	AccountID string `json:"accountId"`
-}
-
+// Account 是匿名查询账号的结果（docs/protocol.md 3.2）。
 type Account struct {
 	AccountID   string `json:"accountId"`
-	Email       string `json:"email"`
 	Initialized bool   `json:"initialized"`
 	RootPub     string `json:"rootPub"`
 }
@@ -37,6 +27,8 @@ type PairingRequest struct {
 	ID        string `json:"id"`
 	Secret    string `json:"secret"`
 	ExpiresAt int64  `json:"expiresAt"`
+	// Authorized 表示请求由配对码创建，会推送到管理设备上。
+	Authorized bool `json:"authorized"`
 }
 
 type Environment struct {
@@ -101,29 +93,16 @@ func (c *Client) Instance(ctx context.Context) (*Instance, error) {
 	return &out, nil
 }
 
-func (c *Client) Prelogin(ctx context.Context, email string) (*Prelogin, error) {
-	var out Prelogin
-	return &out, c.Public(ctx, "GET", "/api/v1/auth/prelogin?email="+url.QueryEscape(email), nil, &out)
-}
-
-// Login 用密码登录；服务端要求邮件验证码时返回 code_required 错误（带 Flow），再带上 flow 和 code 调用一次。
-func (c *Client) Login(ctx context.Context, email, authKey, flow, code string) (*Session, error) {
-	body := map[string]string{"email": email, "authKey": authKey}
-	if flow != "" {
-		body["flow"], body["code"] = flow, code
-	}
-	var out Session
-	return &out, c.Public(ctx, "POST", "/api/v1/auth/login", body, &out)
-}
-
-func (c *Client) Account(ctx context.Context, token string) (*Account, error) {
+// Lookup 按邮箱匿名查询账号；邮箱没有注册时返回 not_found 错误。
+func (c *Client) Lookup(ctx context.Context, email string) (*Account, error) {
 	var out Account
-	return &out, c.WithToken(ctx, token, "GET", "/api/v1/account", nil, &out)
+	return &out, c.Public(ctx, "GET", "/api/v1/accounts/lookup?email="+url.QueryEscape(email), nil, &out)
 }
 
-func (c *Client) CreatePairing(ctx context.Context, token string, body map[string]any) (*PairingRequest, error) {
+// CreatePairing 发起配对请求，不需要会话：账号由 AccountID 请求头指定。
+func (c *Client) CreatePairing(ctx context.Context, body map[string]any) (*PairingRequest, error) {
 	var out PairingRequest
-	return &out, c.WithToken(ctx, token, "POST", "/api/v1/pairings", body, &out)
+	return &out, c.Public(ctx, "POST", "/api/v1/pairings", body, &out)
 }
 
 func (c *Client) PairingStatus(ctx context.Context, id, secret string) (string, error) {

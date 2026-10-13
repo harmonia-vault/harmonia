@@ -39,7 +39,6 @@ func main() {
 	envKey := seed(3)
 	code := seed(4)[:16]
 	rec := hc.DeriveRecovery(code)
-	salt := seed(5)[:16]
 
 	canonicalIn := []string{"harmonia.device", "AAAAAAAAAAAAAAAAAAAAAA", "client", "pub-a", "pub-b"}
 	msg := hc.DeviceCertMsg("AAAAAAAAAAAAAAAAAAAAAA", "manager", hc.B64(sign.Pub), hc.B64(boxKey.Pub[:]))
@@ -60,10 +59,6 @@ func main() {
 		"value": map[string]any{
 			"key": hc.B64(envKey), "envId": "BBBBBBBBBBBBBBBBBBBBBB", "keyVersion": 1,
 			"name": "OPENAI_API_KEY", "ciphertext": value, "plain": "sk-测试 value with 'quote'",
-		},
-		"password": map[string]any{
-			"password": "correct horse 电池", "salt": hc.B64(salt),
-			"key": hc.B64(hc.PasswordKey("correct horse 电池", salt)),
 		},
 		"recovery": map[string]any{
 			"code": hc.B64(code), "formatted": hc.FormatRecoveryCode(code),
