@@ -12,6 +12,7 @@ import 'scanner.dart';
 import 'theme.dart';
 import 'glass_overlays.dart';
 import 'glass.dart';
+import 'glass_controls.dart';
 import 'widgets.dart';
 
 /// “添加设备”按钮：从按钮展开浮动菜单，先选择方式。配对码要在对方发起之前生成，扫码则在对方发起之后，
@@ -203,11 +204,10 @@ class _ReviewPairingPageState extends State<ReviewPairingPage> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, set) => AppAlertDialog(
           title: Text('拒绝“${p.name}”？'),
-          content: CheckboxListTile(
+          content: AppCheckboxTile(
             value: block,
             contentPadding: EdgeInsets.zero,
-            controlAffinity: ListTileControlAffinity.leading,
-            onChanged: (v) => set(() => block = v ?? false),
+            onChanged: (v) => set(() => block = v),
             title: const Text('30 分钟内阻止这个网络再次发起请求'),
             subtitle: Text('不是你本人发起时勾选。来自 ${p.ip}'),
           ),
@@ -262,10 +262,9 @@ class _ReviewPairingPageState extends State<ReviewPairingPage> {
       if (!widget.scanned) ...[
         const SizedBox(height: Space.md),
         Card(
-          child: CheckboxListTile(
+          child: AppCheckboxTile(
             value: _matched,
-            controlAffinity: ListTileControlAffinity.leading,
-            onChanged: (v) => setState(() => _matched = v ?? false),
+            onChanged: (v) => setState(() => _matched = v),
             title: const Text('核对码一致，这是我自己的设备'),
           ),
         ),
@@ -276,7 +275,7 @@ class _ReviewPairingPageState extends State<ReviewPairingPage> {
       if (p.canManage) ...[
         const SizedBox(height: Space.md),
         Card(
-          child: SwitchListTile(
+          child: AppSwitchTile(
             value: _manager,
             onChanged: (v) => setState(() => _manager = v),
             title: const Text('作为管理设备'),

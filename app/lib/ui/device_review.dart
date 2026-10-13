@@ -5,6 +5,7 @@ import '../app/controller.dart';
 import '../core/api.dart';
 import '../core/models.dart';
 import 'devices.dart' show platformIcon, platformName;
+import 'glass_controls.dart';
 import 'lock.dart';
 import 'theme.dart';
 import 'widgets.dart';
@@ -66,10 +67,11 @@ class _DeviceReviewViewState extends State<DeviceReviewView> {
   Widget _tile(DeviceInfo d) {
     final reason = _failed[d.id];
     return Card(
-      child: CheckboxListTile(
+      child: AppCheckboxTile(
         value: _selected.contains(d.id),
+        leadingCheckbox: false,
         onChanged: (v) => setState(() {
-          if (v == true) {
+          if (v) {
             _selected.add(d.id);
           } else {
             _selected.remove(d.id);
