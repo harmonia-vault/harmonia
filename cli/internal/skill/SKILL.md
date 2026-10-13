@@ -86,8 +86,10 @@ harmonia var list [--env 环境]    # 变量名，默认隐藏值
 ```bash
 harmonia exec -- python agent.py
 harmonia exec --env 环境A,环境B -- npm test   # 只用这些环境，排在前面的优先
+harmonia exec --env 环境A --env 环境B -- npm test   # 同上，--env 也可以重复给出
 ```
 
+- 用户要求只用某个或某几个环境（例如测试环境、生产环境）时用 `--env`：命令只拿到这些环境的变量，即使当前终端里已有其他环境的变量。环境名用 `harmonia env list` 查。
 - 不要假设当前 shell 里已经有这些变量。Shell 集成主要作用于用户自己的终端，你执行命令的 shell 不一定加载它。
 - `harmonia exec` 启动时先同步一次；连不上服务器时使用本机缓存，并在 stderr 提示。
 - 不要把变量值打印到对话里：避免 `echo $KEY`、`env`、`harmonia export`、`harmonia var list --show`。

@@ -115,6 +115,8 @@ harmonia env deactivate <环境>        停用环境（activate 重新启用）
 harmonia env order <环境>...          调整顺序：同名变量由排在前面的环境提供
 harmonia exec -- <命令>               只给这个命令注入变量
 harmonia exec --env OpenAI,Other -- <命令>
+                                      只用这几个环境（也可以写成 --env OpenAI --env Other），
+                                      靠前的优先；终端里其他环境的变量不会传给命令
 harmonia export --format dotenv       输出当前生效的变量
 harmonia var set <环境> <变量名>       写入变量（需要读写权限，必须联网）
 harmonia import --env <环境>          从当前终端勾选已有的环境变量导入

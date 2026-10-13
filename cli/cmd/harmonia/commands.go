@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -283,7 +284,10 @@ func cmdOverride(ctx context.Context, args []string) error {
 	return nil
 }
 
-// effective 返回要注入的变量；envs 非空时只使用这些环境（后列出的优先）。
+// envList 合并 --env 的取值：可以用逗号分隔，也可以重复给出，按出现顺序排列。
+func envList(f *flags) string { return strings.Join(f.lists["env"], ",") }
+
+// effective 返回要注入的变量；envs 非空时只使用这些环境（先列出的优先）。
 func effective(ctx context.Context, a *app.App, envs string) (map[string]string, error) {
 	sctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	if err := a.Sync(sctx); err != nil {
@@ -298,6 +302,9 @@ func effective(ctx context.Context, a *app.App, envs string) (map[string]string,
 		// 按列出的顺序合并，同名变量由排在前面的环境提供。
 		var ids []string
 		for _, name := range strings.Split(envs, ",") {
+			if strings.TrimSpace(name) == "" {
+				continue
+			}
 			e, err := a.Env(strings.TrimSpace(name))
 			if err != nil {
 				return nil, err
@@ -335,14 +342,19 @@ func cmdExec(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	vars, err := effective(ctx, a, f.values["env"])
+	envs := envList(f)
+	vars, err := effective(ctx, a, envs)
 	if err != nil {
 		return err
 	}
-	env := os.Environ()
-	for k, v := range vars {
-		env = append(env, k+"="+v)
+	// 指定了 --env 时，终端里由其他环境写入的变量（例如开启了 Shell 集成）不传给命令。
+	var known map[string]map[string]bool
+	if envs != "" {
+		if known, err = a.Known(); err != nil {
+			return err
+		}
 	}
+	env := app.ExecEnv(os.Environ(), vars, known, runtime.GOOS == "windows")
 	bin, err := exec.LookPath(cmdArgs[0])
 	if err != nil {
 		return fmt.Errorf("找不到命令 %s%s", cmdArgs[0], notFoundHint)
@@ -359,7 +371,7 @@ func cmdExport(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	vars, err := effective(ctx, a, f.values["env"])
+	vars, err := effective(ctx, a, envList(f))
 	if err != nil {
 		return err
 	}

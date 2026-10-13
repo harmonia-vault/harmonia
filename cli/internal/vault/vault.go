@@ -221,3 +221,30 @@ func sources(c *state.Cache, k *state.DeviceKeys, ids []string, ov state.Overrid
 	}
 	return out
 }
+
+// Known 返回这台设备能访问的每个环境（含已停用、已到期的）给各变量的值，以及本机覆盖值：
+// 变量名 → 值的集合。用于 harmonia exec --env 时认出终端里由 Harmonia 写入的变量。解不开的环境跳过。
+func Known(c *state.Cache, k *state.DeviceKeys, ov state.Overrides) map[string]map[string]bool {
+	out := map[string]map[string]bool{}
+	add := func(name, v string) {
+		if out[name] == nil {
+			out[name] = map[string]bool{}
+		}
+		out[name][v] = true
+	}
+	for _, env := range c.Environments {
+		vals, err := Values(c, k, env.ID)
+		if err != nil {
+			continue
+		}
+		for name, v := range vals {
+			add(name, v)
+		}
+	}
+	for _, vars := range ov {
+		for name, v := range vars {
+			add(name, v)
+		}
+	}
+	return out
+}

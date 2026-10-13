@@ -19,6 +19,7 @@ var version = "dev"
 
 type flags struct {
 	values map[string]string
+	lists  map[string][]string // 可以重复给出的选项，按出现顺序
 	bools  map[string]bool
 	args   []string
 	rest   []string // "--" 之后的参数
@@ -26,7 +27,7 @@ type flags struct {
 
 // parseFlags 解析参数，允许选项出现在位置参数之后。valued 列出需要取值的选项。
 func parseFlags(args []string, valued ...string) (*flags, error) {
-	f := &flags{values: map[string]string{}, bools: map[string]bool{}}
+	f := &flags{values: map[string]string{}, lists: map[string][]string{}, bools: map[string]bool{}}
 	needs := map[string]bool{}
 	for _, v := range valued {
 		needs[v] = true
@@ -51,6 +52,7 @@ func parseFlags(args []string, valued ...string) (*flags, error) {
 				val = args[i]
 			}
 			f.values[name] = val
+			f.lists[name] = append(f.lists[name], val)
 		} else {
 			f.bools[name] = true
 		}

@@ -106,7 +106,7 @@ var helpGroups = []struct {
 		{"override list", "列出本机覆盖"},
 	}},
 	{"使用变量", [][2]string{
-		{"exec [--env a,b] -- <命令...>", "带上变量运行命令；--env 按列出的顺序，靠前的优先"},
+		{"exec [--env a,b] -- <命令...>", "带上变量运行命令；--env 只用这些环境（可重复给出），靠前的优先"},
 		{"export [--format sh|dotenv|json]", "输出当前生效的变量"},
 	}},
 	{"安装与维护", slices.Concat(shellHelp, [][2]string{
