@@ -23,21 +23,21 @@ import (
 
 type terminalPrompt struct{}
 
-func (terminalPrompt) AskCode(message string) (string, error) {
-	fmt.Fprintln(os.Stderr, message)
-	return prompt("邮件中的验证码：")
-}
-
-func (terminalPrompt) ShowPairing(qr, code, name string, expiresAt time.Time) {
+func (terminalPrompt) ShowPairing(qr, code, name string, expiresAt time.Time, authorized bool) {
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "在管理设备上打开 Harmonia，进入“设备 → 添加设备”，扫描下面的二维码：")
+	if authorized {
+		fmt.Fprintln(os.Stderr, "已用配对码发起请求。管理设备上的 Harmonia 在前台时会直接弹出批准页，也可以在“设备”页的待批准列表中找到它。")
+		fmt.Fprintln(os.Stderr, "批准前请在管理设备上核对下面的核对码，或扫描二维码：")
+	} else {
+		fmt.Fprintln(os.Stderr, "在管理设备上打开 Harmonia，进入“设备 → 添加设备”，扫描下面的二维码：")
+	}
 	qrterminal.GenerateWithConfig(qr, qrterminal.Config{
 		Level: qrterminal.L, Writer: os.Stderr, HalfBlocks: true,
 		BlackChar: qrterminal.BLACK_BLACK, WhiteChar: qrterminal.WHITE_WHITE,
 		BlackWhiteChar: qrterminal.BLACK_WHITE, WhiteBlackChar: qrterminal.WHITE_BLACK, QuietZone: 2,
 	})
 	fmt.Fprintf(os.Stderr, "无法扫码时，选择“输入核对码”。核对码：%s\n", code)
-	fmt.Fprintf(os.Stderr, "批准前请确认显示的设备名是“%s”。请求在 %s 前有效。\n", name, expiresAt.Format("15:04"))
+	fmt.Fprintf(os.Stderr, "批准前请确认显示的设备名是“%s”。请求 5 分钟内（%s 前）有效。\n", name, expiresAt.Format("15:04"))
 }
 
 func (terminalPrompt) Waiting() {
@@ -45,7 +45,7 @@ func (terminalPrompt) Waiting() {
 }
 
 func cmdLogin(ctx context.Context, args []string) error {
-	f, err := parseFlags(args, "email", "name")
+	f, err := parseFlags(args, "email", "name", "code")
 	if err != nil {
 		return err
 	}
@@ -74,15 +74,13 @@ func cmdLogin(ctx context.Context, args []string) error {
 			in.Email = def
 		}
 	}
-	if f.bools["password-stdin"] {
-		in.Password, err = prompt("")
+	if code, ok := f.values["code"]; ok {
+		in.PairingCode = code
 	} else {
-		in.Password, err = promptSecret("密码：")
+		// 读不到输入（例如在脚本中运行）时按留空处理，改用扫码。
+		in.PairingCode, _ = prompt("配对码（在管理设备的“设备 → 添加设备 → 生成配对码”中获取；直接回车改用扫码）：")
 	}
-	if err != nil {
-		return err
-	}
-	fmt.Fprintln(os.Stderr, "正在登录……")
+	fmt.Fprintln(os.Stderr, "正在发起配对……")
 	a, n, err := app.Login(ctx, in, terminalPrompt{})
 	if err != nil {
 		return err

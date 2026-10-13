@@ -20,8 +20,6 @@ type Error struct {
 	Status  int
 	Code    string
 	Message string
-	// Flow 随 code_required 返回，带上它和邮件验证码再登录一次。
-	Flow string
 }
 
 func (e *Error) Error() string {
@@ -112,14 +110,14 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any, o r
 	defer res.Body.Close()
 	data, _ := io.ReadAll(io.LimitReader(res.Body, 64<<20))
 	if res.StatusCode != http.StatusOK {
-		var e struct{ Error, Message, Flow string }
+		var e struct{ Error, Message string }
 		if json.Unmarshal(data, &e) != nil || e.Error == "" {
 			return &Error{Status: res.StatusCode, Code: "http", Message: fmt.Sprintf("服务器返回了意外的响应（HTTP %d），请确认地址是 Harmonia 服务。", res.StatusCode)}
 		}
 		if e.Error == "device_revoked" {
 			return ErrRevoked
 		}
-		return &Error{Status: res.StatusCode, Code: e.Error, Message: e.Message, Flow: e.Flow}
+		return &Error{Status: res.StatusCode, Code: e.Error, Message: e.Message}
 	}
 	if out != nil {
 		if err := json.Unmarshal(data, out); err != nil {
@@ -129,14 +127,9 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any, o r
 	return nil
 }
 
-// Public 调用不需要会话的接口。
+// Public 调用不需要会话的接口；设置了 AccountID 时带上账号请求头。
 func (c *Client) Public(ctx context.Context, method, path string, body, out any) error {
 	return c.do(ctx, method, path, body, out, reqOpts{})
-}
-
-// WithToken 使用指定令牌（密码会话、恢复会话）调用。
-func (c *Client) WithToken(ctx context.Context, token, method, path string, body, out any) error {
-	return c.do(ctx, method, path, body, out, reqOpts{token: token})
 }
 
 // DeviceToken 返回有效的设备会话令牌，必要时重新登录。

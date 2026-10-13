@@ -60,10 +60,6 @@ func TestVectors(t *testing.T) {
 		t.Error("value aad must bind name")
 	}
 
-	if B64(PasswordKey(s("password", "password"), b("password", "salt"))) != s("password", "key") {
-		t.Error("password")
-	}
-
 	code := b("recovery", "code")
 	if FormatRecoveryCode(code) != s("recovery", "formatted") {
 		t.Error("recovery format")

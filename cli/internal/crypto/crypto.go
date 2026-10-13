@@ -15,17 +15,12 @@ import (
 	"strconv"
 	"strings"
 
-	"golang.org/x/crypto/argon2"
 	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/crypto/curve25519"
 	"golang.org/x/crypto/nacl/box"
 )
 
-const (
-	KdfOpsLimit = 3
-	KdfMemLimit = 64 * 1024 * 1024
-	MaxValueLen = 65536
-)
+const MaxValueLen = 65536
 
 var (
 	ErrDecrypt   = errors.New("解密失败")
@@ -73,11 +68,6 @@ func HKDF(ikm []byte, info string) []byte {
 		panic(err)
 	}
 	return out
-}
-
-// PasswordKey 与 libsodium crypto_pwhash(argon2id13, ops=3, mem=64MiB) 一致。
-func PasswordKey(password string, salt []byte) []byte {
-	return argon2.IDKey([]byte(password), salt, KdfOpsLimit, KdfMemLimit/1024, 1, 32)
 }
 
 // SignKey 是 Ed25519 签名密钥对。
