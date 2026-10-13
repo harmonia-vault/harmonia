@@ -35,7 +35,7 @@ void main() {
 
   // 测试中直接同步计算 Argon2id，不开 isolate。
   Keyring ring([HardwareKeys? h]) =>
-      Keyring(c, store, h ?? hw, derive: (p, s) async => c.passwordKey(p, s), now: () => now);
+      Keyring(c, store, h ?? hw, derive: (p, s) async => c.pinKey(p, s), now: () => now);
 
   test('PIN 格式', () {
     expect(Keyring.validPin('123456'), isTrue);

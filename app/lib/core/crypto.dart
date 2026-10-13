@@ -6,8 +6,9 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart' as hash;
 import 'package:sodium/sodium_sumo.dart';
 
-const kdfOpsLimit = 3;
-const kdfMemLimit = 64 * 1024 * 1024;
+/// App PIN 的 Argon2id 参数（协议 2 节“PIN 派生”）。
+const pinOpsLimit = 3;
+const pinMemLimit = 64 * 1024 * 1024;
 const maxValueLen = 65536;
 
 String b64(List<int> bytes) => base64Url.encode(bytes).replaceAll('=', '');
@@ -138,13 +139,14 @@ class HCrypto {
     return h.expand(masterKey: prk, context: info, outLen: 32).extractBytes();
   }
 
-  Uint8List passwordKey(String password, Uint8List salt) => sodium.crypto.pwhash
+  /// 由 App PIN 派生 PIN 槽的输入（协议 2.5）。
+  Uint8List pinKey(String pin, Uint8List salt) => sodium.crypto.pwhash
       .callStr(
         outLen: 32,
-        password: password,
+        password: pin,
         salt: salt,
-        opsLimit: kdfOpsLimit,
-        memLimit: kdfMemLimit,
+        opsLimit: pinOpsLimit,
+        memLimit: pinMemLimit,
         alg: CryptoPwhashAlgorithm.argon2id13,
       )
       .extractBytes();
@@ -273,9 +275,9 @@ String normalizeCode(String input) => input
     .replaceAll('O', '0')
     .replaceAll(RegExp('[IL]'), '1');
 
-/// 在后台 isolate 中计算密码派生密钥，避免界面卡顿。
-Future<Uint8List> passwordKeyInIsolate(String password, Uint8List salt) =>
+/// 在后台 isolate 中计算 PIN 派生值，避免界面卡顿。
+Future<Uint8List> pinKeyInIsolate(String pin, Uint8List salt) =>
     Isolate.run(() async {
       final c = await HCrypto.init();
-      return c.passwordKey(password, salt);
+      return c.pinKey(pin, salt);
     });

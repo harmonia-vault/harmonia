@@ -27,7 +27,13 @@ mixin VaultDevices {
     }
   }
 
-  /// 根据扫描到的二维码找到配对请求，并核对指纹。
+  /// 生成配对码（协议 3.2）：新设备带上它发起的请求会出现在待批准列表中。同时作废上一个配对码。
+  Future<PairingCode> createPairingCode() async {
+    final res = await api!.device('POST', '/api/v1/pairing-codes', body: {});
+    return PairingCode(res['code'] as String, DateTime.fromMillisecondsSinceEpoch(res['expiresAt'] as int));
+  }
+
+  /// 根据扫描到的二维码找到配对请求（匿名请求也可以），并核对指纹。
   Future<PairingRequest> pairingFromQr(String qr) async {
     final parsed = parsePairingQr(qr);
     if (parsed == null) throw VaultException('这不是 Harmonia 的配对二维码。');
@@ -37,7 +43,7 @@ mixin VaultDevices {
       res = await api!.device('GET', '/api/v1/pairings/$id');
     } on ApiException catch (e) {
       if (e.code == 'not_found' || e.code == 'conflict') {
-        throw VaultException('配对请求不存在或已过期，请在电脑上重新发起。');
+        throw VaultException('配对请求不存在或已过期，请在要接入的设备上重新发起。');
       }
       rethrow;
     }
@@ -50,7 +56,7 @@ mixin VaultDevices {
     return p;
   }
 
-  /// 根据手输的核对码在待处理请求中查找。
+  /// 根据手输的核对码在全部等待中的请求（包括匿名请求）中查找。
   Future<PairingRequest> pairingFromCode(String code) async {
     final want = normalizeCode(code);
     if (want.length != 16) throw VaultException('核对码是 16 位，请检查后重新输入。');
@@ -61,7 +67,7 @@ mixin VaultDevices {
         return p;
       }
     }
-    throw VaultException('没有找到匹配的配对请求。请确认核对码正确，并且电脑上的配对还没有过期。');
+    throw VaultException('没有找到匹配的配对请求。请确认核对码正确，并且对方的配对还没有过期（5 分钟）。');
   }
 
   /// 批准配对。asManager=true 时新设备成为管理设备，拥有全部环境。

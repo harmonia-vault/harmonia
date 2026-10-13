@@ -1,4 +1,4 @@
-// 本机还没有接入账号时的流程：注册、验证、登录、首次初始化、作为新手机配对、恢复、找回密码、重置账号。
+// 本机还没有接入账号时的流程：查询账号、注册、验证、首次初始化、作为新手机配对、恢复、重置账号。账号没有密码。
 import 'dart:io' show WebSocket;
 import 'dart:typed_data';
 
@@ -17,11 +17,20 @@ class InstanceInfo {
   final bool emailVerification;
 }
 
-class PasswordSession {
-  PasswordSession(this.server, this.email, this.token, this.accountId, this.initialized, this.rootPub);
-  final String server, email, token, accountId;
+/// 已经确定的账号。注册会话（[token]）只用于首次初始化；接入已初始化的账号不需要会话（协议 3.1）。
+class AccountSession {
+  AccountSession(this.server, this.email, this.accountId, this.initialized, this.rootPub, {this.token});
+  final String server, email, accountId;
   final bool initialized;
   final String? rootPub;
+  final String? token;
+}
+
+/// 注册结果：需要验证邮箱时给出绑定验证码的流程凭证 [flow]，否则直接给出注册会话。
+class Registration {
+  Registration({this.flow, this.session});
+  final String? flow;
+  final AccountSession? session;
 }
 
 /// 首次初始化前在本机生成的密钥与恢复码；用户确认抄写后才提交。
@@ -36,11 +45,14 @@ class SetupDraft {
 /// 作为新的管理设备发起的配对请求。
 class PendingPairing {
   PendingPairing(this.session, this.id, this.secret, this.signSeed, this.boxSeed, this.qr,
-      this.code, this.expiresAt, this.deviceName);
-  final PasswordSession session;
+      this.code, this.expiresAt, this.deviceName, {this.authorized = false});
+  final AccountSession session;
   final String id, secret, qr, code, deviceName;
   final Uint8List signSeed, boxSeed;
   final DateTime expiresAt;
+
+  /// 用配对码发起：管理设备会直接弹出批准页。
+  final bool authorized;
 
   /// 等待连接；关闭它即放弃这次请求，服务端随即作废。
   WebSocket? _socket;
@@ -68,77 +80,46 @@ class AccountService {
       throw VaultException('服务器版本（${res['version']}）与 App 不兼容，请升级 App 或服务器。');
     }
     final reg = (res['registration'] as Map).cast<String, dynamic>();
-    // 还没有升级的服务器不返回 first：按已有账号处理，默认显示登录。
+    // 还没有升级的服务器不返回 first：按已有账号处理。
     return InstanceInfo(server, res['version'] as String, reg['open'] as bool,
         reg['first'] as bool? ?? false, reg['emailVerification'] as bool);
   }
 
-  Future<Map<String, String>> _password(String password) async {
-    final salt = crypto.random(16);
-    return {'kdfSalt': b64(salt), 'authKey': b64(await passwordKeyInIsolate(password, salt))};
+  /// 匿名查询账号；邮箱还没有注册时返回 null。
+  Future<AccountSession?> lookup(String server, String email) async {
+    final e = email.trim().toLowerCase();
+    try {
+      final res = await _client(server)
+          .public('GET', '/api/v1/accounts/lookup?email=${Uri.encodeQueryComponent(e)}');
+      return AccountSession(server, e, res['accountId'] as String, res['initialized'] as bool, res['rootPub'] as String?);
+    } on ApiException catch (err) {
+      if (err.code == 'not_found') return null;
+      rethrow;
+    }
   }
 
-  /// 注册；返回是否需要验证邮箱。
-  /// 注册。需要验证邮箱时返回绑定验证码的流程凭证 flow，否则返回 null。
-  Future<String?> register(String server, String email, String password) async {
+  /// 注册。已注册但还没有初始化的账号按新注册处理。
+  Future<Registration> register(String server, String email) async {
+    final e = email.trim().toLowerCase();
+    final res = await _client(server).public('POST', '/api/v1/register', {'email': e});
+    if (res['verificationRequired'] == true) return Registration(flow: res['flow'] as String);
+    return Registration(session: _registered(server, e, res));
+  }
+
+  AccountSession _registered(String server, String email, Map<String, dynamic> res) =>
+      AccountSession(server, email, res['accountId'] as String, false, null, token: res['token'] as String);
+
+  /// 验证邮箱，返回注册会话。
+  Future<AccountSession> verifyEmail(String server, String email, String flow, String code) async {
+    final e = email.trim().toLowerCase();
     final res = await _client(server)
-        .public('POST', '/api/v1/register', {'email': email.trim(), ...await _password(password)});
-    return res['verificationRequired'] == true ? res['flow'] as String : null;
+        .public('POST', '/api/v1/register/verify', {'email': e, 'flow': flow, 'code': code});
+    return _registered(server, e, res);
   }
-
-  Future<void> verifyEmail(String server, String email, String flow, String code) => _client(server)
-      .public('POST', '/api/v1/register/verify', {'email': email.trim(), 'flow': flow, 'code': code});
 
   /// 重新发送验证码，返回新的流程凭证。
   Future<String> resendVerification(String server, String email) async =>
       (await _client(server).public('POST', '/api/v1/register/resend', {'email': email.trim()}))['flow'] as String;
-
-  /// 密码登录。账号正受到异常登录尝试时，服务端会在密码正确后要求邮件验证码：
-  /// 这时调用 [askCode] 向用户索要（返回 null 表示取消），验证码不对时带着提示再问。
-  Future<PasswordSession> login(String server, String email, String password,
-      {Future<String?> Function(String message)? askCode}) async {
-    final c = _client(server);
-    final pre = await c.public(
-        'GET', '/api/v1/auth/prelogin?email=${Uri.encodeQueryComponent(email.trim())}');
-    final key = await passwordKeyInIsolate(password, unb64(pre['kdfSalt'] as String));
-    final body = {'email': email.trim(), 'authKey': b64(key)};
-    Map<String, dynamic> s;
-    try {
-      s = await c.public('POST', '/api/v1/auth/login', body);
-    } on ApiException catch (e) {
-      if (e.code != 'code_required' || askCode == null) rethrow;
-      s = await _loginWithCode(c, body, e, askCode);
-    }
-    final token = s['token'] as String;
-    c.accountId = s['accountId'] as String;
-    final acct = await c.withToken(token, 'GET', '/api/v1/account');
-    return PasswordSession(server, acct['email'] as String, token, acct['accountId'] as String,
-        acct['initialized'] as bool, acct['rootPub'] as String?);
-  }
-
-  Future<Map<String, dynamic>> _loginWithCode(ApiClient c, Map<String, String> body, ApiException first,
-      Future<String?> Function(String message) askCode) async {
-    var message = first.message;
-    for (var attempt = 1;; attempt++) {
-      final code = await askCode(message);
-      if (code == null) throw ApiException(0, 'cancelled', '已取消登录。');
-      try {
-        return await c.public('POST', '/api/v1/auth/login', {...body, 'flow': first.flow!, 'code': code});
-      } on ApiException catch (e) {
-        if (e.code != 'invalid_request' || attempt >= 5) rethrow;
-        message = e.message;
-      }
-    }
-  }
-
-  /// 发送找回密码验证码，返回绑定它的流程凭证。
-  Future<String> requestPasswordReset(String server, String email) async =>
-      (await _client(server).public('POST', '/api/v1/password-reset/request', {'email': email.trim()}))['flow']
-          as String;
-
-  Future<void> completePasswordReset(String server, String email, String flow, String code, String newPassword) async =>
-      _client(server).public('POST', '/api/v1/password-reset/complete',
-          {'email': email.trim(), 'flow': flow, 'code': code, ...await _password(newPassword)});
 
   /// 发送重置账号验证码，返回绑定它的流程凭证。
   Future<String> requestAccountReset(String server, String email) async =>
@@ -153,14 +134,14 @@ class AccountService {
   SetupDraft prepareSetup() => SetupDraft(
       crypto.random(16), crypto.random(32), crypto.random(32), crypto.random(32), crypto.newId());
 
-  Future<LocalConfig> completeSetup(PasswordSession s, SetupDraft d, String deviceName) async {
+  Future<LocalConfig> completeSetup(AccountSession s, SetupDraft d, String deviceName) async {
     final root = crypto.signKeyFromSeed(d.rootSeed);
     final sign = crypto.signKeyFromSeed(d.signSeed);
     final box = crypto.boxKeyFromSeed(d.boxSeed);
     final rec = crypto.deriveRecovery(d.code);
     final recSealed = crypto.seal(d.rootSeed, rec.box.pub);
     final signPub = b64(sign.pub), boxPub = b64(box.pub);
-    await _client(s.server, s.accountId).withToken(s.token, 'POST', '/api/v1/account/setup', {
+    await _client(s.server, s.accountId).withToken(s.token!, 'POST', '/api/v1/account/setup', {
       'rootPub': b64(root.pub),
       'device': {
         'id': d.deviceId,
@@ -192,22 +173,25 @@ class AccountService {
 
   // ---- 作为新手机配对 ----
 
-  Future<PendingPairing> startPairing(PasswordSession s, String deviceName) async {
+  /// 发起配对，不需要会话。[code] 是管理设备上生成的配对码，为空时管理设备只能扫码或手输核对码取到这次请求。
+  Future<PendingPairing> startPairing(AccountSession s, String deviceName, {String? code}) async {
     final signSeed = crypto.random(32), boxSeed = crypto.random(32);
     final signPub = b64(crypto.signKeyFromSeed(signSeed).pub);
     final boxPub = b64(crypto.boxKeyFromSeed(boxSeed).pub);
-    final res = await _client(s.server, s.accountId).withToken(s.token, 'POST', '/api/v1/pairings', {
+    final res = await _client(s.server, s.accountId).public('POST', '/api/v1/pairings', {
       'name': deviceName,
       'platform': platform,
       'signPub': signPub,
       'boxPub': boxPub,
       'rootPub': s.rootPub,
       'canManage': true,
+      if (code != null && code.trim().isNotEmpty) 'code': code.trim(),
     });
     final id = res['id'] as String;
     final fp = pairingFingerprint(id, signPub, boxPub, s.rootPub!);
     return PendingPairing(s, id, res['secret'] as String, signSeed, boxSeed, pairingQr(id, fp),
-        pairingCode(fp), DateTime.fromMillisecondsSinceEpoch(res['expiresAt'] as int), deviceName);
+        pairingCode(fp), DateTime.fromMillisecondsSinceEpoch(res['expiresAt'] as int), deviceName,
+        authorized: res['authorized'] == true);
   }
 
   /// 保持等待连接直到有结果：批准后返回本机配置，否则抛出说明原因的异常。连上后调用 [onReady]。
@@ -242,7 +226,7 @@ class AccountService {
       case 'rejected':
         throw VaultException('这次配对被拒绝或已作废，请重新发起。');
       case 'expired':
-        throw VaultException('配对请求已过期（10 分钟），请重新发起。');
+        throw VaultException('配对请求已过期（5 分钟），请重新发起。');
     }
     throw VaultException('与服务器的连接中断，这次配对已作废。请检查网络后重新发起。');
   }

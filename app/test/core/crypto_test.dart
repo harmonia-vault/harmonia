@@ -56,10 +56,11 @@ void main() {
     expect(c.decryptValue(key, 'E', 1, 'N', ct), 'hello');
   });
 
-  test('密码', () {
-    expect(
-        b64(c.passwordKey(s('password', 'password'), b('password', 'salt'))),
-        s('password', 'key'));
+  // PIN 槽依赖这组参数（协议 2.5），改动后已有的 PIN 就解不开本机数据。
+  // 期望值由 Go 的 Argon2id 实现按同样的参数算出，只在 App 本机使用，不在三端共用向量中。
+  test('PIN 派生', () {
+    expect(b64(c.pinKey('correct horse 电池', unb64('BQYHCAkKCwwNDg8QERITFA'))),
+        'JyKd57S7C0tZfNKkCcgyymm6s9Gg8Im2dsSYhemGS5s');
   });
 
   test('恢复码', () {

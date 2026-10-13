@@ -8,6 +8,7 @@ import '../app/controller.dart';
 import '../core/crypto.dart';
 import 'device_review.dart';
 import 'lock.dart';
+import 'pairing_code.dart';
 import 'recovery_actions.dart';
 import 'theme.dart';
 import 'widgets.dart';
@@ -15,10 +16,9 @@ import 'app_scope.dart';
 
 /// 两步确认恢复码：先展示让用户抄写，再要求完整重新输入。
 class RecoveryCodeConfirm extends StatefulWidget {
-  const RecoveryCodeConfirm({super.key, required this.code, required this.onConfirmed, this.extra});
+  const RecoveryCodeConfirm({super.key, required this.code, required this.onConfirmed});
   final Uint8List code;
   final Future<void> Function() onConfirmed;
-  final Widget? extra;
   @override
   State<RecoveryCodeConfirm> createState() => _RecoveryCodeConfirmState();
 }
@@ -69,7 +69,6 @@ class _RecoveryCodeConfirmState extends State<RecoveryCodeConfirm> {
           style: const TextStyle(fontFamily: 'monospace', fontSize: 17),
           decoration: InputDecoration(labelText: '恢复码', errorText: _error),
         ),
-        if (widget.extra != null) ...[const SizedBox(height: Space.md), widget.extra!],
         const SizedBox(height: Space.xl),
         FilledButton(
           onPressed: () async {
@@ -125,9 +124,13 @@ class UnpairedPage extends StatelessWidget {
       if (c.notice != null) ...[Banner2(c.notice!, warn: true), const SizedBox(height: Space.lg)],
       _Choice(
         icon: Icons.phonelink_lock_outlined,
-        title: '让管理设备批准',
-        body: '在管理设备上扫描这台手机显示的二维码。',
-        onTap: () => runBusy(context, c.startPairing),
+        title: '接入这台手机',
+        body: '由管理设备扫描这台手机显示的二维码并批准。\n有配对码时可以填写，管理设备会直接弹出批准页。',
+        onTap: () async {
+          final code = await askPairingCode(context);
+          if (code == null || !context.mounted) return;
+          await runBusy(context, () => c.startPairing(code: code));
+        },
       ),
       const SizedBox(height: Space.md),
       _Choice(
@@ -188,7 +191,9 @@ class PairingWaitPage extends StatelessWidget {
     final palette = context.palette;
     return AuthScaffold(
       title: '等待批准',
-      subtitle: '在管理设备上打开 Harmonia，进入“设备 → 添加设备”，扫描下面的二维码。',
+      subtitle: p.authorized
+          ? '已用配对码发起，管理设备在前台时会直接弹出批准页。\n请在那台设备上核对下面的核对码一致后再批准。'
+          : '在管理设备上打开 Harmonia，进入“设备 → 添加设备”，扫描下面的二维码。',
       onBack: c.cancelPairing,
       children: [
         Center(
@@ -203,7 +208,7 @@ class PairingWaitPage extends StatelessWidget {
           ),
         ),
         const SizedBox(height: Space.xl),
-        const Text('无法扫码时，在管理设备上手动输入核对码：'),
+        Text(p.authorized ? '核对码：' : '无法扫码时，在管理设备上手动输入核对码：'),
         const SizedBox(height: Space.sm),
         CodeBox(p.code, copyable: false),
         const SizedBox(height: Space.lg),
@@ -284,21 +289,14 @@ class RotationPage extends StatefulWidget {
 
 class _RotationPageState extends State<RotationPage> {
   late final Uint8List _code = widget.c.newRecoveryCode();
-  final _password = TextEditingController();
-  bool _changePassword = false;
   bool _started = false;
   bool _done = false;
   bool _reviewing = false;
 
   Future<void> _submit() async {
-    final pw = _changePassword ? _password.text : null;
-    if (pw != null && validatePassword(pw) != null) {
-      toast(context, '新密码至少 8 位');
-      return;
-    }
     if (!widget.forced && !await confirmIdentity(context, '验证身份以更换恢复码')) return;
     if (!mounted) return;
-    final ok = await runBusy(context, () => widget.c.rotateRecovery(_code, newPassword: pw));
+    final ok = await runBusy(context, () => widget.c.rotateRecovery(_code));
     if (ok && mounted) setState(() => _done = true);
   }
 
@@ -333,7 +331,6 @@ class _RotationPageState extends State<RotationPage> {
       if (widget.forced) ...[
         const _Point(Icons.block_outlined, '完成前无法管理设备或修改数据。'),
         const _Point(Icons.replay_outlined, '中途退出也没关系，下次打开 Harmonia 会回到这里继续。'),
-        const _Point(Icons.password_outlined, '如果忘记了原来的登录密码，可以在这一步同时设置新密码。'),
       ] else ...[
         const _Point(Icons.undo_outlined, '提交前随时可以返回，不会有任何改变。'),
         const _Point(Icons.fingerprint, '提交时需要再验证一次身份。'),
@@ -350,34 +347,7 @@ class _RotationPageState extends State<RotationPage> {
       title: '保存新恢复码',
       subtitle: '新恢复码还没有生效，旧恢复码仍然可用。\n保存并核对后提交，才会替换旧恢复码。',
       onBack: () => setState(() => _started = false),
-      children: [
-        RecoveryCodeConfirm(
-          code: _code,
-          onConfirmed: _submit,
-          extra: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Card(
-                child: SwitchListTile(
-                  value: _changePassword,
-                  onChanged: (v) => setState(() => _changePassword = v),
-                  title: const Text('同时设置新的登录密码'),
-                  subtitle: widget.forced ? const Text('如果忘记了原来的密码，可以在这里重新设置') : null,
-                ),
-              ),
-              if (_changePassword) ...[
-                const SizedBox(height: Space.md),
-                TextField(
-                  autofillHints: AppScope.isSimulated(context) ? null : const [AutofillHints.newPassword],
-                  controller: _password,
-                  obscureText: true,
-                  decoration: const InputDecoration(labelText: '新密码（至少 8 位）'),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ],
+      children: [RecoveryCodeConfirm(code: _code, onConfirmed: _submit)],
     ),
   );
 }

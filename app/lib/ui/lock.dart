@@ -273,7 +273,7 @@ class _LockPageState extends State<LockPage> {
       if (!mounted) return;
       setState(() {
         _busy = false;
-        _error = '本机数据无法读取。请选择“忘记 PIN”清除本机数据后重新登录';
+        _error = '本机数据无法读取。请选择“忘记 PIN”清除本机数据后重新接入';
       });
     }
   }
@@ -284,7 +284,7 @@ class _LockPageState extends State<LockPage> {
       title: '清除本机数据？',
       body:
           '${_bio ? '如果只是忘记了 PIN，可以先用${widget.c.identity.bio('解锁')}，再到“设置”中修改 PIN。\n' : ''}'
-          '清除后，账号和云端数据不受影响，但这台手机需要重新登录，并由管理设备批准或用恢复码恢复。\n'
+          '清除后，账号和云端数据不受影响，但这台手机需要重新接入，并由管理设备批准或用恢复码恢复。\n'
           '这台手机原来的设备记录需要在管理设备上移除。',
       ok: '清除本机数据',
       danger: true,

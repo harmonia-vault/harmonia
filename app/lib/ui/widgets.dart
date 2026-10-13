@@ -406,11 +406,6 @@ String formatExpiry(int ms) {
   return '${t.month}月${t.day}日 ${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')} 到期';
 }
 
-String? validatePassword(String? v) {
-  if (v == null || v.length < 8) return '密码至少 8 位';
-  return null;
-}
-
 String? validateEmail(String? v) {
   if (v == null || !RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(v.trim())) return '请输入有效的邮箱地址';
   return null;

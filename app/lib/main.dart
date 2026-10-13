@@ -108,13 +108,13 @@ class _HarmoniaAppState extends State<HarmoniaApp> with WidgetsBindingObserver {
     setState(() {});
   }
 
-  /// 在首页收到新的配对请求时直接打开批准页。每个请求只弹一次；已有弹出的批准页时不再叠加，
-  /// 其余请求留在“设备”页的待批准列表里。
+  /// 在首页收到用配对码发起的新请求时直接打开批准页（匿名请求不弹出）。每个请求只弹一次；
+  /// 已有弹出的批准页时不再叠加，其余请求留在“设备”页的待批准列表里。
   Future<void> _popupPairing() async {
     final c = widget.c;
     final nav = _navigator.currentState;
     if (c.pageDebugActive || c.stage != Stage.home || nav == null) return;
-    final fresh = c.pairings.where((p) => _seenPairings.add(p.id)).toList();
+    final fresh = c.authorizedPairings.where((p) => _seenPairings.add(p.id)).toList();
     if (fresh.isEmpty || _reviewing) return;
     _reviewing = true;
     await nav.push(

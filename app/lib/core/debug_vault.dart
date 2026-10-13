@@ -28,7 +28,6 @@ class DebugVault extends Vault {
   final requests = <PairingRequest>[];
   final _rotations = <String>{};
   int _nextId = 0;
-  String password = 'preview-password';
 
   LocalConfig get sampleConfig => LocalConfig(
     server: 'https://debug.invalid',
@@ -63,7 +62,6 @@ class DebugVault extends Vault {
     this.scenario = scenario;
     _nextId = 3;
     _rotations.clear();
-    password = 'preview-password';
     config = sampleConfig;
     localKey = Uint8List(32);
     cache = SyncCache()..self = {'kind': 'manager'};
@@ -101,6 +99,22 @@ class DebugVault extends Vault {
         'rootPub': 'debug-root',
         'ip': '192.0.2.10',
         'canManage': false,
+        'authorized': true,
+        'expiresAt': DateTime.now().add(const Duration(hours: 1)).millisecondsSinceEpoch,
+      }),
+    );
+    // 没有用配对码的请求：不出现在待批准列表，只能扫码或手输核对码找到。
+    requests.add(
+      PairingRequest({
+        'id': 'debug-anonymous',
+        'name': '只能扫码找到的电脑',
+        'platform': 'darwin',
+        'signPub': 'debug-sign-2',
+        'boxPub': 'debug-box-2',
+        'rootPub': 'debug-root',
+        'ip': '198.51.100.20',
+        'canManage': false,
+        'authorized': false,
         'expiresAt': DateTime.now().add(const Duration(hours: 1)).millisecondsSinceEpoch,
       }),
     );
@@ -196,6 +210,12 @@ class DebugVault extends Vault {
   }
 
   @override
+  Future<PairingCode> createPairingCode() async {
+    check();
+    return PairingCode('7K3M9Q2P', DateTime.now().add(const Duration(minutes: 5)));
+  }
+
+  @override
   Future<PairingRequest> pairingFromQr(String qr) async {
     check();
     final id = parsePairingQr(qr)?.$1;
@@ -263,15 +283,8 @@ class DebugVault extends Vault {
   }
 
   @override
-  Future<void> changePassword(String newPassword) async {
+  Future<RotationAttempt> rotateRecovery(Uint8List newCode, {String? key}) async {
     check();
-    password = newPassword;
-  }
-
-  @override
-  Future<RotationAttempt> rotateRecovery(Uint8List newCode, {String? newPassword, String? key}) async {
-    check();
-    if (newPassword != null) password = newPassword;
     final rotation = key ?? 'debug-rotation-${++_nextId}';
     _rotations.add(rotation);
     cache.self['rotationRequired'] = false;
