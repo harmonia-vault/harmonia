@@ -17,7 +17,7 @@ esac
 os=$(uname -s | tr '[:upper:]' '[:lower:]')
 case "$os" in
   darwin|linux) ;;
-  *) echo "暂不支持这个系统：$os（目前支持 macOS 和 Linux）" >&2; exit 1 ;;
+  *) echo "暂不支持这个系统：${os}（目前支持 macOS 和 Linux）" >&2; exit 1 ;;
 esac
 case "$(uname -m)" in
   x86_64|amd64) arch=amd64 ;;
@@ -51,7 +51,7 @@ if [ -z "$url" ] || [ -z "$expected" ]; then
   exit 1
 fi
 
-echo "正在下载 harmonia $version（$os/$arch）……"
+echo "正在下载 harmonia ${version}（${os}/${arch}）……"
 fetch "$url" "$tmp/harmonia"
 if command -v sha256sum >/dev/null 2>&1; then
   actual=$(sha256sum "$tmp/harmonia" | cut -d' ' -f1)
