@@ -1,9 +1,11 @@
 // 设备详情中的“使用顺序”：开关某台设备上的环境、拖动调整顺序，并显示同名变量由哪个环境提供。
 // 激活只是使用上的便利，不是安全边界（docs/protocol.md 第 4 节），所以修改时不要求验证身份。
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../app/controller.dart';
 import '../core/models.dart';
+import 'glass.dart';
 import 'glass_controls.dart';
 import 'theme.dart';
 import 'widgets.dart';
@@ -62,12 +64,28 @@ class _ActivationEditorState extends State<ActivationEditor> {
     );
   }
 
+  /// 玻璃布局下拖动中的那一行是一块浮起的玻璃面板：随拖动略微放大，圆角与卡片一致。
+  Widget _glassProxy(Widget child, int index, Animation<double> animation) => AnimatedBuilder(
+    animation: animation,
+    child: child,
+    builder: (context, child) => Transform.scale(
+      scale: 1 + 0.03 * Curves.easeOut.transform(animation.value),
+      child: AppSurface(
+        color: context.palette.card,
+        radius: 24,
+        panel: true,
+        child: Material(type: MaterialType.transparency, child: child),
+      ),
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     final grants = _grants;
     final palette = context.palette;
     final now = DateTime.now().millisecondsSinceEpoch;
     final conflicts = _conflicts();
+    final glass = usesGlass(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -80,11 +98,15 @@ class _ActivationEditorState extends State<ActivationEditor> {
             physics: const NeverScrollableScrollPhysics(),
             buildDefaultDragHandles: false,
             onReorderItem: _move,
+            proxyDecorator: glass ? _glassProxy : null,
             children: [
               for (final (i, g) in grants.indexed)
                 ListTile(
                   key: ValueKey(g.envId),
-                  leading: ReorderableDragStartListener(index: i, child: const Icon(Icons.drag_handle)),
+                  leading: ReorderableDragStartListener(
+                    index: i,
+                    child: Icon(glass ? CupertinoIcons.line_horizontal_3 : Icons.drag_handle),
+                  ),
                   title: Text(widget.c.vault.environment(g.envId).name),
                   subtitle: g.expiresAt != 0 && g.expiresAt <= now ? const Text('授权已到期') : null,
                   trailing: AppSwitch(value: g.active, onChanged: (v) => _toggle(i, v)),
