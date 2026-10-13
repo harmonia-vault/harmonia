@@ -84,6 +84,10 @@ h1{margin:56px 0 16px;font-size:clamp(26px,7.4vw,44px);line-height:1.2;font-weig
 h1 em{font-style:normal;text-decoration:underline var(--yellow);text-decoration-thickness:.16em;text-underline-offset:.14em;text-decoration-skip-ink:none}
 .lead{margin:0;max-width:34em;font-size:17px;color:var(--mute)}
 .addr{display:flex;align-items:center;gap:20px;margin-top:32px;padding:18px 20px;border:1.5px solid var(--ink);border-radius:18px;background:var(--card);box-shadow:4px 4px 0 var(--yellow)}
+.ai{margin-top:32px;padding:18px 20px;border:1.5px solid var(--ink);border-radius:18px;background:var(--card);box-shadow:4px 4px 0 var(--accent)}
+.ai span{font-size:13px;letter-spacing:.08em;color:var(--mute)}
+.ai p{margin:0;font-size:14px;color:var(--mute)}
+.ai .prompt{margin:6px 0 12px;padding:12px 14px;border:1.5px dashed var(--ink);border-radius:12px;color:var(--ink);font-size:15px;overflow-wrap:anywhere;-webkit-user-select:all;user-select:all}
 .addr div{flex:1;min-width:0}
 .qr{flex:none;width:136px;height:136px;border-radius:10px}
 .addr span{font-size:13px;letter-spacing:.08em;color:var(--mute)}
@@ -101,9 +105,6 @@ p{margin:0 0 12px;color:var(--mute)}
 .term{margin:0 0 12px;padding:12px 16px;border:1.5px solid var(--term-edge);border-radius:14px;background:var(--term);color:#F2EDE4}
 .term span{display:block;font-size:12px;color:#A69D8D}
 .term code{display:block;padding:2px 0;font-size:13.5px;line-height:1.6;word-break:break-all;-webkit-user-select:all;user-select:all}
-.prompt{margin:0 0 12px;padding:12px 16px;border:1.5px dashed var(--ink);border-radius:14px;background:var(--card)}
-.prompt span{display:block;font-size:12px;color:var(--mute)}
-.prompt p{margin:0;padding:2px 0;color:var(--ink);font-size:14.5px;overflow-wrap:anywhere;-webkit-user-select:all;user-select:all}
 .or{margin-top:20px}
 .flow{display:grid;grid-template-columns:repeat(3,1fr)}
 .node{position:relative;padding:0 10px;text-align:center}
@@ -149,9 +150,13 @@ function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 }
 
-/** 复制给 AI 助手的一句话：用 install 安装命令行，读取 harmonia skill 的说明，接入这台服务器。address 已转义。 */
-function aiPrompt(install: string, address: string): string {
-  return escapeHtml(`${install} 安装 Harmonia，然后运行 harmonia skill，按输出的说明接入服务器 `) + address + "（邮箱和配对码问我）。";
+/** 复制给 AI 助手的一句话，各个系统通用：安装命令行，读取 harmonia skill 的说明，接入这台服务器。address 已转义。 */
+function aiPrompt(address: string): string {
+  return escapeHtml(
+    `在这台电脑上安装 Harmonia 命令行：macOS、Linux 运行 curl -fsSL ${FEED}/install.sh | HARMONIA_YES=1 sh；` +
+      `Windows 在 PowerShell 中运行 $env:HARMONIA_YES = '1'; irm ${FEED}/install.ps1 | iex。` +
+      `装好后运行 harmonia skill，按输出的说明接入服务器 `,
+  ) + address + "（邮箱和配对码问我）。";
 }
 
 function page(origin: string): string {
@@ -178,6 +183,11 @@ ${ICON}
 <main>
 <h1>这是一台 <em>Harmonia</em> 服务器</h1>
 <p class="lead">Harmonia 是一个自托管的环境变量同步工具：在手机上集中管理 API Key 等环境变量，授权给自己的电脑、服务器和 AI Agent 环境使用。</p>
+<section class="ai">
+<span>让 AI 助手部署（推荐）</span>
+<p class="prompt">${aiPrompt(address)}</p>
+<p>复制这句话发给 Claude Code、Codex 这类能运行命令的 AI 助手。它会装好命令行、Shell 集成和后台服务，再向你要邮箱和配对码，由你在手机 App 上批准。还没有账号的话，先按下面的“开始使用”安装 App 并注册。</p>
+</section>
 <div class="addr">
 <div>
 <span>服务器地址</span>
@@ -204,9 +214,7 @@ ${qrCode(origin)}
 <div class="term"><span>macOS、Linux</span><code>curl -fsSL ${FEED}/install.sh | sh</code></div>
 <div class="term"><span>Windows（在 PowerShell 里运行）</span><code>irm ${FEED}/install.ps1 | iex</code></div>
 <div class="term"><span>安装后接入</span><code>harmonia login ${address}</code></div>
-<p class="or">也可以把下面这句话复制给 Claude Code、Codex 这类能运行命令的 AI 助手：它会装好命令行、Shell 集成和后台服务，再向你要邮箱和配对码，由你在 App 上批准。</p>
-<div class="prompt"><span>给 AI 助手（macOS、Linux）</span><p>${aiPrompt(`运行 curl -fsSL ${FEED}/install.sh | HARMONIA_YES=1 sh`, address)}</p></div>
-<div class="prompt"><span>给 AI 助手（Windows）</span><p>${aiPrompt(`在 PowerShell 中运行 $env:HARMONIA_YES = '1'; irm ${FEED}/install.ps1 | iex`, address)}</p></div>
+<p class="or">也可以把最上面的提示词发给 AI 助手，由它完成这一步。</p>
 </li>
 </ol>
 

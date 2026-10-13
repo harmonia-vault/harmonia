@@ -16,10 +16,14 @@ describe("实例首页", () => {
     expect(html).toMatch(/<svg viewBox="-3 -3 \d+ \d+" class="qr"/);
   });
 
-  it("给出复制给 AI 助手的安装提示词，带上这台服务器的地址", async () => {
+  it("最上面给出各个系统通用的 AI 助手提示词，带上这台服务器的地址", async () => {
     const html = await homePage("https://vault.example.com").text();
-    expect(html).toContain("install.sh | HARMONIA_YES=1 sh 安装 Harmonia，然后运行 harmonia skill，按输出的说明接入服务器 https://vault.example.com（邮箱和配对码问我）。");
-    expect(html).toContain("$env:HARMONIA_YES = &#39;1&#39;; irm https://github.com/harmonia-vault/harmonia/releases/download/update-feed/install.ps1 | iex 安装 Harmonia");
+    const prompt = html.match(/<p class="prompt">(.*?)<\/p>/)?.[1] ?? "";
+    expect(prompt).toContain("install.sh | HARMONIA_YES=1 sh；");
+    expect(prompt).toContain("$env:HARMONIA_YES = &#39;1&#39;; irm https://github.com/harmonia-vault/harmonia/releases/download/update-feed/install.ps1 | iex。");
+    expect(prompt).toContain("运行 harmonia skill，按输出的说明接入服务器 https://vault.example.com（邮箱和配对码问我）。");
+    expect(html.match(/class="prompt"/g)).toHaveLength(1);
+    expect(html.indexOf('class="ai"')).toBeLessThan(html.indexOf('class="addr"'));
   });
 
   it("不带脚本，不加载外部资源", async () => {

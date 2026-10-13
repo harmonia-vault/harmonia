@@ -8,6 +8,7 @@ Harmonia 是一个自托管的环境变量同步工具：在手机上集中管�
 - **端到端加密**：变量在手机或电脑上加密后才上传，服务端只保存密文。
 - **手机负责授权**：新电脑扫码配对，由手机决定它能访问哪些环境、只读还是读写、多久到期；随时撤销。
 - **终端中使用**：安装 Shell 集成后自动加载变量；也可以用 `harmonia exec` 只给某个程序注入。
+- **AI 助手一句话部署**：把一句提示词发给 Claude Code、Codex 这类 AI 助手，它在电脑上装好命令行并接入，你只需在手机上批准，见[在电脑上接入](#3-在电脑上接入)。
 - **实时同步**：手机上改一次，几秒内同步到在线的电脑。
 - **自托管**：服务端部署在你自己的 Cloudflare 账号上，开源（MIT）。
 
@@ -47,6 +48,19 @@ Harmonia 没有上架 App Store。Releases 里的 `harmonia-<版本>.ipa` 没有
 
 ### 3. 在电脑上接入
 
+**推荐让 AI 助手来做。** 把下面这句话发给 Claude Code、Codex 这类能运行命令的 AI 助手，macOS、Linux、Windows 都用这一句（换成你的服务器地址）。在电脑浏览器里打开服务器地址，首页最上面也有这句话，地址已经填好：
+
+```text
+在这台电脑上安装 Harmonia 命令行：macOS、Linux 运行 curl -fsSL https://github.com/harmonia-vault/harmonia/releases/download/update-feed/install.sh | HARMONIA_YES=1 sh；Windows 在 PowerShell 中运行 $env:HARMONIA_YES = '1'; irm https://github.com/harmonia-vault/harmonia/releases/download/update-feed/install.ps1 | iex。装好后运行 harmonia skill，按输出的说明接入服务器 https://你的服务器地址（邮箱和配对码问我）。
+```
+
+- `HARMONIA_YES=1` 让安装脚本不再询问，直接装好 Shell 集成和后台服务（Windows 上是写入用户环境变量和后台服务）。
+- `harmonia skill` 输出给 AI 助手的使用说明：怎样接入、用 `harmonia exec` 使用变量、不把变量值打印出来、哪些命令要你同意才运行。`harmonia skill install` 把它保存成技能文件，写到 `~/.claude/skills` 和 `~/.agents/skills`（对应的工具目录存在时），或用 `--dir` 指定的目录。
+- 接入时 AI 助手会向你要邮箱和配对码（在 App 的“设备 → 添加设备 → 生成配对码”中获取），并把核对码告诉你，由你在手机上批准。
+- `harmonia update` 会顺带更新保存过的技能文件。说明里写着对应的版本，AI 助手发现版本对不上时会重新读取。
+
+#### 自己安装
+
 macOS、Linux：
 
 ```bash
@@ -72,25 +86,6 @@ harmonia login https://你的服务器地址
 命令会询问邮箱和配对码，不需要密码。配对码可以留空：终端会显示二维码，在 App 中打开“设备 → 添加设备”扫码（或手输终端里的核对码），选择这台电脑可以访问的环境和权限，批准。也可以先在 App 的“添加设备”里点“生成配对码”，把 8 位配对码填进去，这样手机在前台时会直接弹出批准页；批准前同样要核对核对码。授权的环境默认已启用。
 
 之后在手机上修改变量，同步完成后，电脑终端按一次空回车即可使用新值；直接执行的第一条命令可能仍使用旧值。在 App 的“设备详情”里可以开关某个环境、拖动调整顺序。
-
-### 让 AI 助手安装
-
-把下面这句话发给 Claude Code、Codex 这类能运行命令的 AI 助手（换成你的服务器地址和邮箱）：
-
-```text
-运行 curl -fsSL https://github.com/harmonia-vault/harmonia/releases/download/update-feed/install.sh | HARMONIA_YES=1 sh 安装 Harmonia，然后运行 harmonia skill，按输出的说明接入账号（服务器 https://你的服务器地址，邮箱 you@example.com）。
-```
-
-Windows 上用这一句：
-
-```text
-在 PowerShell 中运行 $env:HARMONIA_YES = '1'; irm https://github.com/harmonia-vault/harmonia/releases/download/update-feed/install.ps1 | iex 安装 Harmonia，然后运行 harmonia skill，按输出的说明接入账号（服务器 https://你的服务器地址，邮箱 you@example.com）。
-```
-
-- `HARMONIA_YES=1` 让安装脚本不再询问，直接装好 Shell 集成和后台服务（Windows 上是写入用户环境变量和后台服务）。
-- `harmonia skill` 输出给 AI 助手的使用说明：怎样接入、用 `harmonia exec` 使用变量、不把变量值打印出来、哪些命令要你同意才运行。`harmonia skill install` 把它保存成技能文件，写到 `~/.claude/skills` 和 `~/.agents/skills`（对应的工具目录存在时），或用 `--dir` 指定的目录。
-- 接入时 AI 助手会向你要配对码，并把核对码告诉你，由你在手机上批准。
-- `harmonia update` 会顺带更新保存过的技能文件。说明里写着对应的版本，AI 助手发现版本对不上时会重新读取。
 
 ### Windows
 
