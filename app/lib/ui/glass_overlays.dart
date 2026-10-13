@@ -97,7 +97,9 @@ class _GlassDialogState extends State<_GlassDialog> {
                     children: [
                       if (title != null)
                         Padding(
-                          padding: EdgeInsets.fromLTRB(14, 0, 14, body == null ? 0 : 6),
+                          // 正文是一段文字时与系统提醒框一样紧跟标题；是输入框等控件时多留一些，
+                          // 浮动标签不会顶到标题。
+                          padding: EdgeInsets.fromLTRB(14, 0, 14, body == null ? 0 : (content is Text ? 6 : 16)),
                           child: DefaultTextStyle(
                             style: theme.textTheme.titleLarge!.copyWith(
                               color: p.ink,
@@ -165,11 +167,43 @@ class _GlassDialogState extends State<_GlassDialog> {
 }
 
 class AppAlertDialog extends AlertDialog {
-  const AppAlertDialog({super.key, super.title, super.content, super.actions}) : super(scrollable: true);
+  const AppAlertDialog({super.key, super.title, super.content, super.actions, this.keyboard = false})
+    : super(scrollable: true);
+
+  /// 弹窗一出现就会弹出键盘（里面有自动聚焦的输入框）。
+  final bool keyboard;
 
   @override
-  Widget build(BuildContext context) =>
-      usesGlass(context) ? _GlassDialog(title: title, content: content, actions: actions) : super.build(context);
+  Widget build(BuildContext context) {
+    final dialog = usesGlass(context)
+        ? _GlassDialog(title: title, content: content, actions: actions)
+        : super.build(context);
+    return keyboard ? _KeyboardSpace(child: dialog) : dialog;
+  }
+}
+
+/// 一开始就按键盘弹出后的位置摆放弹窗。否则弹窗先出现在屏幕正中，再被键盘顶上去，
+/// 出现的动画里多出一段上移，和不带输入框的弹窗不一致。
+class _KeyboardSpace extends StatelessWidget {
+  const _KeyboardSpace({required this.child});
+  final Widget child;
+
+  /// 见过的最高键盘；还没见过时按屏幕高度估计。估高了只是弹窗略偏上，不会移动。
+  static double _tallest = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
+    final actual = media.viewInsets.bottom;
+    if (actual > _tallest) _tallest = actual;
+    // 横屏时键盘占比更大，最多按半屏预留，不把弹窗挤没。
+    final expected = (_tallest > 0 ? _tallest : media.size.height * 0.4).clamp(0.0, media.size.height * 0.5);
+    if (actual >= expected) return child;
+    return MediaQuery(
+      data: media.copyWith(viewInsets: media.viewInsets.copyWith(bottom: expected)),
+      child: child,
+    );
+  }
 }
 
 class AppSimpleDialog extends SimpleDialog {
@@ -204,7 +238,8 @@ class AppMenuButton extends StatelessWidget {
       menuBorderRadius: 28,
       itemBorderRadius: 20,
       menuPadding: const EdgeInsets.all(6),
-      settings: glassSettings(context),
+      // 菜单上是文字，与弹窗用同一种面板材质，背后的标题和按钮不会透出字形。
+      settings: glassPanelSettings(context, context.palette.card),
       quality: glassQuality(context),
       semanticLabel: '环境操作',
       items: [

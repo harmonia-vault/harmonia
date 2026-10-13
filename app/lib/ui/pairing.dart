@@ -45,6 +45,7 @@ class _AddDevicePageState extends State<AddDevicePage> {
       context: context,
       useRootNavigator: false,
       builder: (c) => AppAlertDialog(
+        keyboard: true,
         title: const Text('输入核对码'),
         content: TextField(
           controller: ctl,

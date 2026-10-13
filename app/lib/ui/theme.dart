@@ -106,9 +106,10 @@ ThemeData buildTheme(Brightness brightness, {bool liquidGlass = false, double gl
     outline: p.ink.withValues(alpha: 0.5),
     outlineVariant: p.line,
   );
+  // 输入框保留一道细线：浮动标签要落在线上，也用它和不可编辑的卡片区分。
   final border = OutlineInputBorder(
-    borderRadius: BorderRadius.circular(14),
-    borderSide: BorderSide(color: p.line, width: 1.2),
+    borderRadius: BorderRadius.circular(liquidGlass ? 18 : 14),
+    borderSide: BorderSide(color: p.line, width: liquidGlass ? 1 : 1.2),
   );
   return ThemeData(
     useMaterial3: true,
@@ -169,7 +170,8 @@ ThemeData buildTheme(Brightness brightness, {bool liquidGlass = false, double gl
         minimumSize: const Size(64, 52),
         shape: const StadiumBorder(),
         foregroundColor: p.ink,
-        side: BorderSide(color: p.ink.withValues(alpha: 0.6), width: 1.2),
+        backgroundColor: liquidGlass ? p.card : null,
+        side: liquidGlass ? BorderSide.none : BorderSide(color: p.ink.withValues(alpha: 0.6), width: 1.2),
       ),
     ),
     snackBarTheme: const SnackBarThemeData(behavior: SnackBarBehavior.floating),

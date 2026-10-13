@@ -26,6 +26,7 @@ Future<String?> askName(BuildContext context, {required String title, String ini
     context: context,
     useRootNavigator: false,
     builder: (c) => AppAlertDialog(
+      keyboard: true,
       title: Text(title),
       content: TextField(
         controller: ctl,
@@ -225,7 +226,8 @@ class _EnvironmentPageState extends State<EnvironmentPage> {
               child: Column(
                 children: [
                   for (final (i, n) in names.indexed) ...[
-                    if (i > 0) const Divider(),
+                    // 这一组没有行首图标，分隔线与文字左缘对齐。
+                    if (i > 0) Divider(indent: usesGlass(context) ? listRowPadding.start : null),
                     ListTile(
                       contentPadding: listRowPadding,
                       title: Text(
