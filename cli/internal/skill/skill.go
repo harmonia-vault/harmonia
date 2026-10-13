@@ -15,9 +15,10 @@ import (
 //go:embed SKILL.md
 var text string
 
-// Render 返回填入版本号的使用说明。
+// Render 返回填入版本号的使用说明。Windows 上检出的源码可能是 CRLF 换行，统一成 LF。
 func Render(version string) []byte {
-	return []byte(strings.ReplaceAll(text, "{{version}}", version))
+	s := strings.ReplaceAll(text, "\r\n", "\n")
+	return []byte(strings.ReplaceAll(s, "{{version}}", version))
 }
 
 // File 返回技能目录下 Harmonia 的技能文件路径。
