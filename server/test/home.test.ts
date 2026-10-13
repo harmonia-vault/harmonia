@@ -16,6 +16,12 @@ describe("实例首页", () => {
     expect(html).toMatch(/<svg viewBox="-3 -3 \d+ \d+" class="qr"/);
   });
 
+  it("给出复制给 AI 助手的安装提示词，带上这台服务器的地址", async () => {
+    const html = await homePage("https://vault.example.com").text();
+    expect(html).toContain("install.sh | HARMONIA_YES=1 sh 安装 Harmonia，然后运行 harmonia skill，按输出的说明接入服务器 https://vault.example.com（邮箱和配对码问我）。");
+    expect(html).toContain("$env:HARMONIA_YES = &#39;1&#39;; irm https://github.com/harmonia-vault/harmonia/releases/download/update-feed/install.ps1 | iex 安装 Harmonia");
+  });
+
   it("不带脚本，不加载外部资源", async () => {
     const res = await open(new TestServer(), "GET", "http://localhost/");
     expect(res.headers.get("content-security-policy")).toContain("default-src 'none'");

@@ -101,6 +101,10 @@ p{margin:0 0 12px;color:var(--mute)}
 .term{margin:0 0 12px;padding:12px 16px;border:1.5px solid var(--term-edge);border-radius:14px;background:var(--term);color:#F2EDE4}
 .term span{display:block;font-size:12px;color:#A69D8D}
 .term code{display:block;padding:2px 0;font-size:13.5px;line-height:1.6;word-break:break-all;-webkit-user-select:all;user-select:all}
+.prompt{margin:0 0 12px;padding:12px 16px;border:1.5px dashed var(--ink);border-radius:14px;background:var(--card)}
+.prompt span{display:block;font-size:12px;color:var(--mute)}
+.prompt p{margin:0;padding:2px 0;color:var(--ink);font-size:14.5px;overflow-wrap:anywhere;-webkit-user-select:all;user-select:all}
+.or{margin-top:20px}
 .flow{display:grid;grid-template-columns:repeat(3,1fr)}
 .node{position:relative;padding:0 10px;text-align:center}
 .node+.node::before{content:"";position:absolute;top:42px;left:calc(-50% + 54px);width:calc(100% - 108px);border-top:2px dashed var(--ink);opacity:.4}
@@ -143,6 +147,11 @@ function qrCode(text: string): string {
 
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+}
+
+/** 复制给 AI 助手的一句话：用 install 安装命令行，读取 harmonia skill 的说明，接入这台服务器。address 已转义。 */
+function aiPrompt(install: string, address: string): string {
+  return escapeHtml(`${install} 安装 Harmonia，然后运行 harmonia skill，按输出的说明接入服务器 `) + address + "（邮箱和配对码问我）。";
 }
 
 function page(origin: string): string {
@@ -195,6 +204,9 @@ ${qrCode(origin)}
 <div class="term"><span>macOS、Linux</span><code>curl -fsSL ${FEED}/install.sh | sh</code></div>
 <div class="term"><span>Windows（在 PowerShell 里运行）</span><code>irm ${FEED}/install.ps1 | iex</code></div>
 <div class="term"><span>安装后接入</span><code>harmonia login ${address}</code></div>
+<p class="or">也可以把下面这句话复制给 Claude Code、Codex 这类能运行命令的 AI 助手：它会装好命令行、Shell 集成和后台服务，再向你要邮箱和配对码，由你在 App 上批准。</p>
+<div class="prompt"><span>给 AI 助手（macOS、Linux）</span><p>${aiPrompt(`运行 curl -fsSL ${FEED}/install.sh | HARMONIA_YES=1 sh`, address)}</p></div>
+<div class="prompt"><span>给 AI 助手（Windows）</span><p>${aiPrompt(`在 PowerShell 中运行 $env:HARMONIA_YES = '1'; irm ${FEED}/install.ps1 | iex`, address)}</p></div>
 </li>
 </ol>
 

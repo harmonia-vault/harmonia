@@ -160,6 +160,7 @@
 对应 [rewrite-plan.md](rewrite-plan.md) 5.13。
 
 - [ ] **一行安装**：把 README 里的提示词交给 AI 助手（Claude Code 或 Codex），它不需要你在终端里回答任何问题就装好 harmonia、Shell 集成和后台服务；`harmonia status` 显示两项都已安装。Linux 上没有开启 linger 时，输出里给出要运行的 sudo 命令
+- [ ] **实例首页**：“接入电脑”一步下有两句给 AI 助手的提示词（macOS、Linux 和 Windows），里面的服务器地址就是这台服务器的地址，点一下即整段选中；手机上没有横向滚动，深色模式下也清楚
 - [ ] 在有终端的环境里手动运行带 `HARMONIA_YES=1` 的安装命令，同样不询问；Windows 上用 `$env:HARMONIA_YES = '1'` 效果相同
 - [ ] **读取说明**：`harmonia skill` 输出的说明开头写着当前版本，与 `harmonia version` 一致
 - [ ] **接入**：AI 助手按说明向你要服务器地址、邮箱和配对码，运行 `harmonia login` 后把核对码告诉你；你在手机上批准后接入完成
