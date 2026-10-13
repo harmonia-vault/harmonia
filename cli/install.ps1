@@ -2,7 +2,8 @@
 # 放到 %LOCALAPPDATA%\Programs\Harmonia 并加入用户的 Path。不需要管理员权限。
 #   irm https://github.com/harmonia-vault/harmonia/releases/download/update-feed/install.ps1 | iex
 #   安装测试版：先运行 $env:HARMONIA_CHANNEL = 'beta'
-#   不询问、直接开启写入用户环境变量和后台服务（供 AI 助手和脚本使用）：先运行 $env:HARMONIA_YES = '1'
+#   不询问、直接开启写入用户环境变量和后台服务：先运行 $env:HARMONIA_YES = '1'
+#   不询问、两项都不开启（供 AI 助手使用，装好后由它询问用户）：先运行 $env:HARMONIA_YES = '0'
 #
 # 这个文件必须保存为不带 BOM 的 UTF-8，文字一律放在单引号里并经过 T：
 # Windows PowerShell 5.1 的 irm 会把 UTF-8 的中文按单字节读错，T 把读错的文字还原。
@@ -96,7 +97,7 @@
       # 重新安装：之前的选择保持不变，只让后台服务换成新版本。
       if ($service) { & $exe service install }
       Say '已更新。'
-    } elseif ([Environment]::UserInteractive -and -not [Console]::IsInputRedirected) {
+    } elseif ($env:HARMONIA_YES -ne '0' -and [Environment]::UserInteractive -and -not [Console]::IsInputRedirected) {
       # 有终端可以交互时，询问是否开启写入用户环境变量和后台服务，直接回车即同意。
       Write-Host ''
       Say '[1/2] 用户环境变量：把同步的变量写入 Windows 的用户环境变量，新启动的程序都能读到。'

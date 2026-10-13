@@ -159,9 +159,10 @@
 
 对应 [rewrite-plan.md](rewrite-plan.md) 5.13。
 
-- [ ] **一行安装**：把 README 里的提示词交给 AI 助手（Claude Code 或 Codex），它不需要你在终端里回答任何问题就装好 harmonia、Shell 集成和后台服务；`harmonia status` 显示两项都已安装。Linux 上没有开启 linger 时，输出里给出要运行的 sudo 命令
+- [ ] **一行安装**：把 README 里的提示词交给 AI 助手（Claude Code 或 Codex），它不需要你在终端里回答任何问题就装好 harmonia；这时 `harmonia status` 显示 Shell 集成和后台服务都未安装
+- [ ] **询问开启**：装好后 AI 助手分别说明 Shell 集成和后台服务的作用、不开启时怎么用、两者的区别，并问你是否开启；只开启你同意的那项，`harmonia status` 与你的选择一致。Linux 上开启后台服务后需要 linger 时，它把 sudo 命令和原因告诉你，不自己运行
 - [ ] **实例首页**：“接入电脑”一步在安装命令之前是“让 AI 助手安装”，卡片里只有一段各系统通用的提示词（开头简单介绍 Harmonia），没有其他说明文字，里面的服务器地址就是这台服务器的地址；服务器地址、提示词和三条命令都有“复制”按钮，点后显示“已复制”，粘贴出来的内容正确（用 HTTPS 地址和 http://localhost 各试一次）；在 macOS、Linux、Windows 上把同一句发给 AI 助手都能装好；手机上没有横向滚动，深色模式下也清楚
-- [ ] 在有终端的环境里手动运行带 `HARMONIA_YES=1` 的安装命令，同样不询问；Windows 上用 `$env:HARMONIA_YES = '1'` 效果相同
+- [ ] 在有终端的环境里手动运行带 `HARMONIA_YES=0` 的安装命令，不询问、两项都不装；`HARMONIA_YES=1` 不询问、两项都装上。Windows 上用 `$env:HARMONIA_YES = '0'`、`'1'` 效果相同
 - [ ] **读取说明**：`harmonia skill` 输出的说明开头写着当前版本，与 `harmonia version` 一致
 - [ ] **接入**：AI 助手按说明向你要服务器地址、邮箱和配对码，运行 `harmonia login` 后把核对码告诉你；你在手机上批准后接入完成
 - [ ] **使用变量**：让 AI 助手运行一个需要某个密钥的命令，它用 `harmonia exec` 运行，对话里没有出现变量值

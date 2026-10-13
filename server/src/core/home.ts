@@ -161,9 +161,9 @@ function escapeHtml(value: string): string {
 function aiPrompt(origin: string): string {
   return escapeHtml(
     `Harmonia（和弦，${origin}）是用户部署的环境变量同步服务，开源、自托管：用户在手机 App 上管理 API Key 等环境变量，端到端加密后同步到用户授权的电脑，你可以用它的命令行取用这些变量，不需要用户把 Key 贴进对话。` +
-      `请在这台电脑上安装 Harmonia 命令行：macOS、Linux 运行 curl -fsSL ${FEED}/install.sh | HARMONIA_YES=1 sh；` +
-      `Windows 在 PowerShell 中运行 $env:HARMONIA_YES = '1'; irm ${FEED}/install.ps1 | iex。` +
-      `装好后运行 harmonia skill，按输出的说明接入服务器 ${origin}（邮箱和配对码向用户询问）。`,
+      `请在这台电脑上安装 Harmonia 命令行：macOS、Linux 运行 curl -fsSL ${FEED}/install.sh | HARMONIA_YES=0 sh；` +
+      `Windows 在 PowerShell 中运行 $env:HARMONIA_YES = '0'; irm ${FEED}/install.ps1 | iex。` +
+      `装好后运行 harmonia skill，按输出的说明接入服务器 ${origin}（邮箱和配对码向用户询问），并询问用户是否开启 Shell 集成和后台服务。`,
   );
 }
 
