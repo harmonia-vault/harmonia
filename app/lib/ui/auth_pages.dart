@@ -115,7 +115,6 @@ class _SignInPageState extends State<SignInPage> {
       useRootNavigator: false,
       barrierDismissible: false,
       builder: (ctx) => AppAlertDialog(
-        keyboard: true,
         title: const Text('输入邮箱验证码'),
         content: Column(
           mainAxisSize: MainAxisSize.min,

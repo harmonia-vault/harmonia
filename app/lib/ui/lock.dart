@@ -117,7 +117,6 @@ class _PinDialogState extends State<_PinDialog> {
 
   @override
   Widget build(BuildContext context) => AppAlertDialog(
-    keyboard: true,
     title: const Text('输入 App PIN'),
     content: Column(
       mainAxisSize: MainAxisSize.min,
@@ -144,7 +143,6 @@ Future<String?> askNewPin(BuildContext context) {
     useRootNavigator: false,
     builder: (c) => StatefulBuilder(
       builder: (c, setState) => AppAlertDialog(
-        keyboard: true,
         title: const Text('设置新的 App PIN'),
         content: Column(
           mainAxisSize: MainAxisSize.min,

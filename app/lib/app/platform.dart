@@ -38,5 +38,5 @@ Future<void> copySensitive(String text) => _channel.invokeMethod('copySensitive'
 /// 用户取消时返回 false。
 Future<bool> shareFile(String path) async => await _channel.invokeMethod<bool>('shareFile', {'path': path}) ?? false;
 
-/// 用系统浏览器打开网页（iOS 上用来打开新版本的下载页）。
+/// 用系统浏览器打开网页（Android 与 iOS 上用来打开新版本的下载页）。
 Future<void> openUrl(String url) => _channel.invokeMethod('openUrl', {'url': url});

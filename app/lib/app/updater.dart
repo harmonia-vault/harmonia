@@ -153,13 +153,13 @@ Future<void> checkForUpdate(BuildContext context, {required bool manual, require
       current: '0.0.0',
       notes: List.generate(8, (i) => '- 示例更新 ${i + 1}：检查长内容滚动与固定按钮。').join('\n'),
       hint: '此处使用模拟更新。',
-      primary: '模拟安装',
-      secondary: '模拟打开下载页',
+      primary: Platform.isIOS ? '下载并导入签名工具' : '下载并安装',
+      secondary: '打开下载页',
     );
     if (!context.mounted) return;
     if (choice == UpdateChoice.primary) {
       await simulateUpdateDownload(context);
-    } else if (choice != null) {
+    } else if (choice == UpdateChoice.secondary) {
       toast(context, '模拟打开下载页');
     }
     return;
@@ -201,8 +201,17 @@ Future<void> checkForUpdate(BuildContext context, {required bool manual, require
     notes: info.notes,
     hint: '下载后会打开系统安装界面，数据会保留。',
     primary: '下载并安装',
+    secondary: '打开下载页',
   );
   if (choice == null || !context.mounted) return;
+  if (choice == UpdateChoice.secondary) {
+    try {
+      await openUrl('$_releases/tag/v${info.version}');
+    } on PlatformException {
+      if (context.mounted) toast(context, '无法打开下载页，请安装或启用浏览器后重试');
+    }
+    return;
+  }
   if (await _channel.invokeMethod<bool>('canInstall') != true) {
     if (!context.mounted) return;
     final ok = await confirmDialog(

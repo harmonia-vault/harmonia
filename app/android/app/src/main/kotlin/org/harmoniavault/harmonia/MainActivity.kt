@@ -1,5 +1,6 @@
 package org.harmoniavault.harmonia
 
+import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipDescription
 import android.content.ClipboardManager
@@ -21,7 +22,7 @@ import io.flutter.plugin.common.MethodChannel
 import java.io.File
 
 // FlutterFragmentActivity 是 BiometricPrompt 的要求。平台通道提供：设备名、安装更新 APK、
-// HTML 转 PDF、通过系统“保存到”保存文件、敏感内容复制（1 分钟后清空剪贴板）；
+// 打开网页、HTML 转 PDF、通过系统“保存到”保存文件、敏感内容复制（1 分钟后清空剪贴板）；
 // 本机密钥保护见 LocalKeys。
 class MainActivity : FlutterFragmentActivity() {
     private val handler = Handler(Looper.getMainLooper())
@@ -86,6 +87,14 @@ class MainActivity : FlutterFragmentActivity() {
                             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
                     )
                     result.success(null)
+                }
+                "openUrl" -> {
+                    try {
+                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(call.argument<String>("url")!!)))
+                        result.success(null)
+                    } catch (_: ActivityNotFoundException) {
+                        result.error("open_failed", null, null)
+                    }
                 }
                 "htmlToPdf" -> HtmlPdf.render(this, call.argument<String>("html")!!) { bytes ->
                     if (bytes != null) result.success(bytes) else result.error("pdf_failed", null, null)

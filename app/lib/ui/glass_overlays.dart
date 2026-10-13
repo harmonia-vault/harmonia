@@ -167,43 +167,11 @@ class _GlassDialogState extends State<_GlassDialog> {
 }
 
 class AppAlertDialog extends AlertDialog {
-  const AppAlertDialog({super.key, super.title, super.content, super.actions, this.keyboard = false})
-    : super(scrollable: true);
-
-  /// 弹窗一出现就会弹出键盘（里面有自动聚焦的输入框）。
-  final bool keyboard;
+  const AppAlertDialog({super.key, super.title, super.content, super.actions}) : super(scrollable: true);
 
   @override
-  Widget build(BuildContext context) {
-    final dialog = usesGlass(context)
-        ? _GlassDialog(title: title, content: content, actions: actions)
-        : super.build(context);
-    return keyboard ? _KeyboardSpace(child: dialog) : dialog;
-  }
-}
-
-/// 一开始就按键盘弹出后的位置摆放弹窗。否则弹窗先出现在屏幕正中，再被键盘顶上去，
-/// 出现的动画里多出一段上移，和不带输入框的弹窗不一致。
-class _KeyboardSpace extends StatelessWidget {
-  const _KeyboardSpace({required this.child});
-  final Widget child;
-
-  /// 见过的最高键盘；还没见过时按屏幕高度估计。估高了只是弹窗略偏上，不会移动。
-  static double _tallest = 0;
-
-  @override
-  Widget build(BuildContext context) {
-    final media = MediaQuery.of(context);
-    final actual = media.viewInsets.bottom;
-    if (actual > _tallest) _tallest = actual;
-    // 横屏时键盘占比更大，最多按半屏预留，不把弹窗挤没。
-    final expected = (_tallest > 0 ? _tallest : media.size.height * 0.4).clamp(0.0, media.size.height * 0.5);
-    if (actual >= expected) return child;
-    return MediaQuery(
-      data: media.copyWith(viewInsets: media.viewInsets.copyWith(bottom: expected)),
-      child: child,
-    );
-  }
+  Widget build(BuildContext context) =>
+      usesGlass(context) ? _GlassDialog(title: title, content: content, actions: actions) : super.build(context);
 }
 
 class AppSimpleDialog extends SimpleDialog {

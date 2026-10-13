@@ -26,7 +26,6 @@ Future<String?> askName(BuildContext context, {required String title, String ini
     context: context,
     useRootNavigator: false,
     builder: (c) => AppAlertDialog(
-      keyboard: true,
       title: Text(title),
       content: TextField(
         controller: ctl,

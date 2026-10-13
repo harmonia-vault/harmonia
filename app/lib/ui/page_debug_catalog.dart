@@ -162,7 +162,7 @@ Map<String, List<DebugPageEntry>> debugPages() => {
   ],
   '弹窗与弹层': [
     DebugPageEntry(
-      '首页新建环境、遮罩与键盘避让',
+      '首页新建环境、遮罩与键盘弹出避让',
       (s) => DebugOverlay(
         background: HomePage(c: s.c),
         show: (c) => askName(c, title: '新建环境', label: '环境名称'),
@@ -218,7 +218,7 @@ Map<String, List<DebugPageEntry>> debugPages() => {
       ),
     ),
     DebugPageEntry(
-      '检查更新、长说明与下载',
+      '检查更新、长说明与下载页',
       (s) => DebugOverlay(show: (c) => checkForUpdate(c, manual: true, channel: s.c.updateChannel)),
     ),
   ],
