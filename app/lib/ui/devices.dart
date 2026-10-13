@@ -54,9 +54,8 @@ class _DevicesTabState extends State<DevicesTab> {
     _loadPending();
   }
 
-  Future<void> _addDevice() async {
-    await addDevice(context, c);
-    if (mounted) await _loadPending();
+  void _refreshAfterAdd() {
+    if (mounted) _loadPending();
   }
 
   @override
@@ -69,11 +68,18 @@ class _DevicesTabState extends State<DevicesTab> {
     final me = c.vault.config!.deviceId;
     return AppTabPage(
       title: '设备',
-      actions: [IconButton(tooltip: '添加设备', onPressed: _addDevice, icon: const Icon(Icons.add))],
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _addDevice,
-        icon: const Icon(Icons.add),
-        label: const Text('添加设备'),
+      actions: [
+        AddDeviceMenu(
+          c: c,
+          onDone: _refreshAfterAdd,
+          trigger: (context, open) => IconButton(tooltip: '添加设备', onPressed: open, icon: const Icon(Icons.add)),
+        ),
+      ],
+      floatingActionButton: AddDeviceMenu(
+        c: c,
+        onDone: _refreshAfterAdd,
+        trigger: (context, open) =>
+            FloatingActionButton.extended(onPressed: open, icon: const Icon(Icons.add), label: const Text('添加设备')),
       ),
       onRefresh: () async {
         await c.syncNow();

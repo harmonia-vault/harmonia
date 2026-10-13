@@ -14,35 +14,35 @@ import 'glass_overlays.dart';
 import 'glass.dart';
 import 'widgets.dart';
 
-/// 添加设备：先选择方式。配对码要在对方发起之前生成，扫码则在对方发起之后，两者分开放（docs/rewrite-plan.md 5.10）。
-Future<void> addDevice(BuildContext context, AppController c) async {
-  final scan = await showAppDialog<bool>(
-    context: context,
-    useRootNavigator: false,
-    builder: (ctx) => AppSimpleDialog(
-      title: const Text('添加设备'),
-      children: [
-        ListTile(
-          leading: const Icon(Icons.qr_code_scanner),
-          title: const Text('扫码或输入核对码'),
-          subtitle: Text(tidy('对方已经显示了二维码，例如电脑上运行了 harmonia login，或另一台手机选择了接入')),
-          onTap: () => Navigator.pop(ctx, true),
-        ),
-        ListTile(
-          leading: const Icon(Icons.password_outlined),
-          title: const Text('生成配对码'),
-          subtitle: Text(tidy('对方还没开始：先生成配对码告诉对方，对方发起后这里会直接弹出批准页')),
-          onTap: () => Navigator.pop(ctx, false),
-        ),
-      ],
-    ),
-  );
-  if (scan == null || !context.mounted) return;
-  if (scan) {
-    await Navigator.push(context, MaterialPageRoute(builder: (_) => AddDevicePage(c: c)));
-  } else {
-    await showPairingCode(context, c);
+/// “添加设备”按钮：从按钮展开浮动菜单，先选择方式。配对码要在对方发起之前生成，扫码则在对方发起之后，
+/// 两者并列（docs/rewrite-plan.md 5.10）。[trigger] 是展开菜单的按钮，例如设备页的悬浮按钮或标题栏的加号。
+class AddDeviceMenu extends StatelessWidget {
+  const AddDeviceMenu({super.key, required this.c, required this.trigger, this.onDone});
+  final AppController c;
+  final Widget Function(BuildContext context, VoidCallback open) trigger;
+
+  /// 选完的流程结束后调用，例如刷新待批准列表。
+  final VoidCallback? onDone;
+
+  Future<void> _select(BuildContext context, String way) async {
+    if (way == 'code') {
+      await showPairingCode(context, c);
+    } else {
+      await Navigator.push(context, MaterialPageRoute(builder: (_) => AddDevicePage(c: c)));
+    }
+    onDone?.call();
   }
+
+  @override
+  Widget build(BuildContext context) => AppMenuButton(
+    semanticLabel: '添加设备',
+    trigger: trigger,
+    items: const [
+      (value: 'code', label: '生成配对码', icon: Icons.password_outlined, danger: false),
+      (value: 'scan', label: '扫码确认', icon: Icons.qr_code_scanner, danger: false),
+    ],
+    onSelected: (way) => _select(context, way),
+  );
 }
 
 class AddDevicePage extends StatefulWidget {
@@ -102,7 +102,7 @@ class _AddDevicePageState extends State<AddDevicePage> {
     body: (context) => ListView(
       padding: pagePadding(context, const EdgeInsets.all(Space.lg)),
       children: [
-        const Text('扫描电脑终端或另一台手机上显示的二维码。'),
+        Text(tidy('扫描对方屏幕上显示的二维码，例如电脑上运行了 harmonia login，或另一台手机选择了接入。')),
         const SizedBox(height: Space.md),
         QrScannerView(
           // 页面调试中扫到的是只能扫码找到的示例请求。
