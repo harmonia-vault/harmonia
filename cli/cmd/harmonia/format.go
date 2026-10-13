@@ -113,6 +113,7 @@ var helpGroups = []struct {
 		{"service install|uninstall|status", "管理后台同步服务"},
 		{"update [--check]", "检查并升级 harmonia"},
 		{"update channel [stable|beta]", "查看或切换更新渠道（正式版 / 测试版）"},
+		{"skill [install [--dir 目录]]", "输出给 AI 助手的使用说明；install 保存成技能文件"},
 		{"logout", "退出账号并清除本机数据"},
 		{"uninstall", uninstallSummary},
 		{"version", "显示版本"},

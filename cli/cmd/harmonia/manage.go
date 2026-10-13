@@ -141,6 +141,7 @@ func cmdUninstall(ctx context.Context, args []string) error {
 	if err := removeIntegration(a); err != nil {
 		return err
 	}
+	removeSkills()
 	if err := os.RemoveAll(a.Dir.Path); err != nil {
 		return err
 	}

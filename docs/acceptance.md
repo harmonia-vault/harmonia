@@ -152,3 +152,18 @@
 - [ ] 扫到别的二维码（例如电脑终端里的配对二维码）时提示这不是服务器的二维码，可以继续扫；拒绝相机权限时提示改为手动填写
 - [ ] 用手机相机（不是 App）扫首页的二维码，会在浏览器里打开这张首页
 - [ ] 在浏览器里打开 `<服务器地址>/api/v1/instance`，其中的 `version` 与部署的版本一致
+
+---
+
+# 给 AI 助手使用
+
+对应 [rewrite-plan.md](rewrite-plan.md) 5.13。
+
+- [ ] **一行安装**：把 README 里的提示词交给 AI 助手（Claude Code 或 Codex），它不需要你在终端里回答任何问题就装好 harmonia、Shell 集成和后台服务；`harmonia status` 显示两项都已安装。Linux 上没有开启 linger 时，输出里给出要运行的 sudo 命令
+- [ ] 在有终端的环境里手动运行带 `HARMONIA_YES=1` 的安装命令，同样不询问；Windows 上用 `$env:HARMONIA_YES = '1'` 效果相同
+- [ ] **读取说明**：`harmonia skill` 输出的说明开头写着当前版本，与 `harmonia version` 一致
+- [ ] **接入**：AI 助手按说明向你要服务器地址、邮箱和配对码，运行 `harmonia login` 后把核对码告诉你；你在手机上批准后接入完成
+- [ ] **使用变量**：让 AI 助手运行一个需要某个密钥的命令，它用 `harmonia exec` 运行，对话里没有出现变量值
+- [ ] **保存技能文件**：有 `~/.claude` 时，`harmonia skill install` 写入 `~/.claude/skills/harmonia/SKILL.md`，新开的 Claude Code 能识别这个技能；`--dir` 写入指定目录；两个工具目录都没有、也没给 `--dir` 时，提示怎么做
+- [ ] **升级**：发布更高的版本后，`harmonia update` 自动覆盖保存过的技能文件，里面的版本变成新版本，输出提示 AI 助手重新读取；用安装脚本重装新版本后，AI 助手发现版本不一致，会重新运行 `harmonia skill`
+- [ ] **卸载**：`harmonia uninstall` 后，保存过的技能文件和空的 `harmonia` 目录被删除

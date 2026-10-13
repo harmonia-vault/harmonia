@@ -73,6 +73,25 @@ harmonia login https://你的服务器地址
 
 之后在手机上修改变量，同步完成后，电脑终端按一次空回车即可使用新值；直接执行的第一条命令可能仍使用旧值。在 App 的“设备详情”里可以开关某个环境、拖动调整顺序。
 
+### 让 AI 助手安装
+
+把下面这句话发给 Claude Code、Codex 这类能运行命令的 AI 助手（换成你的服务器地址和邮箱）：
+
+```text
+运行 curl -fsSL https://github.com/harmonia-vault/harmonia/releases/download/update-feed/install.sh | HARMONIA_YES=1 sh 安装 Harmonia，然后运行 harmonia skill，按输出的说明接入账号（服务器 https://你的服务器地址，邮箱 you@example.com）。
+```
+
+Windows 上用这一句：
+
+```text
+在 PowerShell 中运行 $env:HARMONIA_YES = '1'; irm https://github.com/harmonia-vault/harmonia/releases/download/update-feed/install.ps1 | iex 安装 Harmonia，然后运行 harmonia skill，按输出的说明接入账号（服务器 https://你的服务器地址，邮箱 you@example.com）。
+```
+
+- `HARMONIA_YES=1` 让安装脚本不再询问，直接装好 Shell 集成和后台服务（Windows 上是写入用户环境变量和后台服务）。
+- `harmonia skill` 输出给 AI 助手的使用说明：怎样接入、用 `harmonia exec` 使用变量、不把变量值打印出来、哪些命令要你同意才运行。`harmonia skill install` 把它保存成技能文件，写到 `~/.claude/skills` 和 `~/.agents/skills`（对应的工具目录存在时），或用 `--dir` 指定的目录。
+- 接入时 AI 助手会向你要配对码，并把核对码告诉你，由你在手机上批准。
+- `harmonia update` 会顺带更新保存过的技能文件。说明里写着对应的版本，AI 助手发现版本对不上时会重新读取。
+
 ### Windows
 
 Windows 10（1809 及以上）、Windows 11 都可以用，系统自带的 Windows PowerShell 和 PowerShell 7 都能运行安装命令。程序装在 `%LOCALAPPDATA%\Programs\Harmonia`，安装后新开一个终端即可使用 `harmonia`。
@@ -107,6 +126,7 @@ harmonia import --env <环境>          从当前终端勾选已有的环境变�
 harmonia override set <环境> <变量名> <值>
                                       设置只在本机生效的值，不上传
 harmonia update                       升级 harmonia
+harmonia skill                        输出给 AI 助手的使用说明（install 保存成技能文件）
 harmonia logout                       退出账号，清除本机数据
 harmonia uninstall                    完全卸载
 ```
