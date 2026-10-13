@@ -24,7 +24,7 @@
 | 封装 | libsodium `crypto_box_seal`（X25519 + XSalsa20-Poly1305） |
 | 加密密钥对 | 由 32 字节种子按 `crypto_box_seed_keypair` 派生：sk = SHA-512(seed)[0:32]，pk = X25519(sk, 基点) |
 | 签名 | Ed25519，由 32 字节种子派生（`crypto_sign_seed_keypair`） |
-| 密码 | Argon2id（`crypto_pwhash` argon2id13，ops=3，mem=64 MiB，并行度 1），salt 16 字节，输出 32 字节 = authKey |
+| PIN 派生 | Argon2id（`crypto_pwhash` argon2id13，ops=3，mem=64 MiB，并行度 1），salt 16 字节，输出 32 字节。只用于 App 本机的 PIN 槽（2.5），不经过网络；账号没有密码 |
 | 派生 | HKDF-SHA256，salt 为空，输出 32 字节 |
 | 摘要 | SHA-256 |
 
@@ -40,7 +40,7 @@
 | 恢复签名钥 | HKDF(恢复码, info=`harmonia.recovery.sign`) → Ed25519 种子 | 由恢复码派生 |
 | 恢复加密钥 | HKDF(恢复码, info=`harmonia.recovery.box`) → box 种子 | 由恢复码派生 |
 
-需要人工抄写或输入的码（恢复码、配对核对码、邮件验证码）统一使用 **Crockford Base32** 字母表 `0123456789ABCDEFGHJKMNPQRSTVWXYZ`（不含 I、L、O、U），按 RFC 4648 的位序编码、无填充。解析时去掉 `-` 和空白，转为大写，把 `O` 视为 `0`、`I` 和 `L` 视为 `1`。
+需要人工抄写或输入的码（恢复码、配对核对码、配对码、邮件验证码）统一使用 **Crockford Base32** 字母表 `0123456789ABCDEFGHJKMNPQRSTVWXYZ`（不含 I、L、O、U），按 RFC 4648 的位序编码、无填充。解析时去掉 `-` 和空白，转为大写，把 `O` 视为 `0`、`I` 和 `L` 视为 `1`。
 
 恢复码的显示格式：16 字节编码为 26 个字符，每 4 个字符用 `-` 分组。
 
@@ -62,7 +62,7 @@
 
 ### 2.3 信任锚：rootPub 钉住
 
-- 每台设备在第一次接触账号时读取 `rootPub` 并保存在本地，此后不再接受变更：首次初始化时由本机生成；登录后从 `GET /account` 读取；恢复时由恢复码解开的 root 种子推出。
+- 每台设备在第一次接触账号时读取 `rootPub` 并保存在本地，此后不再接受变更：首次初始化时由本机生成；配对接入时从 `GET /accounts/lookup` 读取；恢复时由恢复码解开的 root 种子推出。
 - 配对请求中包含设备钉住的 `rootPub`，并纳入配对指纹。管理设备在批准前检查它是否等于真实的 `rootPub`，不一致就拒绝（提示服务器可能被篡改）。
 - 因此，服务器无法偷换封装：封装必须由 root 签名；也无法塞入假设备：设备证书必须由 root 签名。
 
@@ -81,11 +81,11 @@ fp = SHA-256(C(["harmonia.pairing", pairingId, signPub, boxPub, rootPub]))
 **Android：**
 
 ```
-DEK  = 32 字节随机数，登录后设置 App PIN 时生成
+DEK  = 32 字节随机数，确定账号后设置 App PIN 时生成
 本机配置 = XChaCha20-Poly1305(DEK, 配置 JSON, AAD = C(["harmonia.local", "config"]))
 
 PIN 槽（必有）：
-  pk   = Argon2id(PIN, salt)                  // salt 16 字节；参数同 2 节“密码”
+  pk   = Argon2id(PIN, salt)                  // salt 16 字节；参数同 2 节“PIN 派生”
   kek  = HMAC-SHA256(K_hw, pk)                // K_hw：Keystore HMAC 密钥，不可导出，不要求用户验证
   槽   = XChaCha20-Poly1305(kek, DEK, AAD = C(["harmonia.local-slot", "pin"]))
 
@@ -136,7 +136,7 @@ HashToP256(pk)：
 ## 3. HTTP API
 
 - 基础路径为 `/api/v1`。请求和响应都是 JSON，只允许 HTTPS（本地开发时允许 `http://localhost`、`http://127.0.0.1`）。
-- 错误响应：`{"error": "<code>", "message": "<中文说明>"}`。被限流时另带 `retryAfter`（秒），并设置 `Retry-After` 响应头；`code_required` 另带 `flow`。
+- 错误响应：`{"error": "<code>", "message": "<中文说明>"}`。被限流时另带 `retryAfter`（秒），并设置 `Retry-After` 响应头。
 - 根路径 `GET /`（以及 `HEAD /`）不属于 API，返回给浏览器看的实例首页（HTML），内容见设计文档 5.5。它同样只允许 HTTPS、受入口总量限制，不访问任何账号数据。首页上有服务器地址的二维码，内容就是地址本身（例如 `https://vault.example.com`，没有末尾的 `/`）；App 的“连接服务器”页扫它来填地址，只接受以 `https://` 开头（本地开发时也接受 `http://`）的内容。
 
 ### 3.0 账号与寻址
@@ -147,13 +147,14 @@ HashToP256(pk)：
   - `REQUIRE_EMAIL_VERIFICATION`：为 `true` 时注册需要验证邮箱（默认 `false`）。
 - 账号状态：
   - `pending`：邮箱未验证。15 分钟内不验证，该注册作废，可以重新注册。
-  - `active`：可以登录。
-  - `initialized`：已在手机上完成密钥初始化，账号公钥 `rootPub` 确定。
+  - `active`：邮箱已验证（或不需要验证），可以用注册会话完成初始化。这时账号还没有任何数据，同一邮箱可以重新注册，按新注册处理。
+  - `initialized`：已在手机上完成密钥初始化，账号公钥 `rootPub` 确定。之后不能再注册这个邮箱，新设备只能通过配对或恢复接入。
+- 账号没有密码。
 - 寻址方式：
   - 会话令牌的格式为 `<accountId>.<随机串>`，服务端据此定位账号。
-  - 不带令牌的账号内请求（设备登录、配对状态查询、恢复登录），在请求头 `X-Harmonia-Account` 中给出账号 ID。
-  - 以邮箱为入口的请求（注册、登录、找回密码、重置账号、开始恢复），由目录解析邮箱。
-- 邮件验证码：8 位，字符取自 Crockford Base32 字母表（见 2.1），不区分大小写；15 分钟内有效。用途包括注册验证、登录加验、找回密码、重置账号。
+  - 不带令牌的账号内请求（设备登录、发起配对、配对状态查询、恢复登录），在请求头 `X-Harmonia-Account` 中给出账号 ID。
+  - 以邮箱为入口的请求（注册、查询账号、重置账号、开始恢复），由目录解析邮箱。
+- 邮件验证码：8 位，字符取自 Crockford Base32 字母表（见 2.1），不区分大小写；15 分钟内有效。用途只有注册验证和重置账号。
   - 每次发送验证码，服务端同时返回流程凭证 `flow`（32 字节随机数，b64），验证码与它绑定，校验时必须带上 `flow`。
   - 每个 `flow` 最多尝试 5 次，失败只作废这个 `flow`，不影响别人申请的验证码。
   - 发信频率和数量见 3.8。
@@ -162,9 +163,11 @@ HashToP256(pk)：
 
 | 类型 | 获取方式 | 有效期 | 允许的操作 |
 | --- | --- | --- | --- |
-| password | `POST /auth/login` | 15 分钟 | 查看账号信息、首次初始化密钥、创建配对请求 |
+| registration | `POST /register`（不需要验证邮箱时）或 `POST /register/verify` | 15 分钟 | 查看账号信息、首次初始化密钥 |
 | device | `POST /auth/device-session` | 1 小时 | 按设备当前的权限 |
 | recovery | `POST /recovery/session` | 15 分钟 | 读取恢复材料、登记本机 |
+
+发起配对不需要会话，见 `POST /pairings`。
 
 `rotationRequired=true` 的管理设备只允许调用：`/sync`、`/events`、`/account`、`/recovery/rotate*`、`/devices/self/revoke`。
 
@@ -174,14 +177,11 @@ HashToP256(pk)：
 
 | 方法与路径 | 说明 |
 | --- | --- |
-| `GET /instance` | `{product:"harmonia", version, protocol:1, registration:{open, first, emailVerification}}`。`open` 表示现在可以注册（开放注册，或者还没有任何账号）；`first` 表示还没有任何账号完成注册，客户端只在这时默认显示注册，其余情况默认显示登录 |
-| `POST /register` | `{email, kdfSalt, authKey}` → `{accountId, verificationRequired, flow?}`（需要验证邮箱时带 `flow`）。邮箱已被注册时返回 `conflict`，注册未开放时返回 `forbidden` |
-| `POST /register/verify` | `{email, flow, code}` → `{ok}` |
+| `GET /instance` | `{product:"harmonia", version, protocol:1, registration:{open, first, emailVerification}}`。`open` 表示现在可以注册（开放注册，或者还没有任何账号）；`first` 表示还没有任何账号完成注册，客户端据此提示“创建第一个账号” |
+| `POST /register` | `{email}` → 需要验证邮箱时 `{accountId, verificationRequired:true, flow}`，否则 `{accountId, verificationRequired:false, token, expiresAt}`（注册会话）。邮箱已注册且账号已初始化时返回 `conflict`；已注册但未初始化时按新注册处理（原来的注册会话作废）；注册未开放时返回 `forbidden` |
+| `POST /register/verify` | `{email, flow, code}` → `{accountId, token, expiresAt}`（注册会话） |
 | `POST /register/resend` | `{email}` → `{flow}` |
-| `GET /auth/prelogin?email=` | `{kdfSalt, opsLimit, memLimit}` |
-| `POST /auth/login` | `{email, authKey, flow?, code?}` → `{token, expiresAt, accountId}`；邮箱未验证时返回 `email_unverified`；需要邮件加验时返回 `code_required` 和 `flow`，见 3.8 |
-| `POST /password-reset/request` | `{email}` → `{flow}`，发送找回密码验证码 |
-| `POST /password-reset/complete` | `{email, flow, code, kdfSalt, authKey}` → `{ok}`，只修改密码，数据保留 |
+| `GET /accounts/lookup?email=` | 匿名查询：`{accountId, initialized, rootPub?}`（已初始化时带 `rootPub`）。邮箱没有注册时返回 `not_found`。服务器谎报 `rootPub` 时配对指纹不一致，管理设备批准前会发现 |
 | `POST /account-reset/request` | `{email}` → `{flow}`，发送重置账号验证码 |
 | `POST /account-reset/complete` | `{email, flow, code}` → `{ok}`，**永久删除**该账号的全部数据和设备，邮箱可以重新注册 |
 | `POST /recovery/challenge` | `{email}` → `{accountId, nonce, expiresAt}` |
@@ -190,16 +190,16 @@ HashToP256(pk)：
 
 | 方法与路径 | 会话 | 说明 |
 | --- | --- | --- |
-| `GET /account` | password 或 device | `{accountId, email, initialized, rootPub?}` |
-| `POST /account/setup` | password，且账号未初始化 | 首次初始化：创建 root 和第一台管理设备，见 3.2.1 |
-| `PUT /account/password` | device（管理设备） | `{kdfSalt, authKey}` |
+| `GET /account` | registration 或 device | `{accountId, email, initialized, rootPub?}` |
+| `POST /account/setup` | registration，且账号未初始化 | 首次初始化：创建 root 和第一台管理设备，见 3.2.1。成功后注册会话作废 |
 | `POST /auth/challenge` | 请求头 `X-Harmonia-Account` | `{deviceId}` → `{nonce, expiresAt}`，nonce 只能使用一次，2 分钟内有效 |
 | `POST /auth/device-session` | 请求头 `X-Harmonia-Account` | `{deviceId, nonce, signature}` → `{token, expiresAt}` |
-| `POST /pairings` | password | `{name, platform, signPub, boxPub, rootPub, canManage}` → `{id, secret, expiresAt}`，10 分钟内有效。`platform` 是 `android`、`ios`、`darwin`、`linux`、`windows` 之一，只用于显示。`canManage` 表示发起方的客户端具备管理功能（目前只有 App 为 true）。服务端记录发起方 IP；该 IP 被阻止时返回 `pairing_blocked` |
+| `POST /pairing-codes` | device（管理设备） | `{}` → `{code, expiresAt}`：生成配对码，8 位 Crockford Base32，5 分钟内有效。每个账号同时只有一个有效配对码，重新生成会作废上一个；用它成功创建一个配对请求后即作废。服务端只保存 `SHA-256` 哈希 |
+| `POST /pairings` | 请求头 `X-Harmonia-Account`，不需要会话 | `{name, platform, signPub, boxPub, rootPub, canManage, code?}` → `{id, secret, expiresAt, authorized}`，5 分钟内有效。`platform` 是 `android`、`ios`、`darwin`、`linux`、`windows` 之一，只用于显示。`canManage` 表示发起方的客户端具备管理功能（目前只有 App 为 true）。`code` 是配对码（解析规则同 2.1，可以带 `-` 和空白）：省略或为空时是匿名请求；给出时必须有效，否则返回 `unauthorized` 并计入 3.8 的递增等待，有效时请求的 `authorized` 为 true。`rootPub` 与账号不一致时返回 `conflict`。服务端记录发起方 IP；该 IP 被阻止时返回 `pairing_blocked` |
 | `GET /pairings/{id}/events` | 请求头 `X-Harmonia-Account` 和 `X-Pairing-Secret` | 发起方的等待连接（WebSocket），见 3.5.1 |
 | `GET /pairings/{id}/status` | 请求头 `X-Harmonia-Account` 和 `X-Pairing-Secret` | `{status}`：`pending` / `approved` / `rejected` / `expired` / `cancelled`。只在等待连接意外断开后查询一次 |
-| `GET /pairings` | device（管理设备） | 列出发起方仍在等待的请求，每项带 `ip` 和 `canManage` |
-| `GET /pairings/{id}` | device（管理设备） | 单个请求；发起方已离开或请求已处理时返回 `conflict` |
+| `GET /pairings` | device（管理设备） | 列出发起方仍在等待的全部请求（包括匿名请求），每项带 `ip`、`canManage` 和 `authorized`（是否由配对码创建）。客户端的待批准列表、角标和自动弹出只处理 `authorized` 为 true 的请求；手输核对码时在全部请求中匹配 |
+| `GET /pairings/{id}` | device（管理设备） | 单个请求（扫码时用二维码中的 ID 获取，匿名请求同样可以）；发起方已离开或请求已处理时返回 `conflict` |
 | `POST /pairings/{id}/approve` | device（管理设备） | 见 3.3；发起方已离开时返回 `conflict` |
 | `POST /pairings/{id}/reject` | device（管理设备） | `{block?: bool}`；`block` 为 true 时，30 分钟内拒绝来自该请求 IP 的新配对请求 |
 | `GET /sync?since=N` | device | 见 3.4 |
@@ -279,7 +279,7 @@ HashToP256(pk)：
 `GET /events` 升级为 WebSocket。服务端只推送提示，不推送任何数据：
 
 - `{"type":"changed","seq":N}`：客户端收到后调用 `/sync`
-- `{"type":"pairing"}`：只推送给管理设备
+- `{"type":"pairing"}`：只推送给管理设备，表示待批准列表有变化。匿名配对请求自身的变化不推送，见 3.5.1
 - `{"type":"revoked"}`：推送后服务端关闭连接
 
 客户端每 30 秒发送一次文本 `ping`，服务端自动回复 `pong`。
@@ -288,11 +288,11 @@ HashToP256(pk)：
 
 发起方创建配对请求后立即连接 `GET /pairings/{id}/events`，连接存在即表示“仍在等待”：
 
-- 每个请求同时只允许一条等待连接。连接建立后，服务端向管理设备推送 `{"type":"pairing"}`；没有等待连接的请求不会出现在 `GET /pairings` 中，也不能被批准。
+- 每个请求同时只允许一条等待连接。连接建立后，若请求由配对码创建（`authorized`），服务端向管理设备推送 `{"type":"pairing"}`；匿名请求不推送。没有等待连接的请求不会出现在 `GET /pairings` 中，也不能被批准。
 - 服务端在请求被处理后向发起方推送 `{"type":"approved"}`、`{"type":"rejected"}` 或 `{"type":"expired"}`，然后关闭连接。
-- 发起方每 10 秒发送一次 `ping`。服务端发现 25 秒内没有收到 `ping`，或连接断开时，若请求仍是 `pending`，就把它标记为 `cancelled`，并向管理设备推送 `{"type":"pairing"}`。
+- 发起方每 10 秒发送一次 `ping`。服务端发现 25 秒内没有收到 `ping`，或连接断开时，若请求仍是 `pending`，就把它标记为 `cancelled`；由配对码创建的请求同时向管理设备推送 `{"type":"pairing"}`。
 - 等待连接意外断开时，发起方查询一次 `GET /pairings/{id}/status`：`approved` 则继续完成接入，否则提示用户重新发起。
-- 请求被批准、拒绝、取消或过期，或账号修改了密码时，服务端都会向管理设备推送 `{"type":"pairing"}`。修改密码会把所有 `pending` 的请求标记为 `rejected`。
+- 请求被管理设备批准或拒绝时，服务端向管理设备推送 `{"type":"pairing"}`；由配对码创建的请求被取消或过期时同样推送，匿名请求不推送。
 
 ### 3.6 轮换恢复码
 
@@ -302,13 +302,11 @@ HashToP256(pk)：
   "generation": "2",
   "signPub": "...", "boxPub": "...",
   "rootEnvelope": {"sealed": "...", "sig": "<新恢复签名钥对 root-recovery 原文的签名>"},
-  "envelopes": [{"envId": "...", "keyVersion": "1", "sealed": "...", "sig": "<root 签名>"}],
-  "password": {"kdfSalt": "...", "authKey": "..."}
+  "envelopes": [{"envId": "...", "keyVersion": "1", "sealed": "...", "sig": "<root 签名>"}]
 }
 ```
 
 - `generation` 必须等于当前值加 1；`envelopes` 必须覆盖全部环境。
-- `password` 可选，恢复流程中用它设置新密码。
 - 整个操作在一个事务中原子完成。成功后旧恢复码失效，发起设备的 `rotationRequired` 被清除。
 - 用相同的 `idempotencyKey` 重试会返回原结果。
 
@@ -317,59 +315,54 @@ HashToP256(pk)：
 | code | HTTP | 含义 |
 | --- | --- | --- |
 | `invalid_request` | 400 | 字段缺失、格式不对或超出限制 |
-| `unauthorized` | 401 | 未登录、会话过期、密码或签名错误 |
+| `unauthorized` | 401 | 未登录、会话过期、签名错误，或配对码不对、已过期 |
 | `device_revoked` | 401 | 本设备已被撤销，客户端应清除本地数据 |
 | `forbidden` | 403 | 权限不足，或授权已到期 |
 | `rotation_required` | 403 | 需要先轮换恢复码 |
 | `not_found` | 404 | 不存在 |
-| `conflict` | 409 | 状态冲突，例如已初始化、配对已处理、幂等键对应的内容不同、代际不对 |
+| `conflict` | 409 | 状态冲突，例如邮箱已注册并初始化、配对已处理、幂等键对应的内容不同、代际不对 |
 | `rate_limited` | 429 | 请求过于频繁 |
 | `pairing_blocked` | 429 | 这个 IP 发起的配对请求刚被拒绝并阻止，30 分钟内不能再发起 |
-| `code_required` | 401 | 密码正确，但这次登录还需要邮件验证码，响应带 `flow`，见 3.8 |
 | `email_unverified` | 403 | 邮箱还没有验证 |
 | `email_unavailable` | 503 | 服务器没有配置发信，无法发送验证码 |
 | `internal` | 500 | 服务器内部错误 |
 
 ### 3.8 限流与风控
 
-原则：按网络分开计数，攻击者的失败只算在他自己的网络上；不因失败次数锁定账号；靠签名验证的操作不受匿名请求影响。无论服务器是否配置了发信，以下规则都成立，差别只在登录加验的方式。
+原则：按网络分开计数，攻击者的失败只算在他自己的网络上；不因失败次数锁定账号或作废配对码；靠签名验证的操作不受匿名请求影响。
 
 **网络**
 
-- 计数单位“网络”：IPv4 按单个地址；IPv6 按 /64，受攻击状态下改按 /48。
+- 计数单位“网络”：IPv4 按单个地址；IPv6 按 /64。
 - 服务端只保存网络标识的 HMAC，密钥由每个账号和目录各自随机生成。原始 IP 只出现在配对请求和配对阻止记录中，随它们过期删除。
 
 **入口**
 
 - 每个网络每分钟最多 300 个请求（全部接口合计），在进入 Durable Object 之前拦截。
-- 以邮箱为入口的接口、设备登录挑战、恢复、发起配对，另按网络限制每分钟次数（注册、登录、恢复挑战 10 次，其他 20 至 30 次）。
+- 以邮箱为入口的接口（包括 `GET /accounts/lookup`）、设备登录挑战、恢复、发起配对，另按网络限制每分钟次数（注册、恢复挑战、发起配对 10 次，其他 20 至 30 次）。
 
-**密码登录**
+**配对码**
 
-- 失败次数按“账号 + 网络”计数，窗口 15 分钟；登录成功后清零该网络的计数。
-- 每个网络前 5 次失败不受限制；之后每失败一次，该网络下次可以尝试的等待时间翻倍，从 5 秒起，最长 5 分钟。等待期间不校验密码，直接返回 `rate_limited`。只影响这一个网络。
-- 受攻击状态：15 分钟内全部网络的失败合计达到 20 次时进入，连续 1 小时没有失败后退出。期间所有网络的登录：
-  - 服务器配置了发信：密码正确后不发会话，而是向账号邮箱发送登录验证码，返回 `code_required` 和 `flow`；带上 `flow` 和 `code` 再次登录才发会话。密码不对时不发邮件。
-  - 未配置发信：每个网络的免限制次数从 5 降为 1。
-- 这些限制只作用于密码登录。被挡住的合法用户可以：等待提示的时间后重试；在管理设备上修改密码（所有密码会话和待处理的配对请求随之作废，账号随即退出受攻击状态）；用恢复码恢复（不需要密码）。
+- 输错次数按“账号 + 网络”计数，窗口 15 分钟；用配对码成功创建请求后清零该网络的计数。
+- 每个网络前 5 次输错不受限制；之后每输错一次，该网络下次可以尝试的等待时间翻倍，从 5 秒起，最长 5 分钟。等待期间不校验配对码，直接返回 `rate_limited`。只影响这一个网络。
+- 不做“输错 N 次作废配对码”，不做账号级锁定。被挡住的合法用户可以等待提示的时间后重试，或不带配对码改用扫码方式。
 
 **邮件**
 
-- 额度按账号计算，按 1 小时滚动，分两份互不占用：
-  - 登录验证码：只在密码正确后发送，每小时 10 封。
-  - 其他（注册验证、找回密码、重置账号）：每个网络 2 封，合计 6 封；每天合计 20 封。
+- 额度按账号计算，按 1 小时滚动：注册验证和重置账号共用，每个网络 2 封，合计 6 封；每天合计 20 封。
 - 同一网络的重发间隔不少于 60 秒；同一网络、同一用途只保留最新一个 `flow`，不同网络的 `flow` 互不影响。
 - 超出额度后不再发送新邮件，返回 `rate_limited`；已经发出的验证码在 15 分钟内照常有效。
 - 注册验证邮件发往尚未注册的邮箱，另由目录限制：每个网络每小时 3 封，整个实例每天 100 封。
 
 **配对**
 
-- 每个网络同时最多 2 个等待中的请求（只计保持等待连接的请求）；整个账号最多 20 个。
-- 拒绝并阻止、修改密码作废待处理请求，见 3.2 和 3.5.1。
+- 每个网络同时最多 2 个等待中的请求（只计保持等待连接的请求，匿名和配对码创建的都算）。
+- 整个账号同时最多 20 个匿名请求、5 个由配对码创建的请求，两者分开计数：匿名请求被占满时，用配对码仍然可以发起。
+- 拒绝并阻止见 3.2。
 
 **签名验证的操作**
 
-- 设备登录挑战、设备会话、恢复会话只按网络限制每分钟次数，不设账号级计数。已接入设备的操作不受密码登录和邮件限制的影响。
+- 设备登录挑战、设备会话、恢复会话只按网络限制每分钟次数，不设账号级计数。已接入设备的操作不受配对码和邮件限制的影响。
 
 ## 4. 规则摘要
 
@@ -379,3 +372,4 @@ HashToP256(pk)：
 - **激活**：激活状态和顺序只决定设备把哪些环境写入本机环境变量、同名变量由哪个环境提供，不是安全边界；设备能读取什么只由授权决定。新授权默认激活并排在最后。
 - **撤销**：服务器删除该设备的授权、封装和会话，推送 `revoked`；客户端收到 `revoked` 推送或 `device_revoked` 错误后，清除本地全部数据。
 - **限流与风控**：按网络和来源分开计数，不锁定账号，见 3.8。
+- **配对**：知道邮箱就能创建匿名配对请求，但只有扫码或手输核对码的管理设备能取到它；配对码只让请求出现在管理设备上，不代替指纹核对。
