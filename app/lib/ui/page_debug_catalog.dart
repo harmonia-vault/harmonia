@@ -60,7 +60,8 @@ Map<String, List<DebugPageEntry>> debugPages() => {
           ? const Center(child: Text('当前没有示例设备，请切换到正常数据。'))
           : DevicePage(c: s.c, deviceId: s.vault.devices.last.id),
     ),
-    DebugPageEntry('扫码添加、核对码弹窗与生成配对码', (s) => AddDevicePage(c: s.c)),
+    DebugPageEntry('添加设备：选择扫码或生成配对码', (s) => DebugOverlay(show: (c) => addDevice(c, s.c))),
+    DebugPageEntry('扫码添加与核对码弹窗', (s) => AddDevicePage(c: s.c)),
     DebugPageEntry('生成配对码与剩余时间', (s) => DebugOverlay(show: (c) => showPairingCode(c, s.c))),
     DebugPageEntry(
       '批准与拒绝设备（用配对码发起）',
