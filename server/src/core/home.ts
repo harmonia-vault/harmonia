@@ -186,15 +186,15 @@ ${qrCode(origin)}
 <a class="btn" href="${REPO}/releases/latest">下载 App</a><a href="${REPO}#在-iphone-上安装">iPhone 安装说明</a>
 </li>
 <li>
-<h3>注册或登录</h3>
-<p>打开 App，扫描上面的二维码，或者手动填写服务器地址，然后用邮箱注册；已经有账号就直接登录。</p>
+<h3>注册或接入</h3>
+<p>打开 App，扫描上面的二维码，或者手动填写服务器地址，然后输入邮箱：新邮箱会注册账号，已有账号就接入这台手机。</p>
 </li>
 <li>
 <h3>接入电脑</h3>
-<p>在电脑上安装命令行，再登录这台服务器。终端会显示二维码，用 App 扫码批准后，变量就会同步过来。</p>
+<p>在电脑上安装命令行，再接入这台服务器。终端会显示二维码，用 App 扫码批准后，变量就会同步过来。</p>
 <div class="term"><span>macOS、Linux</span><code>curl -fsSL ${FEED}/install.sh | sh</code></div>
 <div class="term"><span>Windows（在 PowerShell 里运行）</span><code>irm ${FEED}/install.ps1 | iex</code></div>
-<div class="term"><span>安装后登录</span><code>harmonia login ${address}</code></div>
+<div class="term"><span>安装后接入</span><code>harmonia login ${address}</code></div>
 </li>
 </ol>
 

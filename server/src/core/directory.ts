@@ -28,7 +28,7 @@ export class Directory {
   reserve(email: string, allowRegistration: boolean): string {
     return this.sql.transaction(() => {
       const e = one<{ account_id: string; status: string }>(this.sql, `SELECT * FROM entries WHERE email = ?`, email);
-      if (e?.status === "active") throw conflict("这个邮箱已经注册，请直接登录。");
+      if (e?.status === "active") throw conflict("这个邮箱已经注册，请选择接入这台设备。");
       // 重置过的账号保留重新注册的资格，即使实例已关闭注册。
       if (!allowRegistration && this.firstCompleted() && e?.status !== "reset") {
         throw new ApiError(403, "forbidden", "这台服务器没有开放注册。");

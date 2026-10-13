@@ -30,18 +30,17 @@ const EMAIL_ROUTES = new Set([
   "/api/v1/register",
   "/api/v1/register/verify",
   "/api/v1/register/resend",
-  "/api/v1/auth/prelogin",
-  "/api/v1/auth/login",
-  "/api/v1/password-reset/request",
-  "/api/v1/password-reset/complete",
+  "/api/v1/accounts/lookup",
   "/api/v1/account-reset/request",
   "/api/v1/account-reset/complete",
   "/api/v1/recovery/challenge",
 ]);
 
+/** 邮箱还没有验证时也能调用的接口。 */
+const UNVERIFIED_ROUTES = new Set(["/api/v1/register/verify", "/api/v1/register/resend", "/api/v1/accounts/lookup"]);
+
 const LIMITS: Record<string, number> = {
   "/api/v1/register": 10,
-  "/api/v1/auth/login": 10,
   "/api/v1/recovery/challenge": 10,
 };
 
@@ -115,7 +114,10 @@ export async function route(req: Request, backend: Backend, clientIp: string): P
       }
 
       if (path === "/api/v1/register") {
-        const accountId = await directory.reserve(email, config.allowRegistration);
+        // 已验证邮箱的账号交给账号自己判断：已初始化时拒绝，未初始化时按新注册处理。
+        const existing = await directory.lookup(email);
+        const accountId =
+          existing?.status === "active" ? existing.accountId : await directory.reserve(email, config.allowRegistration);
         const verify = config.requireVerification ? "1" : "0";
         const res = await backend.account(accountId).fetch(forward(req, body, { [ACCOUNT_HEADER]: accountId, [VERIFY_HEADER]: verify }));
         if (res.ok && !config.requireVerification) await activateOrWipe(backend, email, accountId);
@@ -124,8 +126,7 @@ export async function route(req: Request, backend: Backend, clientIp: string): P
 
       const entry = await directory.lookup(email);
       if (!entry) throw notFound("这个邮箱还没有注册。");
-      if (path !== "/api/v1/register/verify" && path !== "/api/v1/register/resend" && path !== "/api/v1/auth/login" &&
-          path !== "/api/v1/auth/prelogin" && entry.status !== "active") {
+      if (!UNVERIFIED_ROUTES.has(path) && entry.status !== "active") {
         throw new ApiError(403, "email_unverified", "邮箱还没有验证，请先完成邮箱验证。");
       }
       const res = await backend.account(entry.accountId).fetch(forward(req, body, { [ACCOUNT_HEADER]: entry.accountId }));
@@ -136,7 +137,7 @@ export async function route(req: Request, backend: Backend, clientIp: string): P
 
     if (!path.startsWith("/api/v1/")) throw notFound("接口不存在。");
     const accountId = accountFromRequest(req);
-    if (!accountId) throw new ApiError(401, "unauthorized", "请先登录。");
+    if (!accountId) throw new ApiError(401, "unauthorized", "请求缺少账号信息，请重新接入。");
     return await backend.account(accountId).fetch(forward(req, req.body ? await req.text() : null, { [ACCOUNT_HEADER]: accountId }));
   } catch (e) {
     return errorResponse(e);

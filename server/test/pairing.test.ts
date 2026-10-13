@@ -1,21 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { checkWaiters, pairingLeft, WAITER_TIMEOUT } from "../src/core/pairing";
+import { checkWaiters, MAX_ANONYMOUS, MAX_AUTHORIZED, pairingLeft, WAITER_TIMEOUT } from "../src/core/pairing";
+import { PAIRING_CODE_TTL } from "../src/core/pairing-codes";
 import { b64 } from "../src/core/util";
-import { FakeDevice, rand, TestAccount, TestServer, waitApproval } from "./helpers";
+import { pairClient, rand, requestPairing, TestAccount, TestServer, waitApproval } from "./helpers";
 
-/** 电脑发起一个配对请求（尚未连上等待连接）。 */
-async function request(s: TestServer, a: TestAccount, ip = "203.0.113.7", canManage = false) {
-  const cli = await FakeDevice.create();
-  const pw = await a.passwordLogin(s);
-  return s.call("POST", "/api/v1/pairings", {
-    token: pw.token,
-    headers: { "cf-connecting-ip": ip },
-    body: { name: "笔记本", platform: "linux", signPub: cli.sign.pub, boxPub: cli.boxPub, rootPub: a.root.pub, canManage },
-  });
-}
+const IP = "203.0.113.7";
 
-const pendingIds = async (s: TestServer, a: TestAccount) =>
-  (await s.ok("GET", "/api/v1/pairings", { token: a.phone.token })).pairings.map((p: { id: string }) => p.id);
+/** 电脑发起一个匿名配对请求（尚未连上等待连接）。 */
+const request = (s: TestServer, a: TestAccount, ip = IP, canManage = false) => requestPairing(s, a, { ip, canManage });
+
+const pending = async (s: TestServer, a: TestAccount) =>
+  (await s.ok("GET", "/api/v1/pairings", { token: a.phone.token })).pairings.map((p: { id: string; authorized: boolean }) => [
+    p.id,
+    p.authorized,
+  ]);
 
 const status = async (s: TestServer, a: TestAccount, req: Record<string, any>) =>
   (
@@ -27,37 +25,151 @@ const status = async (s: TestServer, a: TestAccount, req: Record<string, any>) =
 const pairingPushes = (s: TestServer, a: TestAccount) =>
   s.pushes.filter((p) => p.account === a.accountId && p.msg.type === "pairing").length;
 
-describe("配对等待连接", () => {
-  it("连上等待连接后才通知管理设备、出现在列表中，并带上来源 IP", async () => {
+describe("匿名配对请求", () => {
+  it("不需要会话；不推送给管理设备，但扫码（按 ID）和列表中都能取到，并带上来源 IP", async () => {
     const s = new TestServer();
     const a = await TestAccount.create(s);
-    const req = (await request(s, a)).json;
-    expect(await pendingIds(s, a)).toEqual([]);
-    expect(pairingPushes(s, a)).toBe(0);
+    const r = await request(s, a);
+    expect([r.status, r.json.authorized]).toEqual([200, false]);
+    expect(r.json.expiresAt - s.clock).toBe(5 * 60_000);
+    const req = r.json;
+    expect(await pending(s, a)).toEqual([]);
     const approve = await s.call("POST", `/api/v1/pairings/${req.id}/approve`, { token: a.phone.token, body: {} });
     expect(approve.status).toBe(409);
 
     expect((await waitApproval(s, a, req)).status).toBe(200);
-    expect(pairingPushes(s, a)).toBe(1);
+    expect(pairingPushes(s, a)).toBe(0);
     const list = await s.ok("GET", "/api/v1/pairings", { token: a.phone.token });
-    expect(list.pairings.map((p: { id: string; ip: string }) => [p.id, p.ip])).toEqual([[req.id, "203.0.113.7"]]);
+    expect(list.pairings.map((p: { id: string; ip: string; authorized: boolean }) => [p.id, p.ip, p.authorized])).toEqual([
+      [req.id, IP, false],
+    ]);
+    expect((await s.ok("GET", `/api/v1/pairings/${req.id}`, { token: a.phone.token })).id).toBe(req.id);
     // 同一请求只能有一条等待连接。
     expect((await waitApproval(s, a, req)).status).toBe(409);
-  });
 
-  it("发起方断开后请求作废，管理设备收到通知", async () => {
-    const s = new TestServer();
-    const a = await TestAccount.create(s);
-    const req = (await request(s, a)).json;
-    await waitApproval(s, a, req);
+    // 发起方离开、过期都不推送。
     s.waiters(a.accountId).open.delete(req.id);
     pairingLeft(s.deps(a.accountId), req.id);
     expect(await status(s, a, req)).toBe("cancelled");
-    expect(await pendingIds(s, a)).toEqual([]);
-    expect(pairingPushes(s, a)).toBe(2);
-    expect((await s.call("GET", `/api/v1/pairings/${req.id}`, { token: a.phone.token })).status).toBe(409);
+    expect(pairingPushes(s, a)).toBe(0);
   });
 
+  it("只能发给已初始化的账号；账号公钥不一致、缺少字段时拒绝", async () => {
+    const s = new TestServer();
+    const a = await TestAccount.create(s);
+    const missing = await s.call("POST", "/api/v1/pairings", {
+      headers: { "x-harmonia-account": a.accountId },
+      body: { name: "x", platform: "linux", signPub: b64(rand(32)), boxPub: b64(rand(32)), rootPub: a.root.pub },
+    });
+    expect(missing.status).toBe(400);
+    const wrongRoot = await s.call("POST", "/api/v1/pairings", {
+      headers: { "x-harmonia-account": a.accountId },
+      body: { name: "x", platform: "linux", signPub: b64(rand(32)), boxPub: b64(rand(32)), rootPub: b64(rand(32)), canManage: false },
+    });
+    expect(wrongRoot.status).toBe(409);
+    const noAccount = await s.call("POST", "/api/v1/pairings", { body: {} });
+    expect(noAccount.status).toBe(401);
+  });
+});
+
+describe("配对码", () => {
+  it("只有管理设备能生成；带配对码的请求推送给管理设备，配对码用一次即作废", async () => {
+    const s = new TestServer();
+    const a = await TestAccount.create(s);
+    const code = await a.pairingCode(s);
+    expect(code).toMatch(/^[0-9A-HJKMNP-TV-Z]{8}$/);
+    // 解析规则同协议 2.1：小写、分组、O 当作 0 都可以。
+    const typed = `${code.slice(0, 4)}-${code.slice(4)}`.toLowerCase().replace(/0/g, "o");
+    const r = await requestPairing(s, a, { ip: IP, code: typed });
+    expect([r.status, r.json.authorized]).toEqual([200, true]);
+    expect(pairingPushes(s, a)).toBe(0);
+    await waitApproval(s, a, r.json);
+    expect(pairingPushes(s, a)).toBe(1);
+    expect(await pending(s, a)).toEqual([[r.json.id, true]]);
+
+    const reused = await requestPairing(s, a, { ip: "198.51.100.1", code });
+    expect([reused.status, reused.json.error]).toEqual([401, "unauthorized"]);
+    expect(reused.json.message).toContain("重新生成");
+
+    // 发起方离开时通知管理设备刷新。
+    s.waiters(a.accountId).open.delete(r.json.id);
+    pairingLeft(s.deps(a.accountId), r.json.id);
+    expect(pairingPushes(s, a)).toBe(2);
+  });
+
+  it("重新生成会作废上一个；5 分钟后过期", async () => {
+    const s = new TestServer();
+    const a = await TestAccount.create(s);
+    const old = await a.pairingCode(s);
+    const fresh = await a.pairingCode(s);
+    expect((await requestPairing(s, a, { ip: IP, code: old })).status).toBe(401);
+    s.clock += PAIRING_CODE_TTL;
+    expect((await requestPairing(s, a, { ip: IP, code: fresh })).status).toBe(401);
+    const third = await a.pairingCode(s);
+    s.clock += PAIRING_CODE_TTL - 1;
+    expect((await requestPairing(s, a, { ip: IP, code: third })).status).toBe(200);
+  });
+
+  it("电脑和没有会话的请求不能生成配对码", async () => {
+    const s = new TestServer();
+    const a = await TestAccount.create(s);
+    const cli = await pairClient(s, a, []);
+    const r = await s.call("POST", "/api/v1/pairing-codes", { token: cli.token, body: {} });
+    expect(r.status).toBe(403);
+    expect((await s.call("POST", "/api/v1/pairing-codes", { body: {} })).status).toBe(401);
+  });
+
+  it("输错按网络递增等待，成功后清零；其他网络不受影响", async () => {
+    const s = new TestServer();
+    const a = await TestAccount.create(s);
+    const code = await a.pairingCode(s);
+    const bad = "203.0.113.1";
+    for (let i = 0; i < 5; i++) expect((await requestPairing(s, a, { ip: bad, code: "ZZZZZZZZ" })).status).toBe(401);
+    // 等待期内不校验，即使配对码是对的。
+    const blocked = await requestPairing(s, a, { ip: bad, code });
+    expect([blocked.status, blocked.json.error, blocked.json.retryAfter]).toEqual([429, "rate_limited", 5]);
+    expect(blocked.json.message).toContain("扫码");
+    // 格式不对同样算输错。
+    s.clock += 5_000;
+    expect((await requestPairing(s, a, { ip: bad, code: "12" })).status).toBe(401);
+    expect((await requestPairing(s, a, { ip: bad, code })).json.retryAfter).toBe(10);
+    // 不带配对码的匿名请求不受影响。
+    expect((await requestPairing(s, a, { ip: bad })).status).toBe(200);
+    // 另一个网络用正确的配对码可以发起；配对码不因别人输错而作废。
+    expect((await requestPairing(s, a, { ip: "198.51.100.7", code })).status).toBe(200);
+
+    s.clock += 10_000;
+    const code2 = await a.pairingCode(s);
+    expect((await requestPairing(s, a, { ip: bad, code: code2 })).status).toBe(200);
+    // 成功后清零：又有 5 次免等待的机会（先等过每分钟的发起次数限制）。
+    s.clock += 60_000;
+    for (let i = 0; i < 5; i++) expect((await requestPairing(s, a, { ip: bad, code: "ZZZZZZZZ" })).status).toBe(401);
+  });
+
+  it("匿名请求占满额度时，用配对码仍然可以发起；配对码请求另有较小的上限", async () => {
+    const s = new TestServer();
+    const a = await TestAccount.create(s);
+    for (let i = 0; i < MAX_ANONYMOUS; i++) expect((await request(s, a, `192.0.2.${i + 1}`)).status).toBe(200);
+    const full = await request(s, a, "198.51.100.50");
+    expect([full.status, full.json.error]).toEqual([429, "rate_limited"]);
+    expect(full.json.message).toContain("生成配对码");
+
+    const ids: string[] = [];
+    for (let i = 0; i < MAX_AUTHORIZED; i++) {
+      const code = await a.pairingCode(s);
+      const r = await requestPairing(s, a, { ip: `198.51.100.${60 + i}`, code });
+      expect(r.status).toBe(200);
+      ids.push(r.json.id);
+    }
+    const code = await a.pairingCode(s);
+    expect((await requestPairing(s, a, { ip: "198.51.100.70", code })).status).toBe(429);
+    // 超出上限时配对码没有被用掉：处理掉一个请求后，同一个配对码可以发起。
+    await s.ok("POST", `/api/v1/pairings/${ids[0]}/reject`, { token: a.phone.token, body: {} });
+    expect((await requestPairing(s, a, { ip: "198.51.100.70", code })).status).toBe(200);
+  });
+});
+
+describe("配对等待连接", () => {
   it("心跳超时的请求作废；过期的请求通知发起方", async () => {
     const s = new TestServer();
     const a = await TestAccount.create(s);
@@ -71,9 +183,9 @@ describe("配对等待连接", () => {
     expect(checkWaiters(s.deps(a.accountId))).toBe(true);
     expect(w.results.get(quiet.id)).toBe("left");
     expect(await status(s, a, quiet)).toBe("cancelled");
-    expect(await pendingIds(s, a)).toEqual([alive.id]);
+    expect(await pending(s, a)).toEqual([[alive.id, false]]);
 
-    s.clock += 10 * 60_000;
+    s.clock += 5 * 60_000;
     w.ping(alive.id);
     expect(checkWaiters(s.deps(a.accountId))).toBe(false);
     expect(w.results.get(alive.id)).toBe("expired");
@@ -110,26 +222,5 @@ describe("配对等待连接", () => {
       body: { kind: "manager", cert: b64(rand(64)), rootSealed: b64(rand(80)), envelopes: [] },
     });
     expect([r.status, r.json.error]).toEqual([400, "invalid_request"]);
-
-    const pw = await a.passwordLogin(s);
-    const missing = await s.call("POST", "/api/v1/pairings", {
-      token: pw.token,
-      body: { name: "x", platform: "linux", signPub: b64(rand(32)), boxPub: b64(rand(32)), rootPub: a.root.pub },
-    });
-    expect(missing.status).toBe(400);
-  });
-
-  it("修改密码后待处理的请求全部作废", async () => {
-    const s = new TestServer();
-    const a = await TestAccount.create(s);
-    const req = (await request(s, a)).json;
-    await waitApproval(s, a, req);
-    await s.ok("PUT", "/api/v1/account/password", {
-      token: a.phone.token,
-      body: { kdfSalt: b64(rand(16)), authKey: b64(rand(32)) },
-    });
-    expect(s.waiters(a.accountId).results.get(req.id)).toBe("rejected");
-    expect(await status(s, a, req)).toBe("rejected");
-    expect(await pendingIds(s, a)).toEqual([]);
   });
 });
