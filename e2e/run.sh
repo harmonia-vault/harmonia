@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # 端到端流程测试：本地 workerd 服务端 + 真实 harmonia CLI + 无界面管理设备（app/lib/core）。
-# 覆盖：注册验证、首次初始化、电脑配对（含取消等待）、exec、实时推送、写入、本地覆盖、权限变更、撤销、恢复与轮换、多管理设备。
+# 覆盖：注册验证（含重新注册未初始化的账号）、首次初始化、匿名查询、电脑配对（扫码方式与配对码方式、取消等待、配对码输错）、
+# exec、实时推送、写入、本地覆盖、权限变更、撤销、恢复与轮换、多管理设备。账号没有密码。
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -8,7 +9,6 @@ TMP="$ROOT/e2e/.tmp"
 PORT=8799
 SERVER="http://localhost:$PORT"
 EMAIL="e2e-$RANDOM@example.com"
-PASSWORD="correct horse battery"
 
 rm -rf "$TMP" && mkdir -p "$TMP"
 step() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
@@ -36,22 +36,31 @@ manager() { (cd "$ROOT/app" && dart run tool/manager.dart --home "$TMP/$1" "${@:
 mail_code() { grep -a "to=$EMAIL purpose=$1" "$TMP/server.log" | tail -1 | sed 's/.*code=//'; }
 cli() { HARMONIA_HOME="$TMP/cli" "$TMP/harmonia" "$@"; }
 
-step "J1 注册、验证邮箱、首次初始化"
-REG=$(manager phone register --server "$SERVER" --email "$EMAIL" --password "$PASSWORD")
+step "J1 注册、验证邮箱、首次初始化（没有密码）"
+expect_eq "$(manager phone lookup --server "$SERVER" --email "$EMAIL")" "not-registered" "注册前查询"
+REG=$(manager phone register --server "$SERVER" --email "$EMAIL")
 expect_eq "$(printf %s "$REG" | cut -f1)" "verification-required" "注册"
 sleep 1
 manager phone verify --server "$SERVER" --email "$EMAIL" --flow "$(printf %s "$REG" | cut -f2)" --code "$(mail_code verification)" >/dev/null
-RECOVERY=$(manager phone setup --server "$SERVER" --email "$EMAIL" --password "$PASSWORD" --name "主手机")
+expect_eq "$(manager phone lookup --server "$SERVER" --email "$EMAIL")" "uninitialized" "验证后、初始化前查询"
+# 已注册但未初始化的账号可以重新注册，按新注册处理（同一网络 60 秒内只能再发一次验证码）。
+sleep 61
+REG=$(manager phone register --server "$SERVER" --email "$EMAIL")
+expect_eq "$(printf %s "$REG" | cut -f1)" "verification-required" "重新注册未初始化的账号"
+sleep 1
+manager phone verify --server "$SERVER" --email "$EMAIL" --flow "$(printf %s "$REG" | cut -f2)" --code "$(mail_code verification)" >/dev/null
+RECOVERY=$(manager phone setup --name "主手机")
 [[ "$RECOVERY" =~ ^[0-9A-HJKMNP-TV-Z]{4}(-[0-9A-HJKMNP-TV-Z]{1,4}){6}$ ]] || fail "恢复码格式：$RECOVERY"
-DUP=$(manager other register --server "$SERVER" --email "$EMAIL" --password "$PASSWORD" 2>&1 || true)
-[[ "$DUP" == *"这个邮箱已经注册"* ]] || fail "重复注册应当提示邮箱已经注册，实际：$DUP"
+expect_eq "$(manager other lookup --server "$SERVER" --email "$EMAIL")" "initialized" "初始化后查询"
+DUP=$(manager other register --server "$SERVER" --email "$EMAIL" 2>&1 || true)
+[[ "$DUP" == *"这个邮箱已经注册并完成了设置"* ]] || fail "已初始化的邮箱重新注册应当被拒绝，实际：$DUP"
 manager phone env-create OpenAI >/dev/null
 manager phone env-create Other >/dev/null
 manager phone var-set OpenAI OPENAI_API_KEY "sk-first 'quoted' \$(no)" >/dev/null
 
 step "J3 终端取消等待后，请求立即作废"
-echo "$PASSWORD" | HARMONIA_HOME="$TMP/cli-cancel" "$TMP/harmonia" login "$SERVER" --email "$EMAIL" --password-stdin --name "e2e-cancel" \
-  >/dev/null 2>"$TMP/cancel.err" &
+HARMONIA_HOME="$TMP/cli-cancel" "$TMP/harmonia" login "$SERVER" --email "$EMAIL" --name "e2e-cancel" \
+  </dev/null >/dev/null 2>"$TMP/cancel.err" &
 CANCEL_PID=$!
 CODE=""
 for _ in $(seq 1 60); do
@@ -65,9 +74,17 @@ wait $CANCEL_PID 2>/dev/null || true
 sleep 1
 if manager phone approve "$CODE" OpenAI:rw >/dev/null 2>&1; then fail "取消后的配对请求仍然可以批准"; fi
 
-step "J3 终端失去响应（心跳中断）后，请求自动作废"
-echo "$PASSWORD" | HARMONIA_HOME="$TMP/cli-stall" "$TMP/harmonia" login "$SERVER" --email "$EMAIL" --password-stdin --name "e2e-stall" \
-  >/dev/null 2>"$TMP/stall.err" &
+step "J3 配对码输错：终端给出可操作的提示，不发起请求"
+if HARMONIA_HOME="$TMP/cli-wrong" "$TMP/harmonia" login "$SERVER" --email "$EMAIL" --code "ZZZZ-ZZZZ" --name "e2e-wrong" \
+  </dev/null >/dev/null 2>"$TMP/wrong.err"; then fail "错误的配对码不应能发起配对"; fi
+grep -q "配对码不对或已过期" "$TMP/wrong.err" || fail "配对码错误的提示不对：$(cat "$TMP/wrong.err")"
+UNKNOWN=$(HARMONIA_HOME="$TMP/cli-wrong" "$TMP/harmonia" login "$SERVER" --email "nobody-$RANDOM@example.com" --code "" </dev/null 2>&1 || true)
+[[ "$UNKNOWN" == *"这个邮箱还没有注册"* ]] || fail "未注册的邮箱提示不对：$UNKNOWN"
+
+step "J3 用配对码发起后终端失去响应（心跳中断），请求自动作废"
+PCODE=$(manager phone pairing-code)
+HARMONIA_HOME="$TMP/cli-stall" "$TMP/harmonia" login "$SERVER" --email "$EMAIL" --code "$PCODE" --name "e2e-stall" \
+  </dev/null >/dev/null 2>"$TMP/stall.err" &
 STALL_PID=$!
 CODE=""
 for _ in $(seq 1 60); do
@@ -76,14 +93,18 @@ for _ in $(seq 1 60); do
   sleep 1
 done
 [ -n "$CODE" ] || { cat "$TMP/stall.err"; fail "没有看到配对核对码"; }
+grep -q "已用配对码发起请求" "$TMP/stall.err" || fail "用配对码发起时终端应当提示管理设备会弹出批准页"
+expect_eq "$(manager phone pending | grep e2e-stall | cut -f2)" "authorized" "用配对码发起的请求进入待批准列表"
+if HARMONIA_HOME="$TMP/cli-reuse" "$TMP/harmonia" login "$SERVER" --email "$EMAIL" --code "$PCODE" --name "e2e-reuse" \
+  </dev/null >/dev/null 2>&1; then fail "配对码只能用一次"; fi
 kill -STOP $STALL_PID
 sleep 42
 if manager phone approve "$CODE" OpenAI:rw >/dev/null 2>&1; then fail "心跳中断后的配对请求仍然可以批准"; fi
 kill -KILL $STALL_PID 2>/dev/null || true
 
-step "J3 电脑登录并配对"
-echo "$PASSWORD" | HARMONIA_HOME="$TMP/cli" "$TMP/harmonia" login "$SERVER" --email "$EMAIL" --password-stdin --name "e2e-laptop" \
-  >"$TMP/login.out" 2>"$TMP/login.err" &
+step "J3 电脑不带配对码发起（扫码方式），手输核对码批准"
+HARMONIA_HOME="$TMP/cli" "$TMP/harmonia" login "$SERVER" --email "$EMAIL" --name "e2e-laptop" \
+  </dev/null >"$TMP/login.out" 2>"$TMP/login.err" &
 LOGIN_PID=$!
 CODE=""
 for _ in $(seq 1 60); do
@@ -92,6 +113,8 @@ for _ in $(seq 1 60); do
   sleep 1
 done
 [ -n "$CODE" ] || { cat "$TMP/login.err"; fail "没有看到配对核对码"; }
+grep -q "5 分钟内" "$TMP/login.err" || fail "终端应当提示请求 5 分钟内有效"
+expect_eq "$(manager phone pending | grep e2e-laptop | cut -f2)" "anonymous" "不带配对码的请求是匿名请求"
 manager phone approve "$CODE" OpenAI:rw >/dev/null
 wait $LOGIN_PID || { cat "$TMP/login.err"; fail "CLI 登录失败"; }
 grep -q "可以访问 1 个环境" "$TMP/login.out" || fail "配对后环境数量不对"
@@ -164,8 +187,12 @@ if cli var set OpenAI NEW "x" 2>"$TMP/ro.err"; then fail "只读设备不应能�
 grep -q "只读" "$TMP/ro.err" || fail "只读错误提示不清楚：$(cat "$TMP/ro.err")"
 cli env list | grep -q Other && fail "未授权的环境不应可见"
 
-step "J9 第二台管理设备加入，并能管理全部环境"
-manager phone2 pair --server "$SERVER" --email "$EMAIL" --password "$PASSWORD" --name "第二台手机" \
+step "J9 第二台管理设备用配对码加入，并能管理全部环境"
+# 本地测试的请求都来自同一个网络，设备登录挑战每分钟最多 30 次：先等过这一分钟。
+sleep 61
+PCODE2=$(manager phone pairing-code)
+[ -n "$PCODE2" ] || fail "没有生成配对码"
+manager phone2 pair --server "$SERVER" --email "$EMAIL" --code "$PCODE2" --name "第二台手机" \
   >"$TMP/pair2.out" 2>"$TMP/pair2.err" &
 PAIR_PID=$!
 CODE2=""
@@ -175,6 +202,7 @@ for _ in $(seq 1 60); do
   sleep 1
 done
 [ -n "$CODE2" ] || { cat "$TMP/pair2.err"; fail "第二台手机没有拿到核对码"; }
+expect_eq "$(manager phone pending | grep 第二台手机 | cut -f2)" "authorized" "用配对码发起的手机进入待批准列表"
 manager phone approve "$CODE2" manager >/dev/null
 wait $PAIR_PID || { cat "$TMP/pair2.err"; fail "第二台手机配对失败"; }
 expect_eq "$(cat "$TMP/pair2.out")" "manager" "第二台手机的身份"
