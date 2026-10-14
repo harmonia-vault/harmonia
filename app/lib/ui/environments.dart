@@ -333,9 +333,35 @@ class _EnvironmentPageState extends State<EnvironmentPage> {
                 ],
               ),
             ),
+          SectionTitle('在命令行中使用'),
+          Card(
+            child: ListTile(
+              contentPadding: listRowPadding,
+              title: const Text('环境 ID'),
+              subtitle: Text(env.id, style: const TextStyle(fontFamily: 'monospace')),
+              onTap: () => _copyId(env),
+              trailing: ListRowActions(
+                children: [
+                  IconButton(tooltip: '复制 ID', icon: const Icon(Icons.copy_rounded), onPressed: () => _copyId(env)),
+                ],
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(Space.xs, Space.sm, Space.xs, 0),
+            child: Text(
+              '命令行里可以用 ID 代替环境名，例如 harmonia exec --env ${env.id} -- 命令。改名后 ID 不变，适合写进脚本。',
+              style: TextStyle(color: context.palette.mute, fontSize: 13),
+            ),
+          ),
         ],
       ),
     );
+  }
+
+  void _copyId(Environment env) {
+    if (!AppScope.isSimulated(context)) Clipboard.setData(ClipboardData(text: env.id));
+    toast(context, '已复制环境 ID');
   }
 }
 

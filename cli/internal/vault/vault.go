@@ -163,16 +163,83 @@ func ActiveIDs(c *state.Cache) []string {
 // Merge 按顺序合并环境：同名变量由排在前面的环境提供；本地覆盖值先替换所在环境中的值。
 // 未授权、已到期或已删除的环境被跳过，并在 skipped 中说明。
 func Merge(c *state.Cache, k *state.DeviceKeys, ids []string, ov state.Overrides, nowMs int64) (map[string]string, []string) {
-	out := map[string]string{}
-	var skipped []string
-	for _, src := range sources(c, k, ids, ov, nowMs, &skipped) {
-		for name, v := range src.vals {
-			if _, ok := out[name]; !ok {
-				out[name] = v
-			}
+	picks := make([]Pick, len(ids))
+	for i, id := range ids {
+		picks[i] = Pick{EnvID: id}
+	}
+	// 只选整个环境时不会因为缺少变量而出错。
+	out, skipped, _ := Select(c, k, picks, ov, nowMs)
+	return out, skipped
+}
+
+// Pick 是 --env 的一项：整个环境，或者环境中的一个变量（Var 非空）。
+type Pick struct {
+	EnvID string
+	Var   string
+}
+
+// ParsePick 解析 --env 的一项：整串是环境名称或 ID 时取整个环境；否则按最后一个“:”
+// 拆成环境和变量名（变量名不含“:”），只取这个变量。
+func ParsePick(c *state.Cache, item string) (Pick, error) {
+	env, err := Find(c, item)
+	if err == nil {
+		return Pick{EnvID: env.ID}, nil
+	}
+	i := strings.LastIndex(item, ":")
+	if i < 0 {
+		return Pick{}, err
+	}
+	name := strings.TrimSpace(item[i+1:])
+	if name == "" {
+		return Pick{}, fmt.Errorf("“%s”缺少变量名，只取一个变量时写成 环境:变量名", item)
+	}
+	env, err = Find(c, strings.TrimSpace(item[:i]))
+	if err != nil {
+		return Pick{}, err
+	}
+	return Pick{EnvID: env.ID, Var: name}, nil
+}
+
+// Select 按 picks 的顺序合并：同名变量由排在前面的一项提供，规则同 Merge。
+// 指定的变量在环境中不存在时返回错误；跳过的环境（已到期等）连同其中指定的变量一起跳过。
+func Select(c *state.Cache, k *state.DeviceKeys, picks []Pick, ov state.Overrides, nowMs int64) (map[string]string, []string, error) {
+	var ids []string
+	seen := map[string]bool{}
+	for _, p := range picks {
+		if !seen[p.EnvID] {
+			seen[p.EnvID] = true
+			ids = append(ids, p.EnvID)
 		}
 	}
-	return out, skipped
+	var skipped []string
+	byID := map[string]source{}
+	for _, src := range sources(c, k, ids, ov, nowMs, &skipped) {
+		byID[src.env.ID] = src
+	}
+	out := map[string]string{}
+	add := func(name, v string) {
+		if _, ok := out[name]; !ok {
+			out[name] = v
+		}
+	}
+	for _, p := range picks {
+		src, ok := byID[p.EnvID]
+		if !ok {
+			continue
+		}
+		if p.Var == "" {
+			for name, v := range src.vals {
+				add(name, v)
+			}
+			continue
+		}
+		v, ok := src.vals[p.Var]
+		if !ok {
+			return nil, nil, fmt.Errorf("环境“%s”里没有变量 %s。运行 harmonia var list --env %s 查看这个环境的变量", src.env.Name, p.Var, src.env.Name)
+		}
+		add(p.Var, v)
+	}
+	return out, skipped, nil
 }
 
 // Conflict 表示一个变量同时出现在多个环境中；Envs 按顺序排列，第一个生效。

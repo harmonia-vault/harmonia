@@ -73,7 +73,7 @@ $env:HARMONIA_YES = '0'; irm https://github.com/harmonia-vault/harmonia/releases
 
 ```bash
 harmonia status                   # 接入状态、环境、Shell 集成和后台服务
-harmonia env list                 # 能访问的环境、顺序，以及同名变量由哪个环境提供
+harmonia env list                 # 能访问的环境、顺序、ID，以及同名变量由哪个环境提供
 harmonia var list [--env 环境]    # 变量名，默认隐藏值
 ```
 
@@ -89,9 +89,12 @@ harmonia var list [--env 环境]    # 变量名，默认隐藏值
 harmonia exec -- python agent.py
 harmonia exec --env 环境A,环境B -- npm test   # 只用这些环境，排在前面的优先
 harmonia exec --env 环境A --env 环境B -- npm test   # 同上，--env 也可以重复给出
+harmonia exec --env 环境A,环境C:API_KEY -- npm test   # 环境A 的全部变量，加上环境C 里的 API_KEY
 ```
 
 - 用户要求只用某个或某几个环境（例如测试环境、生产环境）时用 `--env`：命令只拿到这些环境的变量，即使当前终端里已有其他环境的变量。环境名用 `harmonia env list` 查。
+- 只需要某个环境里的个别变量时写成 `环境:变量名`，同一环境要多个变量就写多项（`环境C:A,环境C:B`）；指定的变量不存在时命令不会运行，并提示怎样查看。
+- 环境既可以用名称也可以用 ID 指定（`harmonia env list` 的 ID 列）。把命令写进脚本、CI 或配置文件时用 ID：环境改名后 ID 不变。
 - 不要假设当前 shell 里已经有这些变量。Shell 集成主要作用于用户自己的终端，你执行命令的 shell 不一定加载它。
 - `harmonia exec` 启动时先同步一次；连不上服务器时使用本机缓存，并在 stderr 提示。`harmonia status`、`harmonia env list`、`harmonia var list` 也是这样。
 - 这台设备没有任何环境的访问权限时，`harmonia exec` 照常运行命令，只在 stderr 提示拿不到变量。这时请用户在管理设备上为这台设备授权。

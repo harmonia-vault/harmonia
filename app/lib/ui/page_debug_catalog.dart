@@ -48,7 +48,7 @@ Map<String, List<DebugPageEntry>> debugPages() => {
     DebugPageEntry('设备列表、添加设备菜单与行尾间距', (s) => s.vault.paired ? DevicesTab(c: s.c) : SignInPage(c: s.c)),
     DebugPageEntry('设置、白色滑块与输入弹窗', (s) => s.vault.paired ? SettingsTab(c: s.c) : SignInPage(c: s.c)),
     DebugPageEntry('关于、连点版本号与开源许可', (s) => AboutPage(c: s.c)),
-    DebugPageEntry('环境详情、复制间距与菜单', (s) => _environment(s, edit: false)),
+    DebugPageEntry('环境详情、环境 ID、复制间距与菜单', (s) => _environment(s, edit: false)),
     DebugPageEntry('添加变量', (s) => _environment(s, edit: true)),
     DebugPageEntry('编辑变量', (s) {
       if (s.vault.environments.isEmpty) return _environment(s, edit: true);

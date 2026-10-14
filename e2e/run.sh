@@ -192,6 +192,12 @@ done
 expect_eq "$(cli exec --env Other --env OpenAI -- printenv OPENAI_API_KEY 2>/dev/null)" "from-other" "--env 可以使用已停用的环境，重复给出时先列出的优先"
 # 模拟开启了 Shell 集成的终端：先加载 env.sh，再用 --env 只选 Other。
 expect_eq "$(bash -c ". '$TMP/cli/env.sh'; export MINE=kept; HARMONIA_HOME='$TMP/cli' '$TMP/harmonia' exec --env Other -- sh -c 'printf \"%s %s\" \"\${ONLY_OPENAI-unset}\" \"\$MINE\"'" 2>/dev/null)" "unset kept" "--env 时不带上终端里其他环境的变量，保留用户自己的变量"
+expect_eq "$(cli exec --env Other,OpenAI:ONLY_OPENAI -- sh -c 'printf "%s %s" "$OPENAI_API_KEY" "$ONLY_OPENAI"' 2>/dev/null)" "from-other only-openai" "--env 环境:变量名 只取这一个变量"
+expect_eq "$(bash -c ". '$TMP/cli/env.sh'; HARMONIA_HOME='$TMP/cli' '$TMP/harmonia' exec --env OpenAI:ONLY_OPENAI -- sh -c 'printf \"%s %s\" \"\${OPENAI_API_KEY-unset}\" \"\$ONLY_OPENAI\"'" 2>/dev/null)" "unset only-openai" "只取一个变量时，终端里同一环境的其他变量也不传给命令"
+cli exec --env OpenAI:NOT_THERE -- true 2>/dev/null && fail "指定的变量不存在时不应运行命令"
+OTHER_ID=$(cli env list | awk '$2 == "Other" { print $NF }')
+[ -n "$OTHER_ID" ] || fail "env list 没有显示环境 ID"
+expect_eq "$(cli exec --env "$OTHER_ID:OPENAI_API_KEY" -- printenv OPENAI_API_KEY 2>/dev/null)" "from-other" "--env 可以用环境 ID"
 # 终端里是旧值时，不加 --env 也以最新值为准（同名变量只传一份）。
 expect_eq "$(bash -c "export OPENAI_API_KEY=stale; HARMONIA_HOME='$TMP/cli' '$TMP/harmonia' exec -- sh -c 'env | grep -c ^OPENAI_API_KEY=; printenv OPENAI_API_KEY'" 2>/dev/null | tr '\n' ' ')" "1 sk-second " "同名变量只传最新值"
 

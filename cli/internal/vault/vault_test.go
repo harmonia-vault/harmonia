@@ -1,6 +1,7 @@
 package vault
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/harmonia-vault/harmonia/cli/internal/api"
@@ -147,4 +148,88 @@ func TestKnownIncludesAllEnvironmentsAndOverrides(t *testing.T) {
 	if !got["A"]["low-a"] || !got["A"]["high-a"] || !got["B"]["low-b"] || !got["B"]["local-b"] || len(got) != 2 {
 		t.Fatalf("应包含每个环境的值和本机覆盖值：%v", got)
 	}
+}
+
+// --env 的各项可以是整个环境（名称或 ID），也可以是“环境:变量名”；按列出的顺序合并，靠前的优先。
+func TestSelectPicks(t *testing.T) {
+	f := newFixture(t)
+	s := f.sync(t, 0, map[string]map[string]string{
+		"env-a": {"A": "a-a", "SHARED": "a-shared"},
+		"env-b": {"B": "b-b"},
+		"env-c": {"API_KEY": "c-key", "DB_URL": "c-db", "SHARED": "c-shared", "OTHER": "c-other"},
+	})
+	if err := Apply(f.cache, s, 0, hc.B64(f.root.Pub), f.dev.ID); err != nil {
+		t.Fatal(err)
+	}
+	// 名称与 ID 不同，确认两种写法都能用；名称里带冒号时整串优先当作环境。
+	for i := range f.cache.Environments {
+		switch f.cache.Environments[i].ID {
+		case "env-a":
+			f.cache.Environments[i].Name = "开发"
+		case "env-c":
+			f.cache.Environments[i].Name = "生产"
+		case "env-b":
+			f.cache.Environments[i].Name = "测试:旧"
+		}
+	}
+	parse := func(items ...string) []Pick {
+		t.Helper()
+		var out []Pick
+		for _, item := range items {
+			p, err := ParsePick(f.cache, item)
+			if err != nil {
+				t.Fatalf("%s：%v", item, err)
+			}
+			out = append(out, p)
+		}
+		return out
+	}
+	check := func(got, want map[string]string) {
+		t.Helper()
+		if len(got) != len(want) {
+			t.Fatalf("got %v want %v", got, want)
+		}
+		for k, v := range want {
+			if got[k] != v {
+				t.Errorf("%s: got %q want %q", k, got[k], v)
+			}
+		}
+	}
+
+	if p := parse("测试:旧")[0]; p.EnvID != "env-b" || p.Var != "" {
+		t.Fatalf("名称带冒号的环境应整个选中：%+v", p)
+	}
+	got, _, err := Select(f.cache, f.dev, parse("开发", "测试:旧", "生产:API_KEY", "env-c:DB_URL", "env-c:SHARED"), state.Overrides{"env-c": {"API_KEY": "local"}}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check(got, map[string]string{"A": "a-a", "SHARED": "a-shared", "B": "b-b", "API_KEY": "local", "DB_URL": "c-db"})
+
+	// 指定的变量写在前面时优先于整个环境里的同名变量。
+	got, _, err = Select(f.cache, f.dev, parse("生产:SHARED", "开发"), nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check(got, map[string]string{"SHARED": "c-shared", "A": "a-a"})
+
+	if _, _, err := Select(f.cache, f.dev, parse("生产:MISSING"), nil, 0); err == nil || !strings.Contains(err.Error(), "var list --env 生产") {
+		t.Fatalf("变量不存在时应报错并提示查看：%v", err)
+	}
+	for _, bad := range []string{"生产:", "没有:API_KEY", "没有"} {
+		if _, err := ParsePick(f.cache, bad); err == nil {
+			t.Errorf("%s 应该报错", bad)
+		}
+	}
+
+	// 授权到期的环境连同其中指定的变量一起跳过并说明。
+	for i := range f.cache.Environments {
+		if f.cache.Environments[i].ID == "env-c" {
+			f.cache.Environments[i].ExpiresAt = 1
+		}
+	}
+	got, skipped, err := Select(f.cache, f.dev, parse("生产:API_KEY", "生产:DB_URL", "开发"), nil, 10)
+	if err != nil || len(skipped) != 1 {
+		t.Fatalf("err %v skipped %v", err, skipped)
+	}
+	check(got, map[string]string{"A": "a-a", "SHARED": "a-shared"})
 }

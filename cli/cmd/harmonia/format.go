@@ -89,7 +89,7 @@ var helpGroups = []struct {
 		{"sync", "立即同步"},
 	}},
 	{"环境", [][2]string{
-		{"env list", "列出环境、顺序和同名变量"},
+		{"env list", "列出环境、顺序、ID 和同名变量；环境可以用名称或 ID 指定，ID 改名不变"},
 		{"env activate <环境>", "启用环境（授权的环境默认已启用）"},
 		{"env deactivate <环境>", "停用环境"},
 		{"env order <环境>...", "把这些环境依次移到最前面，同名变量由靠前的提供"},
@@ -106,8 +106,8 @@ var helpGroups = []struct {
 		{"override list", "列出本机覆盖"},
 	}},
 	{"使用变量", [][2]string{
-		{"exec [--env a,b] -- <命令...>", "带上变量运行命令；--env 只用这些环境（可重复给出），靠前的优先"},
-		{"export [--env a,b] [--format sh|dotenv|json]", "输出当前生效的变量；--env 只用这些环境，靠前的优先"},
+		{"exec [--env a,b,c:变量名] -- <命令...>", "带上变量运行命令；--env 只用这些环境（可重复给出），环境:变量名 只取这个变量，靠前的优先"},
+		{"export [--env a,b,c:变量名] [--format sh|dotenv|json]", "输出当前生效的变量；--env 的写法同 exec"},
 	}},
 	{"管理登录（让这台电脑成为管理设备，需要在手机上批准）", [][2]string{
 		{"manager [--port 端口] [--no-open]", "在浏览器里打开本机管理页面：管理登录、环境和变量的批量管理"},
