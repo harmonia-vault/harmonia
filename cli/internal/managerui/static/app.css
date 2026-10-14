@@ -16,7 +16,7 @@
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
 body {
-  margin: 0; min-height: 100vh; background: var(--paper); color: var(--ink);
+  margin: 0; background: var(--paper); color: var(--ink);
   font: 15px/1.6 -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", sans-serif;
 }
 h1, h2, h3, p, ul, dl, dd { margin: 0; }
@@ -157,6 +157,7 @@ tbody tr:hover { background: var(--rail); }
 tbody tr.on { background: var(--hover); }
 td.tick, th.tick { width: 40px; padding-right: 0; }
 td.name { font-weight: 600; overflow-wrap: anywhere; min-width: 180px; }
+td.name .note { display: block; margin-top: 2px; font-size: 12px; font-weight: 400; color: var(--mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 32ch; }
 td.value { width: 52%; }
 td.value code { display: block; max-height: 9em; padding: 4px 0; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; }
 td.value code.empty { font-family: inherit; color: var(--mute); }
