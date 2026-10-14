@@ -169,13 +169,21 @@ export function manageView(st, apply) {
     envs.length === 0 && loaded && h('p', { class: 'mute small', text: '还没有环境。' }));
   }
 
+  // valueCell 是值那一格：解不开、已显示、遮住三种情况。
+  function valueCell(v, open, value) {
+    if (v.broken) return h('span', { class: 'broken', text: '无法解密。可以勾选后删除，或点编辑重新填写。' });
+    if (open) return h('code', { class: value === '' ? 'empty' : '', text: value === '' ? '（空值）' : value });
+    return h('span', { class: 'masked' }, h('span', { class: 'dots', 'aria-hidden': 'true', text: v.length ? '•'.repeat(Math.min(v.length, 12)) : '' }),
+      h('span', { class: 'len', text: v.length ? `${v.length} 个字符` : '空值' }));
+  }
+
   function row(v) {
     const name = v.name;
     const open = shown.has(name);
     const value = shown.get(name);
-    const show = iconButton(open ? 'eyeOff' : 'eye', open ? `隐藏 ${name} 的值` : `显示 ${name} 的值`);
+    const show = iconButton(open ? 'eyeOff' : 'eye', open ? `隐藏 ${name} 的值` : `显示 ${name} 的值`, { disabled: v.broken });
     show.onclick = () => toggle(name, show);
-    const copy = iconButton('copy', `复制 ${name} 的值`);
+    const copy = iconButton('copy', `复制 ${name} 的值`, { disabled: v.broken });
     copy.onclick = () => copyValue(name, copy);
     const box = h('input', { type: 'checkbox', checked: picked.has(name), 'aria-label': `选择 ${name}` });
     box.onchange = () => {
@@ -185,13 +193,11 @@ export function manageView(st, apply) {
     };
     return h('tr', { class: picked.has(name) ? 'on' : '' },
       h('td', { class: 'tick' }, box),
-      h('td', { class: 'mono name', text: name }),
-      h('td', { class: 'value' }, open
-        ? h('code', { class: value === '' ? 'empty' : '', text: value === '' ? '（空值）' : value })
-        : h('span', { class: 'masked' }, h('span', { class: 'dots', 'aria-hidden': 'true', text: v.length ? '•'.repeat(Math.min(v.length, 12)) : '' }),
-          h('span', { class: 'len', text: v.length ? `${v.length} 个字符` : '空值' }))),
+      h('td', { class: 'name' }, h('span', { class: 'mono', text: name }),
+        v.note && h('span', { class: 'note', title: v.note, text: v.note.split('\n')[0] })),
+      h('td', { class: 'value' }, valueCell(v, open, value)),
       h('td', { class: 'ops' }, show, copy,
-        iconButton('edit', `编辑 ${name}`, { onclick: async () => { if (await varDialog(envId, name)) refresh(); } })));
+        iconButton('edit', `编辑 ${name}`, { onclick: async () => { if (await varDialog(envId, v)) refresh(); } })));
   }
 
   function renderMain() {
@@ -205,7 +211,8 @@ export function manageView(st, apply) {
     }
     // 重画后把光标还给筛选框：输入筛选词和其他设备的修改都会触发重画。
     const typing = main.contains(document.activeElement) && document.activeElement.type === 'search';
-    const visible = vars.filter((v) => v.name.toLowerCase().includes(filter.toLowerCase()));
+    const q = filter.toLowerCase();
+    const visible = vars.filter((v) => v.name.toLowerCase().includes(q) || v.note.toLowerCase().includes(q));
     const all = h('input', { type: 'checkbox', 'aria-label': '全选', checked: visible.length > 0 && visible.every((v) => picked.has(v.name)) });
     all.onchange = () => {
       for (const v of visible) {
@@ -214,7 +221,7 @@ export function manageView(st, apply) {
       }
       renderMain();
     };
-    const search = h('input', { type: 'search', placeholder: `在 ${vars.length} 个变量里按名称筛选`, value: filter, 'aria-label': '按名称筛选', spellcheck: false });
+    const search = h('input', { type: 'search', placeholder: `在 ${vars.length} 个变量里按名称或备注筛选`, value: filter, 'aria-label': '按名称或备注筛选', spellcheck: false });
     search.oninput = () => {
       filter = search.value;
       renderMain();
@@ -237,7 +244,7 @@ export function manageView(st, apply) {
           labeled('plus', '添加变量', { class: 'primary', onclick: openAdd })),
       vars.length > 0 && h('div', { class: 'table' }, h('table', {},
         h('thead', {}, h('tr', {}, h('th', { class: 'tick' }, all), h('th', { text: '名称' }), h('th', { text: '值' }), h('th', { class: 'ops' }, h('span', { class: 'sr', text: '操作' })))),
-        h('tbody', {}, visible.map(row), visible.length === 0 && h('tr', {}, h('td', { colSpan: 4, class: 'mute none', text: `没有名称包含“${filter}”的变量。` }))))),
+        h('tbody', {}, visible.map(row), visible.length === 0 && h('tr', {}, h('td', { colSpan: 4, class: 'mute none', text: `没有名称或备注包含“${filter}”的变量。` }))))),
       h('button', { type: 'button', class: vars.length ? 'drop' : 'drop tall', onclick: () => openImport() },
         glyph('file', vars.length ? 44 : 84),
         h('span', {}, h('b', { text: vars.length ? '把 .env 文件拖到这里，批量导入' : '这个环境还没有变量' }),

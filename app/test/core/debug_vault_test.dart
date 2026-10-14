@@ -12,6 +12,8 @@ import 'package:harmonia/core/vault.dart';
 void main() {
   late HCrypto crypto;
   late DebugVault vault;
+  Map<String, String> values(DebugVault v, String id) => v.entries(id).map((k, e) => MapEntry(k, e.value));
+
   setUpAll(() async => crypto = await HCrypto.init());
   setUp(() => vault = DebugVault(crypto));
   tearDown(() => vault.close());
@@ -19,22 +21,36 @@ void main() {
   test('环境与变量的增改删跨次读取一致，删除环境同时撤销设备引用', () async {
     await vault.createEnvironment('新的示例');
     final id = vault.environments.last.id;
-    await vault.setVariable(id, 'TOKEN', 'demo-only');
-    await vault.setVariable(id, 'TOKEN', 'changed');
+    await vault.setVariable(id, 'TOKEN', 'demo-only', '');
+    await vault.setVariable(id, 'TOKEN', 'changed', '  用途说明  ');
     await vault.renameEnvironment(id, '已改名');
     final device = vault.devices.last;
     await vault.updateGrants(device, [Grant(id, 'rw', 0)]);
     await vault.sync();
     expect(vault.environment(id).name, '已改名');
-    expect(vault.values(id), {'TOKEN': 'changed'});
+    expect(values(vault, id), {'TOKEN': 'changed'});
+    expect(vault.entries(id)['TOKEN']!.note, '用途说明');
     expect(vault.devices.last.grants.single.envId, id);
     await vault.deleteVariable(id, 'TOKEN');
-    expect(vault.values(id), isEmpty);
-    await vault.setVariable(id, 'OTHER', 'temporary');
+    expect(values(vault, id), isEmpty);
+    await vault.setVariable(id, 'OTHER', 'temporary', '');
     await vault.deleteEnvironment(id);
     expect(vault.environments.where((e) => e.id == id), isEmpty);
     expect(vault.cache.variables.containsKey(id), isFalse);
     expect(vault.devices.last.grants, isEmpty);
+  });
+
+  test('解不开的变量单独列出，可以删除或重新写入，其他变量不受影响', () async {
+    expect(vault.brokenVariables('debug-env-1'), ['OLD_TOKEN']);
+    expect(vault.entries('debug-env-1').keys, containsAll(['API_KEY', 'API_URL']));
+    expect(vault.entries('debug-env-1').containsKey('OLD_TOKEN'), isFalse);
+    await vault.setVariable('debug-env-1', 'OLD_TOKEN', 'new', '重新写入');
+    expect(vault.brokenVariables('debug-env-1'), isEmpty);
+    expect(vault.entries('debug-env-1')['OLD_TOKEN']!.note, '重新写入');
+    vault.reset();
+    await vault.deleteVariable('debug-env-1', 'OLD_TOKEN');
+    expect(vault.brokenVariables('debug-env-1'), isEmpty);
+    expect(vault.cache.variables['debug-env-1']!.containsKey('OLD_TOKEN'), isFalse);
   });
 
   test('设备管理通过 Vault 类型调用仍然只修改模拟状态', () async {
@@ -56,20 +72,20 @@ void main() {
   });
 
   test('离线和失败操作不改变已有数据，重置与新会话恢复样例', () async {
-    final original = vault.values('debug-env-1');
+    final original = values(vault, 'debug-env-1');
     vault.scenario = DebugScenario.offline;
-    await expectLater(vault.setVariable('debug-env-1', 'API_KEY', 'wrong'), throwsA(isA<ApiException>()));
+    await expectLater(vault.setVariable('debug-env-1', 'API_KEY', 'wrong', ''), throwsA(isA<ApiException>()));
     vault.scenario = DebugScenario.failure;
     await expectLater(vault.deleteEnvironment('debug-env-1'), throwsA(isA<VaultException>()));
-    expect(vault.values('debug-env-1'), original);
+    expect(values(vault, 'debug-env-1'), original);
     vault.reset(scenario: DebugScenario.empty);
     expect(vault.environments, isEmpty);
     vault.reset();
-    expect(vault.values('debug-env-1'), original);
+    expect(values(vault, 'debug-env-1'), original);
     final other = DebugVault(crypto);
     addTearDown(other.close);
     await vault.deleteEnvironment('debug-env-1');
-    expect(other.values('debug-env-1'), original);
+    expect(values(other, 'debug-env-1'), original);
   });
 
   test('任意服务器地址都只产生模拟账号结果，验证码和重置产生内存变化', () async {

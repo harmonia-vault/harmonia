@@ -165,7 +165,7 @@ func cmdEnv(ctx context.Context, args []string) error {
 	return nil
 }
 func cmdVar(ctx context.Context, args []string) error {
-	f, err := parseFlags(args, "env")
+	f, err := parseFlags(args, "env", "note")
 	if err != nil {
 		return err
 	}
@@ -181,16 +181,23 @@ func cmdVar(ctx context.Context, args []string) error {
 	}
 	switch f.args[0] {
 	case "set":
-		if len(f.args) < 3 {
-			return errors.New("用法：harmonia var set <环境> <变量名> [值]")
+		if len(f.args) < 3 || len(f.args) > 4 {
+			return errors.New("用法：harmonia var set <环境> <变量名> [值] [--note 备注]")
 		}
-		value := ""
-		if len(f.args) >= 4 {
-			value = f.args[3]
-		} else if value, err = promptSecret(fmt.Sprintf("%s 的值：", f.args[2])); err != nil {
-			return err
+		var ch app.VarChange
+		if note, ok := f.values["note"]; ok {
+			ch.Note = &note
 		}
-		if err := a.SetVariables(ctx, f.args[1], map[string]string{f.args[2]: value}); err != nil {
+		if len(f.args) == 4 {
+			ch.Value = &f.args[3]
+		} else if ch.Note == nil {
+			value, err := promptSecret(fmt.Sprintf("%s 的值：", f.args[2]))
+			if err != nil {
+				return err
+			}
+			ch.Value = &value
+		}
+		if err := a.SetVariables(ctx, f.args[1], map[string]app.VarChange{f.args[2]: ch}); err != nil {
 			return err
 		}
 		fmt.Printf("已写入 %s。\n", f.args[2])
@@ -239,13 +246,14 @@ func cmdImport(ctx context.Context, args []string) error {
 		fmt.Println("已取消。")
 		return nil
 	}
-	picked := map[string]string{}
+	picked := map[string]app.VarChange{}
 	for _, tok := range strings.FieldsFunc(ans, func(r rune) bool { return r == ',' || r == ' ' || r == '，' }) {
 		i, err := strconv.Atoi(tok)
 		if err != nil || i < 1 || i > len(names) {
 			return fmt.Errorf("编号“%s”不对", tok)
 		}
-		picked[names[i-1]] = cands[names[i-1]]
+		v := cands[names[i-1]]
+		picked[names[i-1]] = app.VarChange{Value: &v}
 	}
 	if err := a.SetVariables(ctx, f.values["env"], picked); err != nil {
 		return err

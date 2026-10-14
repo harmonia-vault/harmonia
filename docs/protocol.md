@@ -10,6 +10,7 @@
 | ID | 16 字节随机数的 b64，22 个字符，匹配 `^[A-Za-z0-9_-]{22}$` |
 | 变量名 | `^[A-Za-z_][A-Za-z0-9_]{0,127}$`，不能以 `__HARMONIA_` 开头（不区分大小写） |
 | 变量值 | UTF-8，最长 65536 字节，可以为空 |
+| 变量备注 | UTF-8，去除首尾空白后最长 200 个字符，可以换行，可以为空 |
 | 环境名、设备名 | 去除首尾空白后 1–64 个字符 |
 | 时间 | Unix 毫秒整数 |
 | 规范数组 | 字符串数组的紧凑 JSON 的 UTF-8 字节，记作 `C([...])`。数组元素只允许 ASCII 可打印字符（ID、b64、十进制数字、固定单词），因此 Go、Dart、JS 的输出一致 |
@@ -20,7 +21,7 @@
 
 | 用途 | 构件 |
 | --- | --- |
-| 变量值加密 | XChaCha20-Poly1305-IETF。密文 = b64(nonce24 ‖ ciphertext ‖ tag16)。AAD = `C(["harmonia.value", envId, keyVersion, name])` |
+| 变量加密 | XChaCha20-Poly1305-IETF，值和备注一起加密，明文见 2.6。密文 = b64(nonce24 ‖ ciphertext ‖ tag16)。AAD = `C(["harmonia.var", envId, keyVersion, name])` |
 | 封装 | libsodium `crypto_box_seal`（X25519 + XSalsa20-Poly1305） |
 | 加密密钥对 | 由 32 字节种子按 `crypto_box_seed_keypair` 派生：sk = SHA-512(seed)[0:32]，pk = X25519(sk, 基点) |
 | 签名 | Ed25519，由 32 字节种子派生（`crypto_sign_seed_keypair`） |
@@ -154,6 +155,19 @@ DEK  = 32 字节随机数，设置管理口令时生成
 - **清除**：退出管理登录、被撤销、卸载时删除 `manager.json`。
 - 文件权限和写入方式与数据目录下的其他文件相同。
 
+### 2.6 变量明文
+
+变量的明文是一个 UTF-8 编码的 JSON 对象，最长 512 KiB：
+
+```json
+{"value": "sk-...", "note": "测试用的 Key"}
+```
+
+- `value`：字符串，必填，变量值（第 1 节）。
+- `note`：字符串，可选，变量备注（第 1 节）；没有备注时省略或为空字符串。
+- 以后新增的字段都是可选的。读取时忽略不认识的字段；改写一个变量时，不认识的字段原样保留，只改自己认识的字段，这样旧客户端修改备注不会丢掉新版本加入的内容。
+- 解密后不是 JSON 对象、缺少 `value`，或 `value`、`note` 不是字符串时，按解密失败处理。
+
 ## 3. HTTP API
 
 - 基础路径为 `/api/v1`。请求和响应都是 JSON，只允许 HTTPS（本地开发时允许 `http://localhost`、`http://127.0.0.1`）。
@@ -229,7 +243,7 @@ DEK  = 32 字节随机数，设置管理口令时生成
 | `POST /environments` | device（管理设备） | `{id, name, envelopes:[{recipient, keyVersion, sealed, sig}]}`，必须覆盖全部活跃的管理设备和 `recovery` |
 | `PATCH /environments/{id}` | 管理设备或该环境的 admin | `{name}` |
 | `DELETE /environments/{id}` | 管理设备或该环境的 admin | 删除环境和其中全部变量 |
-| `PUT /environments/{id}/variables/{name}` | rw、admin 或管理设备 | `{value, keyVersion}`，请求头带 `Idempotency-Key` |
+| `PUT /environments/{id}/variables/{name}` | rw、admin 或管理设备 | `{value, keyVersion}`，`value` 是值和备注一起加密的密文（第 2 节），只改备注也整体重写。请求头带 `Idempotency-Key` |
 | `DELETE /environments/{id}/variables/{name}` | 同上 | 请求头带 `Idempotency-Key` |
 | `PUT /devices/{id}/grants` | 管理设备 | `{grants:[{envId, role, expiresAt}], envelopes:[{envId, keyVersion, sealed, sig}]}`，整体替换；新授权的环境必须附带封装。已有授权保留激活状态和顺序，新授权默认激活并排在最后 |
 | `PUT /devices/{id}/activation` | 管理设备；或设备本身，此时 `{id}` 为 `self` | `{envs:[{envId, active}]}`，按顺序从前到后排列（排在前面的覆盖后面的同名变量），必须包含该设备全部未到期的授权环境（可以带上已到期的），不能有未授权的环境，否则返回 `conflict`；没有列出的已到期授权保持原有相对顺序，排在后面。只修改激活状态和顺序 |

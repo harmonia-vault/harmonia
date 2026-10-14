@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../app/controller.dart';
+import '../core/crypto.dart' show VarEntry, maxNoteLen;
 import '../core/models.dart';
 import 'theme.dart';
 import 'app_scope.dart';
@@ -187,15 +188,18 @@ class _EnvironmentPageState extends State<EnvironmentPage> {
   Widget build(BuildContext context) {
     final env = c.vault.environments.where((e) => e.id == widget.envId).firstOrNull;
     if (env == null) return const Scaffold();
-    Map<String, String> values;
+    Map<String, VarEntry> values;
+    List<String> broken;
     String? error;
     try {
-      values = c.vault.values(env.id);
+      values = c.vault.entries(env.id);
+      broken = c.vault.brokenVariables(env.id);
     } catch (e) {
       values = {};
+      broken = [];
       error = errorText(e);
     }
-    final names = values.keys.toList()..sort();
+    final names = [...values.keys, ...broken]..sort();
     final devices = c.vault.devices.where((d) => !d.isManager && d.grants.any((g) => g.envId == env.id)).toList();
     return AppPage(
       appBar: AppBarSurface(
@@ -253,38 +257,56 @@ class _EnvironmentPageState extends State<EnvironmentPage> {
                         n,
                         style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.w600),
                       ),
-                      subtitle: Text(
-                        _revealed.contains(n) ? values[n]! : '••••••••',
-                        maxLines: _revealed.contains(n) ? 6 : 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontFamily: 'monospace'),
-                      ),
+                      subtitle: values[n] == null
+                          ? Text('无法解密，点按后可以删除或重新填写', style: TextStyle(color: context.palette.accent))
+                          : Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _revealed.contains(n) ? values[n]!.value : '••••••••',
+                                  maxLines: _revealed.contains(n) ? 6 : 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontFamily: 'monospace'),
+                                ),
+                                if (values[n]!.note.isNotEmpty)
+                                  Text(
+                                    values[n]!.note,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(color: context.palette.mute, fontSize: 13),
+                                  ),
+                              ],
+                            ),
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(
                           builder: (_) => VariableEditPage(c: c, envId: env.id, name: n),
                         ),
                       ),
-                      trailing: ListRowActions(
-                        children: [
-                          IconButton(
-                            tooltip: _revealed.contains(n) ? '隐藏' : '显示',
-                            icon: Icon(
-                              _revealed.contains(n) ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                      trailing: values[n] == null
+                          ? const ListRowChevron()
+                          : ListRowActions(
+                              children: [
+                                IconButton(
+                                  tooltip: _revealed.contains(n) ? '隐藏' : '显示',
+                                  icon: Icon(
+                                    _revealed.contains(n) ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                                  ),
+                                  onPressed: () =>
+                                      setState(() => _revealed.contains(n) ? _revealed.remove(n) : _revealed.add(n)),
+                                ),
+                                IconButton(
+                                  tooltip: '复制',
+                                  icon: const Icon(Icons.copy_rounded),
+                                  onPressed: () {
+                                    if (!AppScope.isSimulated(context)) {
+                                      Clipboard.setData(ClipboardData(text: values[n]!.value));
+                                    }
+                                    toast(context, '已复制 $n');
+                                  },
+                                ),
+                              ],
                             ),
-                            onPressed: () =>
-                                setState(() => _revealed.contains(n) ? _revealed.remove(n) : _revealed.add(n)),
-                          ),
-                          IconButton(
-                            tooltip: '复制',
-                            icon: const Icon(Icons.copy_rounded),
-                            onPressed: () {
-                              if (!AppScope.isSimulated(context)) Clipboard.setData(ClipboardData(text: values[n]!));
-                              toast(context, '已复制 $n');
-                            },
-                          ),
-                        ],
-                      ),
                     ),
                   ],
                 ],
@@ -329,9 +351,10 @@ class VariableEditPage extends StatefulWidget {
 class _VariableEditPageState extends State<VariableEditPage> {
   final _form = GlobalKey<FormState>();
   late final _name = TextEditingController(text: widget.name ?? '');
-  late final _value = TextEditingController(
-    text: widget.name == null ? '' : (widget.c.vault.values(widget.envId)[widget.name] ?? ''),
-  );
+  late final _old = widget.name == null ? null : widget.c.vault.entries(widget.envId)[widget.name];
+  late final _broken = widget.name != null && _old == null;
+  late final _value = TextEditingController(text: _old?.value ?? '');
+  late final _note = TextEditingController(text: _old?.note ?? '');
   bool _show = false;
 
   bool get _editing => widget.name != null;
@@ -340,14 +363,14 @@ class _VariableEditPageState extends State<VariableEditPage> {
     if (!_form.currentState!.validate()) return;
     final c = widget.c;
     final name = _name.text.trim();
-    if (!_editing && c.vault.values(widget.envId).containsKey(name)) {
+    if (!_editing && c.vault.entries(widget.envId).containsKey(name)) {
       final ok = await confirmDialog(context, title: '覆盖 $name？', body: '这个环境中已经有同名变量，保存会覆盖原来的值。', ok: '覆盖');
       if (!ok || !mounted) return;
     }
     final nav = Navigator.of(context);
     final ok = await runBusy(
       context,
-      () => c.guard(() => c.vault.setVariable(widget.envId, name, _value.text)),
+      () => c.guard(() => c.vault.setVariable(widget.envId, name, _value.text, _note.text)),
       done: '已保存 $name',
     );
     if (ok) nav.pop();
@@ -412,7 +435,20 @@ class _VariableEditPageState extends State<VariableEditPage> {
             validator: (v) => (v ?? '').length > 65536 ? '值不能超过 64 KB' : null,
           ),
           const SizedBox(height: Space.md),
-          const Banner2('值在本机加密后才会上传。\n保存需要联网，成功后会同步到所有获授权的电脑。'),
+          TextFormField(
+            controller: _note,
+            minLines: 1,
+            maxLines: 4,
+            maxLength: maxNoteLen,
+            decoration: const InputDecoration(labelText: '备注（可选）', hintText: '例如：用途、从哪里申请、什么时候到期'),
+            validator: (v) => (v ?? '').trim().runes.length > maxNoteLen ? '备注最长 $maxNoteLen 个字' : null,
+          ),
+          const SizedBox(height: Space.md),
+          if (_broken) ...[
+            const Banner2('原来的内容无法解密。可以点右上角删除这个变量，或者重新填写值和备注，保存后覆盖。', warn: true),
+            const SizedBox(height: Space.md),
+          ],
+          const Banner2('值和备注在本机加密后才会上传。\n保存需要联网，成功后会同步到所有获授权的电脑。'),
           const SizedBox(height: Space.xl),
           FilledButton(onPressed: _save, child: const Text('保存')),
         ],

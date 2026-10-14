@@ -105,19 +105,39 @@ func EnvKey(c *state.Cache, k *state.DeviceKeys, envID string) ([]byte, int, err
 	return nil, 0, errors.New("这台设备没有这个环境的密钥")
 }
 
-// Values 解密一个环境的全部变量。
-func Values(c *state.Cache, k *state.DeviceKeys, envID string) (map[string]string, error) {
+// Entries 解密一个环境的全部变量（值和备注）。解不开的变量不放进结果，名称按顺序列在 broken 里，
+// 它们仍然可以删除或重新写入。
+func Entries(c *state.Cache, k *state.DeviceKeys, envID string) (map[string]hc.Entry, []string, error) {
 	key, _, err := EnvKey(c, k, envID)
+	if err != nil {
+		return nil, nil, err
+	}
+	out := map[string]hc.Entry{}
+	var broken []string
+	for name, v := range c.Variables[envID] {
+		e, err := hc.DecryptVar(key, envID, v.KeyVersion, name, v.Value)
+		if err != nil {
+			broken = append(broken, name)
+			continue
+		}
+		out[name] = e
+	}
+	sort.Strings(broken)
+	return out, broken, nil
+}
+
+// Values 解密一个环境的全部变量的值；有变量解不开时整个环境报错。
+func Values(c *state.Cache, k *state.DeviceKeys, envID string) (map[string]string, error) {
+	entries, broken, err := Entries(c, k, envID)
 	if err != nil {
 		return nil, err
 	}
-	out := map[string]string{}
-	for name, v := range c.Variables[envID] {
-		plain, err := hc.DecryptValue(key, envID, v.KeyVersion, name, v.Value)
-		if err != nil {
-			return nil, fmt.Errorf("变量 %s 解密失败，可能数据已损坏", name)
-		}
-		out[name] = plain
+	if len(broken) > 0 {
+		return nil, fmt.Errorf("变量 %s 无法解密，可能数据已损坏。可以用 harmonia var rm 删除它，或在管理设备上重新写入", broken[0])
+	}
+	out := make(map[string]string, len(entries))
+	for name, e := range entries {
+		out[name] = e.Value
 	}
 	return out, nil
 }

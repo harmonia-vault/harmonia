@@ -2,7 +2,7 @@
   "box": {
     "plain": "environment-key-0123456789abcdef",
     "pub": "2AKgsNn2QueLyPryEL9zjXrpGjE7A__CwRyEudgB0Hg",
-    "sealed": "v_7vb5zyOinb-ReLAB1UY6iUsF67M0teQAYnPVEzBFzhzd0MhRl2o3R18JuaWQ1IstdOEqnZC3u8JtH5zPpHn_rpNOMKaNQBQzIP6ZAC0Hg",
+    "sealed": "j5mMBE9AIuAn1qkamb0lp_h7HB8GAwvDApJl6JHau3lLB-ZFprWWzs8f0QHF0WbKUMFqCJWJKQ4E_AgIs9Umg1TYLlydJFD4o9SxccQMFSU",
     "seed": "AgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4fICE"
   },
   "canonical": {
@@ -23,8 +23,8 @@
   },
   "minisign": {
     "message": "{\"version\":\"9.9.9\"}",
-    "publicKey": "untrusted comment: minisign public key: 8377CBE8E040E41F\nRWQf5EDg6Mt3g5A9pFHqQlddjkaalhrzj4yPlZTRnvH5WFfs63r/XAjp",
-    "signature": "untrusted comment: test\nRWQf5EDg6Mt3g7Dt4tW20zPQwMHAy+YW+JNoGivVzzuE9TOvO779A68Rj7tDzvkou2UBfcwL3RxgXQ0YpaOkdq4vRff4FGRpXws=\ntrusted comment: timestamp:0\nt1E2hDNJ7s7lB1rBiKOygyEmm4ZbvjjfyNVSonsS0c9Arlbqtjd/90yxhUYN5er734p94iIY+lhAT2j+WM0JBw==\n"
+    "publicKey": "untrusted comment: minisign public key: C119EE10A06C6A20\nRWQgamygEO4ZwcvkfaGZT66Q51+69+h31okLEdLSo5YX7m6PFXFV+L69",
+    "signature": "untrusted comment: test\nRWQgamygEO4ZwSJGPq1yMMBoc7LQsmsm1OTPZHXaHZt9p+dPQTZHJpY8lucTpOuB7hwB38d0i17XwLS42JjHXXTUx+LNm+yeVAM=\ntrusted comment: timestamp:0\nvB9oO1QwopNC19dE7mN7x59uZOB29c+eBuP6nkpB2pagZ2Gx8Ug7BYw4BISwYvtqJ5/VbPSppwxo68w/7sg3Cw==\n"
   },
   "pairing": {
     "boxPub": "2AKgsNn2QueLyPryEL9zjXrpGjE7A__CwRyEudgB0Hg",
@@ -47,12 +47,15 @@
     "seed": "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA",
     "sig": "4JfiYKNw1eVh5bBUu-mw6wT7TamLzE4M2BoTwZ4-cNPuFiTyAlkCnN-gMCRsprIjc3lA6Y8i1l0YybTqPLKKAA"
   },
-  "value": {
-    "ciphertext": "6Ka3BzB4rP3QEdWUBhU8mJrQu-uxYnq2-ryTYMBfYX3mLVwSCUKjRDJzxBvrOwbzezsDwYF4hcJyhKh814ejwdURoa8",
+  "var": {
+    "ciphertext": "qy-eSU2ZDA_DVBWFQtkJRR-Ua92cmt9YdUFhtT3JXSWXPn3NC6OXBKhqFrdwuR2akIr9zHFtC8v9VKVBYau0RlwWhxSZ6qCkaPTOLp1-O3ijzVUmGT27lW1VI1lwanh6F3o0R9NWo5lTUrxunS7NMnADPoPz",
     "envId": "BBBBBBBBBBBBBBBBBBBBBB",
     "key": "AwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISI",
     "keyVersion": 1,
     "name": "OPENAI_API_KEY",
-    "plain": "sk-测试 value with 'quote'"
+    "noNoteCiphertext": "MeR1LADAi2BsH24WxHLrOHdEt4cBYTFINnW57SlqwOd08Xcp-AuQi1LlnkKS1kdf3nPhqV4",
+    "noNoteName": "EMPTY_NOTE",
+    "note": "测试用的 Key\n第二行",
+    "value": "sk-测试 value with 'quote'"
   }
 }

@@ -119,6 +119,16 @@ func mask(v string) string {
 	return v[:2] + strings.Repeat("*", 6) + v[len(v)-2:]
 }
 
+// noteLine 是列表里显示的备注：多行备注只显示第一行。
+func noteLine(note string) string {
+	first, rest, more := strings.Cut(note, "\n")
+	first = strings.TrimSpace(first)
+	if more && strings.TrimSpace(rest) != "" {
+		first += " …"
+	}
+	return first
+}
+
 func listVars(a *app.App, envName string, show bool) error {
 	cache, err := a.Dir.Cache()
 	if err != nil {
@@ -143,7 +153,7 @@ func listVars(a *app.App, envName string, show bool) error {
 			fmt.Println()
 		}
 		fmt.Printf("%s（%s）\n", e.Name, roleNames[e.Role])
-		vals, err := vault.Values(cache, a.Keys, e.ID)
+		vals, broken, err := vault.Entries(cache, a.Keys, e.ID)
 		if err != nil {
 			fmt.Println("  " + sentence(err.Error()))
 			continue
@@ -153,23 +163,29 @@ func listVars(a *app.App, envName string, show bool) error {
 			names = append(names, n)
 		}
 		sort.Strings(names)
-		if len(names) == 0 {
+		if len(names) == 0 && len(broken) == 0 {
 			fmt.Println("  （没有变量）")
 			continue
 		}
 		var rows [][]string
+		for _, n := range broken {
+			rows = append(rows, []string{n, "（无法解密）", "", ""})
+		}
 		for _, n := range names {
-			v := vals[n]
+			v := vals[n].Value
 			if !show {
 				v = mask(v)
 			}
-			note := ""
+			mark := ""
 			if _, ok := ov[e.ID][n]; ok {
-				note = "（本机覆盖）"
+				mark = "（本机覆盖）"
 			}
-			rows = append(rows, []string{n, v, note})
+			rows = append(rows, []string{n, v, noteLine(vals[n].Note), mark})
 		}
 		printTable(os.Stdout, "  ", rows)
+		if len(broken) > 0 {
+			fmt.Printf("  无法解密的变量可以用 harmonia var rm %s <变量名> 删除，或用 harmonia var set 重新写入。\n", e.Name)
+		}
 	}
 	return nil
 }

@@ -19,6 +19,7 @@ var ErrNotManager = errors.New("这台电脑没有被批准为管理设备")
 // Session 是解锁后的管理身份。全部数据只在内存里，丢弃它即锁定。
 type Session struct {
 	File   *state.ManagerFile
+	dir    *state.Dir
 	keys   *state.DeviceKeys
 	client *api.Client
 
@@ -29,11 +30,11 @@ type Session struct {
 }
 
 // Open 用已解开的设备密钥建立会话；调用方随后要先 Sync 一次。
-func Open(f *state.ManagerFile, keys *state.DeviceKeys) *Session {
+func Open(d *state.Dir, f *state.ManagerFile, keys *state.DeviceKeys) *Session {
 	c := api.New(f.Server)
 	c.AccountID = f.AccountID
 	c.Signer = keys
-	return &Session{File: f, keys: keys, client: c, cache: emptyCache()}
+	return &Session{File: f, dir: d, keys: keys, client: c, cache: emptyCache()}
 }
 
 func emptyCache() *state.Cache {
@@ -83,6 +84,15 @@ func (s *Session) syncLocked(ctx context.Context) error {
 		return err
 	}
 	s.cache, s.info, s.root = next, res.Manager, root
+	// 设备名可以在手机上修改，以服务器为准。
+	if res.Self.Name != "" && res.Self.Name != s.File.DeviceName {
+		updated := *s.File
+		updated.DeviceName = res.Self.Name
+		if err := s.dir.SaveManager(&updated); err != nil {
+			return err
+		}
+		*s.File = updated
+	}
 	return nil
 }
 

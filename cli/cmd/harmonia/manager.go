@@ -132,7 +132,7 @@ func managerLogout(ctx context.Context, d *state.Dir, yes bool) error {
 	if err != nil {
 		return err
 	}
-	sess := manager.Open(m, keys)
+	sess := manager.Open(d, m, keys)
 	err = sess.Logout(ctx, false)
 	if api.IsCode(err, "conflict") {
 		if !confirm("这是账号里唯一的管理设备。退出后只能用恢复码找回账号。仍然退出？") {

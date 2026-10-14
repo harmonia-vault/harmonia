@@ -59,13 +59,47 @@ class _DevicesTabState extends State<DevicesTab> {
     if (mounted) _loadPending();
   }
 
+  Widget _deviceList(List<DeviceInfo> devices, String me) => Card(
+    child: Column(
+      children: [
+        for (final (i, d) in devices.indexed) ...[
+          if (i > 0) const Divider(),
+          ListTile(
+            contentPadding: listRowPadding,
+            leading: Icon(platformIcon(d.platform)),
+            title: Text(d.id == me ? '${d.name}（本机）' : d.name),
+            subtitle: Text(
+              d.isManager
+                  ? '${platformName(d.platform)} · ${formatTime(d.lastSeenAt)}活动'
+                  : '${d.grants.length} 个环境 · ${formatTime(d.lastSeenAt)}活动',
+            ),
+            trailing: const ListRowChevron(),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => DevicePage(c: c, deviceId: d.id),
+              ),
+            ),
+          ),
+        ],
+      ],
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     if (_seenCount != c.pendingPairingCount) {
       _seenCount = c.pendingPairingCount;
       WidgetsBinding.instance.addPostFrameCallback((_) => _loadPending());
     }
-    final devices = [...c.vault.devices]..sort((a, b) => (a.isManager ? 0 : 1).compareTo(b.isManager ? 0 : 1));
+    final managers = [
+      for (final d in c.vault.devices)
+        if (d.isManager) d,
+    ];
+    final clients = [
+      for (final d in c.vault.devices)
+        if (!d.isManager) d,
+    ];
     final me = c.vault.config!.deviceId;
     return AppTabPage(
       title: '设备',
@@ -114,33 +148,9 @@ class _DevicesTabState extends State<DevicesTab> {
               ),
             ),
         ],
-        const SectionTitle('已授权的设备'),
-        Card(
-          child: Column(
-            children: [
-              for (final (i, d) in devices.indexed) ...[
-                if (i > 0) const Divider(),
-                ListTile(
-                  contentPadding: listRowPadding,
-                  leading: Icon(platformIcon(d.platform)),
-                  title: Text(d.id == me ? '${d.name}（本机）' : d.name),
-                  subtitle: Text(
-                    d.isManager
-                        ? '管理设备 · ${formatTime(d.lastSeenAt)}活动'
-                        : '${d.grants.length} 个环境 · ${formatTime(d.lastSeenAt)}活动',
-                  ),
-                  trailing: const ListRowChevron(),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => DevicePage(c: c, deviceId: d.id),
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
+        const SectionTitle('管理设备'),
+        _deviceList(managers, me),
+        if (clients.isNotEmpty) ...[const SectionTitle('CLI'), _deviceList(clients, me)],
         const SizedBox(height: Space.md),
         Text(
           tidy('在电脑上运行 harmonia login 后，点击“添加设备”扫描终端里的二维码；也可以先在“添加设备”中生成配对码，用配对码发起的请求会出现在上面的“等待批准”中。'),
