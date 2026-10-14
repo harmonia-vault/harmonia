@@ -230,7 +230,7 @@ DEK  = 32 字节随机数，设置管理口令时生成
 | `POST /account/setup` | registration，且账号未初始化 | 首次初始化：创建 root 和第一台管理设备，见 3.2.1。成功后注册会话作废 |
 | `POST /auth/challenge` | 请求头 `X-Harmonia-Account` | `{deviceId}` → `{nonce, expiresAt}`，nonce 只能使用一次，2 分钟内有效 |
 | `POST /auth/device-session` | 请求头 `X-Harmonia-Account` | `{deviceId, nonce, signature}` → `{token, expiresAt}` |
-| `POST /pairing-codes` | device（管理设备） | `{}` → `{code, expiresAt}`：生成配对码，8 位 Crockford Base32，5 分钟内有效。每个账号同时只有一个有效配对码，重新生成会作废上一个；用它成功创建一个配对请求后即作废。服务端只保存 `SHA-256` 哈希 |
+| `POST /pairing-codes` | device（管理设备） | `{minutes?}` → `{code, expiresAt}`：生成配对码，8 位 Crockford Base32。`minutes` 是有效期（分钟），5 到 60 的整数，省略时为 10，超出范围返回 `invalid_request`。每个配对码在过期前、或用它成功创建一个配对请求之前一直有效，生成新的不影响已有的；每个账号同时最多 10 个，超出时作废最早生成的那个。服务端只保存 `SHA-256` 哈希 |
 | `POST /pairings` | 请求头 `X-Harmonia-Account`，不需要会话 | `{name, platform, signPub, boxPub, rootPub, canManage, code?}` → `{id, secret, expiresAt, authorized}`，5 分钟内有效。`platform` 是 `android`、`ios`、`darwin`、`linux`、`windows` 之一，只用于显示。`canManage` 表示发起方的客户端具备管理功能（App，以及电脑接入管理身份时为 true）。`code` 是配对码（解析规则同 2.1，可以带 `-` 和空白）：省略或为空时是匿名请求；给出时必须有效，否则返回 `unauthorized` 并计入 3.8 的递增等待，有效时请求的 `authorized` 为 true。`rootPub` 与账号不一致时返回 `conflict`。服务端记录发起方 IP；该 IP 被阻止时返回 `pairing_blocked` |
 | `GET /pairings/{id}/events` | 请求头 `X-Harmonia-Account` 和 `X-Pairing-Secret` | 发起方的等待连接（WebSocket），见 3.5.1 |
 | `GET /pairings/{id}/status` | 请求头 `X-Harmonia-Account` 和 `X-Pairing-Secret` | `{status}`：`pending` / `approved` / `rejected` / `expired` / `cancelled`。只在等待连接意外断开后查询一次 |

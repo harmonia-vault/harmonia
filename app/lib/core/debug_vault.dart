@@ -242,9 +242,9 @@ class DebugVault extends Vault {
   }
 
   @override
-  Future<PairingCode> createPairingCode() async {
+  Future<PairingCode> createPairingCode({int minutes = 10}) async {
     check();
-    return PairingCode('7K3M9Q2P', DateTime.now().add(const Duration(minutes: 5)));
+    return PairingCode('7K3M9Q2P', DateTime.now().add(Duration(minutes: minutes)));
   }
 
   @override

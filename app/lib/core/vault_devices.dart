@@ -16,9 +16,7 @@ mixin VaultDevices {
 
   Future<List<PairingRequest>> pendingPairings() async {
     final res = await api!.device('GET', '/api/v1/pairings');
-    return (res['pairings'] as List)
-        .map((p) => PairingRequest((p as Map).cast<String, dynamic>()))
-        .toList();
+    return (res['pairings'] as List).map((p) => PairingRequest((p as Map).cast<String, dynamic>())).toList();
   }
 
   void _checkPairing(PairingRequest p) {
@@ -27,9 +25,9 @@ mixin VaultDevices {
     }
   }
 
-  /// 生成配对码（协议 3.2）：新设备带上它发起的请求会出现在待批准列表中。同时作废上一个配对码。
-  Future<PairingCode> createPairingCode() async {
-    final res = await api!.device('POST', '/api/v1/pairing-codes', body: {});
+  /// 生成配对码（协议 3.2）：新设备带上它发起的请求会出现在待批准列表中。有效期 [minutes] 分钟，已有的配对码不受影响。
+  Future<PairingCode> createPairingCode({int minutes = 10}) async {
+    final res = await api!.device('POST', '/api/v1/pairing-codes', body: {'minutes': minutes});
     return PairingCode(res['code'] as String, DateTime.fromMillisecondsSinceEpoch(res['expiresAt'] as int));
   }
 
@@ -71,8 +69,7 @@ mixin VaultDevices {
   }
 
   /// 批准配对。asManager=true 时新设备成为管理设备，拥有全部环境。
-  Future<void> approvePairing(PairingRequest p,
-      {required bool asManager, List<Grant> grants = const []}) async {
+  Future<void> approvePairing(PairingRequest p, {required bool asManager, List<Grant> grants = const []}) async {
     final r = _root();
     _checkPairing(p);
     final kind = asManager ? 'manager' : 'client';
@@ -83,13 +80,17 @@ mixin VaultDevices {
       for (final id in envIds)
         _envelope(id, environment(id).keyVersion, p.id, boxPub, _envKeys[id]!)..remove('recipient'),
     ];
-    await api!.device('POST', '/api/v1/pairings/${p.id}/approve', body: {
-      'kind': kind,
-      'cert': cert,
-      'envelopes': envelopes,
-      if (!asManager) 'grants': grants.map((g) => g.toJson()).toList(),
-      if (asManager) 'rootSealed': b64(crypto.seal(r.seed, boxPub)),
-    });
+    await api!.device(
+      'POST',
+      '/api/v1/pairings/${p.id}/approve',
+      body: {
+        'kind': kind,
+        'cert': cert,
+        'envelopes': envelopes,
+        if (!asManager) 'grants': grants.map((g) => g.toJson()).toList(),
+        if (asManager) 'rootSealed': b64(crypto.seal(r.seed, boxPub)),
+      },
+    );
     await sync();
   }
 
@@ -105,14 +106,17 @@ mixin VaultDevices {
     final added = grants.where((g) => !current.contains(g.envId)).toList();
     Uint8List? boxPub;
     if (added.isNotEmpty) boxPub = _verifiedBoxPub(d.id, d.kind, d.signPub, d.boxPub, d.cert);
-    await api!.device('PUT', '/api/v1/devices/${d.id}/grants', body: {
-      'grants': grants.map((g) => g.toJson()).toList(),
-      'envelopes': [
-        for (final g in added)
-          _envelope(g.envId, environment(g.envId).keyVersion, d.id, boxPub!, _envKeys[g.envId]!)
-            ..remove('recipient'),
-      ],
-    });
+    await api!.device(
+      'PUT',
+      '/api/v1/devices/${d.id}/grants',
+      body: {
+        'grants': grants.map((g) => g.toJson()).toList(),
+        'envelopes': [
+          for (final g in added)
+            _envelope(g.envId, environment(g.envId).keyVersion, d.id, boxPub!, _envKeys[g.envId]!)..remove('recipient'),
+        ],
+      },
+    );
     await sync();
   }
 
@@ -135,11 +139,15 @@ mixin VaultDevices {
 
   /// 按顺序设置某台设备各环境的激活状态，排在前面的环境提供同名变量（docs/protocol.md 3.2）。
   Future<void> setActivation(String deviceId, List<Grant> ordered) async {
-    await api!.device('PUT', '/api/v1/devices/$deviceId/activation', body: {
-      'envs': [
-        for (final g in ordered) {'envId': g.envId, 'active': g.active},
-      ],
-    });
+    await api!.device(
+      'PUT',
+      '/api/v1/devices/$deviceId/activation',
+      body: {
+        'envs': [
+          for (final g in ordered) {'envId': g.envId, 'active': g.active},
+        ],
+      },
+    );
     await sync();
   }
 

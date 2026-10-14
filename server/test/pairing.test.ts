@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { checkWaiters, MAX_ANONYMOUS, MAX_AUTHORIZED, pairingLeft, WAITER_TIMEOUT } from "../src/core/pairing";
-import { PAIRING_CODE_TTL } from "../src/core/pairing-codes";
+import { MAX_PAIRING_CODES } from "../src/core/pairing-codes";
 import { b64 } from "../src/core/util";
 import { pairClient, rand, requestPairing, TestAccount, TestServer, waitApproval } from "./helpers";
 
@@ -97,17 +97,41 @@ describe("配对码", () => {
     expect(pairingPushes(s, a)).toBe(2);
   });
 
-  it("重新生成会作废上一个；5 分钟后过期", async () => {
+  it("多个配对码同时有效，各自用掉或过期才失效；默认 10 分钟", async () => {
     const s = new TestServer();
     const a = await TestAccount.create(s);
-    const old = await a.pairingCode(s);
-    const fresh = await a.pairingCode(s);
-    expect((await requestPairing(s, a, { ip: IP, code: old })).status).toBe(401);
-    s.clock += PAIRING_CODE_TTL;
-    expect((await requestPairing(s, a, { ip: IP, code: fresh })).status).toBe(401);
+    const first = await a.pairingCode(s);
+    const second = await a.pairingCode(s);
+    expect((await requestPairing(s, a, { ip: IP, code: first })).status).toBe(200);
+    expect((await requestPairing(s, a, { ip: "198.51.100.1", code: second })).status).toBe(200);
     const third = await a.pairingCode(s);
-    s.clock += PAIRING_CODE_TTL - 1;
-    expect((await requestPairing(s, a, { ip: IP, code: third })).status).toBe(200);
+    s.clock += 10 * 60_000;
+    expect((await requestPairing(s, a, { ip: "192.0.2.1", code: third })).status).toBe(401);
+  });
+
+  it("有效期可选 5 到 60 分钟，超出范围拒绝", async () => {
+    const s = new TestServer();
+    const a = await TestAccount.create(s);
+    const long = await a.pairingCode(s, 60);
+    const short = await a.pairingCode(s, 5);
+    s.clock += 5 * 60_000;
+    expect((await requestPairing(s, a, { ip: IP, code: short })).status).toBe(401);
+    s.clock += 55 * 60_000 - 1;
+    expect((await requestPairing(s, a, { ip: "198.51.100.1", code: long })).status).toBe(200);
+    for (const minutes of [4, 61, 7.5, "10"]) {
+      const r = await s.call("POST", "/api/v1/pairing-codes", { token: a.phone.token, body: { minutes } });
+      expect([r.status, r.json.error]).toEqual([400, "invalid_request"]);
+    }
+  });
+
+  it(`同时最多 ${MAX_PAIRING_CODES} 个，超出时作废最早生成的那个`, async () => {
+    const s = new TestServer();
+    const a = await TestAccount.create(s);
+    const codes: string[] = [];
+    for (let i = 0; i <= MAX_PAIRING_CODES; i++) codes.push(await a.pairingCode(s));
+    expect((await requestPairing(s, a, { ip: IP, code: codes[0] })).status).toBe(401);
+    expect((await requestPairing(s, a, { ip: "198.51.100.1", code: codes[1] })).status).toBe(200);
+    expect((await requestPairing(s, a, { ip: "192.0.2.1", code: codes.at(-1) })).status).toBe(200);
   });
 
   it("电脑和没有会话的请求不能生成配对码", async () => {

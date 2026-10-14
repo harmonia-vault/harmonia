@@ -9,6 +9,7 @@ import '../app/updater.dart';
 import '../core/crypto.dart';
 import '../core/debug_account.dart';
 import 'about.dart';
+import 'ai_prompt.dart';
 import 'auth_pages.dart';
 import 'devices.dart';
 import 'device_review.dart';
@@ -67,6 +68,7 @@ Map<String, List<DebugPageEntry>> debugPages() => {
     ),
     DebugPageEntry('扫码添加与核对码弹窗', (s) => AddDevicePage(c: s.c)),
     DebugPageEntry('生成配对码与剩余时间', (s) => DebugOverlay(show: (c) => showPairingCode(c, s.c))),
+    DebugPageEntry('复制 AI 安装提示词（仅服务器或含邮箱和配对码）', (s) => DebugOverlay(show: (c) => showAiPrompt(c, s.c))),
     DebugPageEntry(
       '批准与拒绝设备（用配对码发起）',
       (s) => s.vault.requests.isEmpty

@@ -127,7 +127,8 @@ export function pairingRoutes(app: Hono, deps: Deps) {
   app.post("/api/v1/pairing-codes", async (c) => {
     await requireDevice(c, deps, { manager: true });
     requireInitialized(sql);
-    return c.json(await createPairingCode(deps));
+    const body = await readJson(c);
+    return c.json(await createPairingCode(deps, body.minutes));
   });
 
   app.post("/api/v1/pairings", async (c) => {
