@@ -178,11 +178,23 @@ func (a *App) submitActivation(ctx context.Context, change func([]api.Environmen
 	return a.Sync(ctx)
 }
 
-// SetOverride 为已存在的云端变量设置仅本机生效的值；value=nil 表示移除。
+// SetOverride 为已存在的云端变量设置仅本机生效的值；value=nil 表示移除，
+// 这时也接受已无法访问的环境的 ID。
 func (a *App) SetOverride(envNameOrID, name string, value *string) (*api.Environment, error) {
 	env, err := a.Env(envNameOrID)
 	if err != nil {
-		return nil, err
+		if value != nil {
+			return nil, err
+		}
+		// 环境已无法访问（例如授权被撤销）时，仍可以按环境 ID 移除留下的覆盖值。
+		ov, oerr := a.Dir.Overrides()
+		if oerr != nil {
+			return nil, oerr
+		}
+		if _, ok := ov[envNameOrID][name]; !ok {
+			return nil, err
+		}
+		env = &api.Environment{ID: envNameOrID, Name: envNameOrID}
 	}
 	cache, err := a.Dir.Cache()
 	if err != nil {
