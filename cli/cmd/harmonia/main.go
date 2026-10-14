@@ -118,6 +118,7 @@ func main() {
 		"daemon":    cmdDaemon,
 		"update":    cmdUpdate,
 		"skill":     cmdSkill,
+		"manager":   cmdManager,
 		"logout":    cmdLogout,
 		"uninstall": cmdUninstall,
 		"version":   func(context.Context, []string) error { fmt.Println("harmonia", version); return nil },

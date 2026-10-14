@@ -55,6 +55,10 @@ func cmdLogin(ctx context.Context, args []string) error {
 		return err
 	}
 	in := app.LoginInput{Email: f.values["email"], DeviceName: f.values["name"]}
+	// 这台电脑已有管理登录时，日常登录沿用它的服务器和账号。
+	if m, _ := a.Dir.Manager(); m != nil && a.Config.Server == "" {
+		a.Config.Server, a.Config.Email = m.Server, m.Email
+	}
 	if len(f.args) > 0 {
 		in.Server = f.args[0]
 	} else if a.Config.Server != "" {

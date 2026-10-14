@@ -77,6 +77,41 @@ type Sync struct {
 	Environments []Environment `json:"environments"`
 	Envelopes    []Envelope    `json:"envelopes"`
 	Variables    []Variable    `json:"variables"`
+	// Manager 只返回给管理设备。
+	Manager *ManagerInfo `json:"manager"`
+}
+
+// ManagerInfo 是同步结果中只有管理设备能拿到的部分（docs/protocol.md 3.4）。
+type ManagerInfo struct {
+	RootSealed string `json:"rootSealed"`
+	Recovery   struct {
+		BoxPub string `json:"boxPub"`
+	} `json:"recovery"`
+	Devices []Device `json:"devices"`
+}
+
+type Device struct {
+	ID      string        `json:"id"`
+	Name    string        `json:"name"`
+	Kind    string        `json:"kind"`
+	SignPub string        `json:"signPub"`
+	BoxPub  string        `json:"boxPub"`
+	Cert    string        `json:"cert"`
+	Grants  []DeviceGrant `json:"grants"`
+}
+
+// DeviceGrant 是一台设备对一个环境的授权；ExpiresAt 为 0 表示一直有效。
+type DeviceGrant struct {
+	EnvID     string `json:"envId"`
+	ExpiresAt int64  `json:"expiresAt"`
+}
+
+// NewEnvelope 是新建环境时提交的一份环境钥封装；Recipient 是设备 ID 或 recovery。
+type NewEnvelope struct {
+	Recipient  string `json:"recipient"`
+	KeyVersion string `json:"keyVersion"`
+	Sealed     string `json:"sealed"`
+	Sig        string `json:"sig"`
 }
 
 func (c *Client) Instance(ctx context.Context) (*Instance, error) {
@@ -132,4 +167,22 @@ func (c *Client) DeleteVariable(ctx context.Context, envID, name, idemKey string
 
 func (c *Client) RevokeSelf(ctx context.Context) error {
 	return c.Device(ctx, "POST", "/api/v1/devices/self/revoke", map[string]any{}, nil, nil)
+}
+
+// RevokeSelfManager 让管理设备本机退出；confirmLast 用于确认它是账号里最后一台管理设备。
+func (c *Client) RevokeSelfManager(ctx context.Context, confirmLast bool) error {
+	return c.Device(ctx, "POST", "/api/v1/devices/self/revoke", map[string]any{"confirmLast": confirmLast}, nil, nil)
+}
+
+func (c *Client) CreateEnvironment(ctx context.Context, id, name string, envelopes []NewEnvelope) error {
+	body := map[string]any{"id": id, "name": name, "envelopes": envelopes}
+	return c.Device(ctx, "POST", "/api/v1/environments", body, nil, nil)
+}
+
+func (c *Client) RenameEnvironment(ctx context.Context, id, name string) error {
+	return c.Device(ctx, "PATCH", "/api/v1/environments/"+id, map[string]string{"name": name}, nil, nil)
+}
+
+func (c *Client) DeleteEnvironment(ctx context.Context, id string) error {
+	return c.Device(ctx, "DELETE", "/api/v1/environments/"+id, nil, nil, nil)
 }

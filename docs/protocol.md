@@ -16,7 +16,7 @@
 
 ## 2. 密码学
 
-全部使用 libsodium 兼容的标准构件。App 本机密钥保护另外使用 Android Keystore，iOS 上使用 Secure Enclave 和钥匙串，见 2.5。
+全部使用 libsodium 兼容的标准构件。App 本机密钥保护另外使用 Android Keystore，iOS 上使用 Secure Enclave 和钥匙串；电脑上的管理身份用口令保护，都见 2.5。
 
 | 用途 | 构件 |
 | --- | --- |
@@ -25,6 +25,7 @@
 | 加密密钥对 | 由 32 字节种子按 `crypto_box_seed_keypair` 派生：sk = SHA-512(seed)[0:32]，pk = X25519(sk, 基点) |
 | 签名 | Ed25519，由 32 字节种子派生（`crypto_sign_seed_keypair`） |
 | PIN 派生 | Argon2id（`crypto_pwhash` argon2id13，ops=3，mem=64 MiB，并行度 1），salt 16 字节，输出 32 字节。只用于 App 本机的 PIN 槽（2.5），不经过网络；账号没有密码 |
+| 口令派生 | Argon2id（`crypto_pwhash` argon2id13，ops=3，mem=256 MiB，并行度 1），salt 16 字节，输出 32 字节。只用于电脑上管理身份的口令槽（2.5），不经过网络 |
 | 派生 | HKDF-SHA256，salt 为空，输出 32 字节 |
 | 摘要 | SHA-256 |
 
@@ -74,9 +75,9 @@ fp = SHA-256(C(["harmonia.pairing", pairingId, signPub, boxPub, rootPub]))
 二维码内容 = "harmonia-pair:" + pairingId + ":" + b64(fp)
 ```
 
-### 2.5 App 本机密钥保护
+### 2.5 本机密钥保护
 
-只用于 App 的本机存储，不经过网络，其他端不需要实现。除 2 节的构件外，这里额外使用系统中不可导出的密钥：Android 上是 Android Keystore，iOS 上是 Secure Enclave 和钥匙串。DEK、本机配置和 PIN 槽的格式两个平台相同，区别只在 `kek` 的算法和生物识别槽。
+**App：** 只用于 App 的本机存储，不经过网络，其他端不需要实现。除 2 节的构件外，这里额外使用系统中不可导出的密钥：Android 上是 Android Keystore，iOS 上是 Secure Enclave 和钥匙串。DEK、本机配置和 PIN 槽的格式两个平台相同，区别只在 `kek` 的算法和生物识别槽。
 
 **Android：**
 
@@ -132,6 +133,26 @@ HashToP256(pk)：
 - 钥匙串条目（`flutter_secure_storage` 写入的内容、K_se 的引用、生物识别条目）全部设为仅限本机，不同步到 iCloud 钥匙串，不随备份迁移到其他设备。
 - **卸载后的残留**：iOS 的钥匙串在 App 卸载后不会清除。App 启动时如果数据目录中没有安装标记，先执行一次“清除”，再写入标记。
 - **模拟器**：模拟器没有 Secure Enclave，仅在模拟器构建中把 K_se 换成保存在钥匙串里的普通 P-256 私钥；真机构建不包含这条路径。
+
+**电脑上的管理身份（设计文档第 16 节）：**
+
+只用于 CLI 的管理身份，保存为数据目录下的 `manager.json`。结构与 App 相同，但没有硬件参与，也没有生物识别槽。日常身份的 `keys.json` 不变。
+
+```
+DEK  = 32 字节随机数，设置管理口令时生成
+管理配置 = XChaCha20-Poly1305(DEK, 配置 JSON, AAD = C(["harmonia.local", "manager"]))
+
+口令槽：
+  kek  = Argon2id(口令, salt)                 // 口令取 UTF-8 字节；salt 16 字节；参数同 2 节“口令派生”
+  槽   = XChaCha20-Poly1305(kek, DEK, AAD = C(["harmonia.local-slot", "passphrase"]))
+```
+
+- 配置 JSON 中含管理身份的设备签名种子和加密种子。root 种子不保存，每次从同步结果的 `manager.rootSealed` 解开并与钉住的 `rootPub` 核对。
+- 管理身份与日常身份各自独立，所以 `manager.json` 自己记录服务器地址、账号 ID、邮箱和钉住的 `rootPub`。除此之外的明文只有设备 ID、设备名（用于提示用户在手机上移除哪台设备）、salt、口令槽和管理配置密文。
+- 口令是否正确只看口令槽能否解开，不保存口令的哈希。
+- **修改口令**：生成新的 salt，用新口令重写口令槽。DEK 和管理配置不变。
+- **清除**：退出管理登录、被撤销、卸载时删除 `manager.json`。
+- 文件权限和写入方式与数据目录下的其他文件相同。
 
 ## 3. HTTP API
 
@@ -196,7 +217,7 @@ HashToP256(pk)：
 | `POST /auth/challenge` | 请求头 `X-Harmonia-Account` | `{deviceId}` → `{nonce, expiresAt}`，nonce 只能使用一次，2 分钟内有效 |
 | `POST /auth/device-session` | 请求头 `X-Harmonia-Account` | `{deviceId, nonce, signature}` → `{token, expiresAt}` |
 | `POST /pairing-codes` | device（管理设备） | `{}` → `{code, expiresAt}`：生成配对码，8 位 Crockford Base32，5 分钟内有效。每个账号同时只有一个有效配对码，重新生成会作废上一个；用它成功创建一个配对请求后即作废。服务端只保存 `SHA-256` 哈希 |
-| `POST /pairings` | 请求头 `X-Harmonia-Account`，不需要会话 | `{name, platform, signPub, boxPub, rootPub, canManage, code?}` → `{id, secret, expiresAt, authorized}`，5 分钟内有效。`platform` 是 `android`、`ios`、`darwin`、`linux`、`windows` 之一，只用于显示。`canManage` 表示发起方的客户端具备管理功能（目前只有 App 为 true）。`code` 是配对码（解析规则同 2.1，可以带 `-` 和空白）：省略或为空时是匿名请求；给出时必须有效，否则返回 `unauthorized` 并计入 3.8 的递增等待，有效时请求的 `authorized` 为 true。`rootPub` 与账号不一致时返回 `conflict`。服务端记录发起方 IP；该 IP 被阻止时返回 `pairing_blocked` |
+| `POST /pairings` | 请求头 `X-Harmonia-Account`，不需要会话 | `{name, platform, signPub, boxPub, rootPub, canManage, code?}` → `{id, secret, expiresAt, authorized}`，5 分钟内有效。`platform` 是 `android`、`ios`、`darwin`、`linux`、`windows` 之一，只用于显示。`canManage` 表示发起方的客户端具备管理功能（App，以及电脑接入管理身份时为 true）。`code` 是配对码（解析规则同 2.1，可以带 `-` 和空白）：省略或为空时是匿名请求；给出时必须有效，否则返回 `unauthorized` 并计入 3.8 的递增等待，有效时请求的 `authorized` 为 true。`rootPub` 与账号不一致时返回 `conflict`。服务端记录发起方 IP；该 IP 被阻止时返回 `pairing_blocked` |
 | `GET /pairings/{id}/events` | 请求头 `X-Harmonia-Account` 和 `X-Pairing-Secret` | 发起方的等待连接（WebSocket），见 3.5.1 |
 | `GET /pairings/{id}/status` | 请求头 `X-Harmonia-Account` 和 `X-Pairing-Secret` | `{status}`：`pending` / `approved` / `rejected` / `expired` / `cancelled`。只在等待连接意外断开后查询一次 |
 | `GET /pairings` | device（管理设备） | 列出发起方仍在等待的全部请求（包括匿名请求），每项带 `ip`、`canManage` 和 `authorized`（是否由配对码创建）。客户端的待批准列表、角标和自动弹出只处理 `authorized` 为 true 的请求；手输核对码时在全部请求中匹配 |

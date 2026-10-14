@@ -135,6 +135,10 @@ harmonia override list
 
 不要读取或修改 `~/.harmonia` 里的文件，其中 `env.sh` 保存着明文的变量值。
 
+## 不要使用管理登录
+
+`harmonia manager` 下的命令（管理页面、管理登录、退出管理登录）让这台电脑能管理整个账号，只能由用户本人在终端和浏览器里操作。不要运行它们，不要代用户输入管理口令，也不要访问它在本机打开的页面和端口。用户问起时，告诉用户自己运行 `harmonia manager`。
+
 ## 升级
 
 `harmonia update --check` 检查新版本，`harmonia update` 升级并重启后台服务。升级会覆盖用 `harmonia skill install` 保存过的技能文件；升级之后按“先核对版本”一节重新读取说明。
