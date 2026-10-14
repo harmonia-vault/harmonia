@@ -120,7 +120,7 @@ func newSession(t *testing.T) *Session {
 	}{{"a", map[string]string{"SAME": "1", "DIFF": "old", "ONLY_A": "值"}}, {"b", map[string]string{"SAME": "1", "DIFF": "new", "NOTE": "n"}}} {
 		key := hc.Random(32)
 		sealed, _ := hc.Seal(key, keys.Box.Pub[:])
-		s.cache.Environments = append(s.cache.Environments, api.Environment{ID: env.id, Name: env.id, KeyVersion: "1", Role: "admin", Position: i})
+		s.cache.Environments = append(s.cache.Environments, api.Environment{ID: env.id, Name: env.id, KeyVersion: "1", Role: "rw", Position: i})
 		s.cache.Envelopes = append(s.cache.Envelopes, api.Envelope{EnvID: env.id, KeyVersion: "1", Sealed: hc.B64(sealed)})
 		s.cache.Variables[env.id] = map[string]state.CachedVar{}
 		for n, v := range env.vars {

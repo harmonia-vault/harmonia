@@ -93,9 +93,9 @@ class DebugVault extends Vault {
       return;
     }
     cache.environments = [
-      Environment('debug-env-1', '开发环境', 1, 'admin', 0),
-      Environment('debug-env-2', '自动化工具', 1, 'admin', 0),
-      Environment('debug-env-3', '个人服务', 1, 'admin', 0),
+      Environment('debug-env-1', '开发环境', 1, 'rw', 0),
+      Environment('debug-env-2', '自动化工具', 1, 'rw', 0),
+      Environment('debug-env-3', '个人服务', 1, 'rw', 0),
     ];
     cache.variables = {
       'debug-env-1': {
@@ -197,7 +197,7 @@ class DebugVault extends Vault {
   @override
   Future<void> createEnvironment(String name) async {
     check();
-    cache.environments.add(Environment('debug-env-${++_nextId}', name.trim(), 1, 'admin', 0));
+    cache.environments.add(Environment('debug-env-${++_nextId}', name.trim(), 1, 'rw', 0));
   }
 
   @override

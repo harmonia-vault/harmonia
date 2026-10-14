@@ -165,9 +165,9 @@ export async function requireDevice(
   return d;
 }
 
-/** 设备在某环境的当前有效权限；管理设备恒为 admin。 */
+/** 设备在某环境的当前有效权限；管理设备恒为 rw。 */
 export function envRole(deps: Deps, d: Device, envId: string): Role | null {
-  if (d.kind === "manager") return "admin";
+  if (d.kind === "manager") return "rw";
   const g = one<{ role: Role }>(
     deps.sql,
     `SELECT role FROM grants WHERE device_id = ? AND env_id = ? AND (expires_at = 0 OR expires_at > ?)`,

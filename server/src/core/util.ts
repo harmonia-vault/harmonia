@@ -163,10 +163,10 @@ export function decimal(v: unknown, what: string): number {
   return Number(s);
 }
 
-export const ROLES = ["ro", "rw", "admin"] as const;
+export const ROLES = ["ro", "rw"] as const;
 export type Role = (typeof ROLES)[number];
 
 export function role(v: unknown): Role {
-  if (!ROLES.includes(v as Role)) throw bad("权限只能是只读、读写或管理。");
+  if (!ROLES.includes(v as Role)) throw bad("权限只能是只读或读写。");
   return v as Role;
 }

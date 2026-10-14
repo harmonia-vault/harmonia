@@ -386,7 +386,7 @@ class EmptyState extends StatelessWidget {
   );
 }
 
-const roleNames = {'ro': '只读', 'rw': '读写', 'admin': '管理'};
+const roleNames = {'ro': '只读', 'rw': '读写'};
 
 String formatTime(int ms) {
   if (ms == 0) return '—';
