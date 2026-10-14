@@ -28,6 +28,8 @@ func isCommon(p string) bool {
 		lines := strings.Split(commonList, "\n")
 		common = make(map[string]struct{}, len(lines))
 		for _, l := range lines {
+			// 在 Windows 上检出源码时，行尾可能被换成 CRLF。
+			l = strings.TrimSuffix(l, "\r")
 			if l != "" {
 				common[l] = struct{}{}
 			}

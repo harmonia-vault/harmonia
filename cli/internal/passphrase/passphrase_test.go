@@ -37,7 +37,7 @@ func TestValidate(t *testing.T) {
 }
 
 func TestCommonListShape(t *testing.T) {
-	lines := strings.Split(strings.TrimSuffix(commonList, "\n"), "\n")
+	lines := strings.Split(strings.TrimSuffix(strings.ReplaceAll(commonList, "\r\n", "\n"), "\n"), "\n")
 	if len(lines) < 30000 {
 		t.Fatalf("常见口令表只有 %d 条，文件可能不完整", len(lines))
 	}
