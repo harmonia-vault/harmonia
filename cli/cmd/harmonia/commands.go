@@ -86,7 +86,11 @@ func cmdLogin(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("\n已接入账号，这台设备可以访问 %d 个环境，授权的环境默认已启用。\n", n)
+	if n == 0 {
+		fmt.Println("\n已接入账号。" + noEnvNotice)
+	} else {
+		fmt.Printf("\n已接入账号，这台设备可以访问 %d 个环境，授权的环境默认已启用。\n", n)
+	}
 	next := [][]string{{"harmonia env list", "查看环境和变量来源"}}
 	if !shellInstalledAny(a) {
 		next = append(next, []string{"harmonia shell install", shellInstallHint})
@@ -121,6 +125,9 @@ func cmdEnv(ctx context.Context, args []string) error {
 		return err
 	}
 	if len(f.args) == 0 || f.args[0] == "list" {
+		if err := refresh(ctx, a); err != nil {
+			return err
+		}
 		return printEnvs(a)
 	}
 	usage := errors.New("用法：harmonia env list | activate <环境> | deactivate <环境> | order <环境>...")
@@ -163,6 +170,9 @@ func cmdVar(ctx context.Context, args []string) error {
 		return err
 	}
 	if len(f.args) == 0 || f.args[0] == "list" {
+		if err := refresh(ctx, a); err != nil {
+			return err
+		}
 		return listVars(a, f.values["env"], f.bools["show"])
 	}
 	switch f.args[0] {
@@ -287,17 +297,25 @@ func cmdOverride(ctx context.Context, args []string) error {
 // envList 合并 --env 的取值：可以用逗号分隔，也可以重复给出，按出现顺序排列。
 func envList(f *flags) string { return strings.Join(f.lists["env"], ",") }
 
+// refresh 用较短的超时同步一次，让授权的变化（例如被撤销）在没有后台服务时也能生效；
+// 连不上服务器时提示并继续使用本机缓存。
+func refresh(ctx context.Context, a *app.App) error {
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	if err := a.Sync(ctx); err != nil {
+		if errors.Is(err, app.ErrRevokedLocal) {
+			return err
+		}
+		fmt.Fprintln(os.Stderr, "harmonia：暂时无法连接服务器，使用本机缓存的内容。")
+	}
+	return nil
+}
+
 // effective 返回要注入的变量；envs 非空时只使用这些环境（先列出的优先）。
 func effective(ctx context.Context, a *app.App, envs string) (map[string]string, error) {
-	sctx, cancel := context.WithTimeout(ctx, 3*time.Second)
-	if err := a.Sync(sctx); err != nil {
-		if errors.Is(err, app.ErrRevokedLocal) {
-			cancel()
-			return nil, err
-		}
-		fmt.Fprintln(os.Stderr, "harmonia：暂时无法连接服务器，使用本机缓存的变量。")
+	if err := refresh(ctx, a); err != nil {
+		return nil, err
 	}
-	cancel()
 	if envs != "" {
 		// 按列出的顺序合并，同名变量由排在前面的环境提供。
 		var ids []string
@@ -321,6 +339,10 @@ func effective(ctx context.Context, a *app.App, envs string) (map[string]string,
 			fmt.Fprintln(os.Stderr, "harmonia：", s)
 		}
 		return vars, nil
+	}
+	// 没有任何环境时照常继续，只说明拿不到变量的原因。
+	if cache, err := a.Dir.Cache(); err == nil && len(cache.Environments) == 0 {
+		fmt.Fprintln(os.Stderr, "harmonia：这台设备还没有任何环境的访问权限，没有可以提供的变量。可以在管理设备上为它授权。")
 	}
 	vars, skipped, err := a.Effective()
 	for _, s := range skipped {

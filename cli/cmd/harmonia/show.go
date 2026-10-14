@@ -30,6 +30,8 @@ func ago(ms int64) string {
 	return fmt.Sprintf("%d 天前", int(d.Hours()/24))
 }
 
+const noEnvNotice = "这台设备还没有任何环境的访问权限。可以在管理设备上为它授权。"
+
 var roleNames = map[string]string{"ro": "只读", "rw": "读写", "admin": "管理"}
 
 func expiry(ms int64) string {
@@ -51,6 +53,9 @@ func cmdStatus(ctx context.Context, args []string) error {
 	if !a.Config.Paired() {
 		fmt.Println("本机还没有接入账号。运行 harmonia login 开始。")
 		return nil
+	}
+	if err := refresh(ctx, a); err != nil {
+		return err
 	}
 	printTable(os.Stdout, "", [][]string{
 		{"账号", a.Config.Email},
@@ -77,7 +82,7 @@ func printEnvs(a *app.App) error {
 		return err
 	}
 	if len(cache.Environments) == 0 {
-		fmt.Println("这台设备还没有任何环境的访问权限。可以在管理设备上为它授权。")
+		fmt.Println(noEnvNotice)
 		return nil
 	}
 	fmt.Println("环境（同名变量由排在前面的环境提供）")
@@ -123,6 +128,10 @@ func listVars(a *app.App, envName string, show bool) error {
 		}
 		envs = envs[:0]
 		envs = append(envs, *e)
+	}
+	if len(envs) == 0 {
+		fmt.Println(noEnvNotice)
+		return nil
 	}
 	ov, _ := a.Dir.Overrides()
 	for i, e := range envs {
@@ -185,7 +194,7 @@ func printOverrides(a *app.App, ov state.Overrides) error {
 	}
 	for id, m := range ov {
 		if !seen[id] && len(m) > 0 {
-			groups = append(groups, group{fmt.Sprintf("已无法访问的环境 %s（覆盖值不生效）", id), m})
+			groups = append(groups, group{fmt.Sprintf("已无法访问的环境 %s（覆盖值不生效，可以用 harmonia override rm %s <变量名> 移除）", id, id), m})
 		}
 	}
 	for i, g := range groups {
