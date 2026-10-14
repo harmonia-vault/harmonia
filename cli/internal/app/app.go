@@ -151,6 +151,27 @@ func (a *App) Effective() (map[string]string, []string, error) {
 	return vars, skipped, nil
 }
 
+// Select 按 --env 的各项（环境名称或 ID，或者“环境:变量名”）依次合并，靠前的优先，见 vault.Select。
+func (a *App) Select(items []string) (map[string]string, []string, error) {
+	cache, err := a.Dir.Cache()
+	if err != nil {
+		return nil, nil, err
+	}
+	picks := make([]vault.Pick, 0, len(items))
+	for _, item := range items {
+		p, err := vault.ParsePick(cache, item)
+		if err != nil {
+			return nil, nil, err
+		}
+		picks = append(picks, p)
+	}
+	ov, err := a.Dir.Overrides()
+	if err != nil {
+		return nil, nil, err
+	}
+	return vault.Select(cache, a.Keys, picks, ov, nowMs())
+}
+
 // RefreshEnvFile 重新计算并写出生效的变量（例如激活环境或授权到期后）：macOS、Linux 上是 env.sh，
 // Windows 上是用户环境变量。返回是否有变化。
 func (a *App) RefreshEnvFile() (bool, error) {

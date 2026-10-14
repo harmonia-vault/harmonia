@@ -19,7 +19,6 @@ import (
 	"github.com/harmonia-vault/harmonia/cli/internal/daemon"
 	"github.com/harmonia-vault/harmonia/cli/internal/service"
 	"github.com/harmonia-vault/harmonia/cli/internal/shell"
-	"github.com/harmonia-vault/harmonia/cli/internal/vault"
 )
 
 type terminalPrompt struct{}
@@ -306,8 +305,18 @@ func cmdOverride(ctx context.Context, args []string) error {
 	return nil
 }
 
-// envList 合并 --env 的取值：可以用逗号分隔，也可以重复给出，按出现顺序排列。
-func envList(f *flags) string { return strings.Join(f.lists["env"], ",") }
+// envList 展开 --env 的取值：可以用逗号分隔，也可以重复给出，按出现顺序排列。
+func envList(f *flags) []string {
+	var out []string
+	for _, v := range f.lists["env"] {
+		for _, item := range strings.Split(v, ",") {
+			if item = strings.TrimSpace(item); item != "" {
+				out = append(out, item)
+			}
+		}
+	}
+	return out
+}
 
 // refresh 用较短的超时同步一次，让授权的变化（例如被撤销）在没有后台服务时也能生效；
 // 连不上服务器时提示并继续使用本机缓存。
@@ -323,34 +332,17 @@ func refresh(ctx context.Context, a *app.App) error {
 	return nil
 }
 
-// effective 返回要注入的变量；envs 非空时只使用这些环境（先列出的优先）。
-func effective(ctx context.Context, a *app.App, envs string) (map[string]string, error) {
+// effective 返回要注入的变量；envs 非空时只使用这些环境或变量（先列出的优先）。
+func effective(ctx context.Context, a *app.App, envs []string) (map[string]string, error) {
 	if err := refresh(ctx, a); err != nil {
 		return nil, err
 	}
-	if envs != "" {
-		// 按列出的顺序合并，同名变量由排在前面的环境提供。
-		var ids []string
-		for _, name := range strings.Split(envs, ",") {
-			if strings.TrimSpace(name) == "" {
-				continue
-			}
-			e, err := a.Env(strings.TrimSpace(name))
-			if err != nil {
-				return nil, err
-			}
-			ids = append(ids, e.ID)
-		}
-		cache, err := a.Dir.Cache()
-		if err != nil {
-			return nil, err
-		}
-		ov, _ := a.Dir.Overrides()
-		vars, skipped := vault.Merge(cache, a.Keys, ids, ov, time.Now().UnixMilli())
+	if len(envs) > 0 {
+		vars, skipped, err := a.Select(envs)
 		for _, s := range skipped {
 			fmt.Fprintln(os.Stderr, "harmonia：", s)
 		}
-		return vars, nil
+		return vars, err
 	}
 	// 没有任何环境时照常继续，只说明拿不到变量的原因。
 	if cache, err := a.Dir.Cache(); err == nil && len(cache.Environments) == 0 {
@@ -370,7 +362,7 @@ func cmdExec(ctx context.Context, args []string) error {
 	}
 	cmdArgs := append(f.args, f.rest...)
 	if len(cmdArgs) == 0 {
-		return errors.New("用法：harmonia exec [--env a,b] -- <命令...>")
+		return errors.New("用法：harmonia exec [--env a,b,c:变量名] -- <命令...>")
 	}
 	a, err := app.Load(true)
 	if err != nil {
@@ -383,7 +375,7 @@ func cmdExec(ctx context.Context, args []string) error {
 	}
 	// 指定了 --env 时，终端里由其他环境写入的变量（例如开启了 Shell 集成）不传给命令。
 	var known map[string]map[string]bool
-	if envs != "" {
+	if len(envs) > 0 {
 		if known, err = a.Known(); err != nil {
 			return err
 		}
