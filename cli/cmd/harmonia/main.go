@@ -12,6 +12,8 @@ import (
 	"syscall"
 
 	"golang.org/x/term"
+
+	"github.com/harmonia-vault/harmonia/cli/internal/api"
 )
 
 // version 在构建时通过 -ldflags "-X main.version=..." 写入。
@@ -95,6 +97,7 @@ func confirmYes(label string) bool {
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	api.Version = version
 	args := os.Args[1:]
 	if len(args) == 0 || args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
 		printHelp(os.Stdout)

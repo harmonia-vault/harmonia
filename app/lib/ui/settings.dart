@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../app/controller.dart';
 import '../core/appearance.dart';
 import '../app/updater.dart';
+import '../core/api.dart' show appVersion;
 import 'about.dart';
 import 'page_debug.dart';
 import 'app_scope.dart';

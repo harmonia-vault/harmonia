@@ -344,6 +344,8 @@ class _DevicePageState extends State<DevicePage> {
                 ListTile(title: const Text('接入时间'), trailing: Text(formatTime(d.createdAt))),
                 const Divider(),
                 ListTile(title: const Text('最近活动'), trailing: Text(formatTime(d.lastSeenAt))),
+                const Divider(),
+                ListTile(title: const Text('版本'), trailing: Text(d.version.isEmpty ? '未知' : d.version)),
               ],
             ),
           ),

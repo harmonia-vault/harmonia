@@ -51,6 +51,8 @@ export type Device = {
   status: string;
   rotation_required: number;
   system_vars: number;
+  /** 设备最近一次同步时上报的客户端版本，没有上报过时为空。 */
+  version: string;
   created_at: number;
   last_seen_at: number;
 };

@@ -127,7 +127,7 @@ Future<void> main(List<String> argv) async {
       final v = await loaded();
       for (final d in v.devices) {
         final grants = d.grants.map((g) => '${v.environment(g.envId).name}:${g.role}${g.active ? '' : ':off'}');
-        print('${d.name}\t${d.kind}\t${grants.join(',')}\t${d.systemVars ? 'system-vars' : ''}');
+        print('${d.name}\t${d.kind}\t${grants.join(',')}\t${d.systemVars ? 'system-vars' : ''}\t${d.version}');
       }
     case 'pair':
       // 作为新的管理设备发起配对（可选带配对码），等待管理设备批准。

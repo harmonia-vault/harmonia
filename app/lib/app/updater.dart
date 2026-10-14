@@ -10,6 +10,7 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
+import '../core/api.dart' show appVersion;
 import '../core/crypto.dart';
 import '../core/update_download.dart';
 import '../core/update_asset.dart';
@@ -19,8 +20,6 @@ import '../ui/download_progress.dart';
 import '../ui/update_sheet.dart';
 import '../ui/app_scope.dart';
 import '../ui/widgets.dart';
-
-const appVersion = String.fromEnvironment('APP_VERSION', defaultValue: '0.1.0');
 
 /// 发布签名公钥（minisign 格式），与 CLI 内置的相同。
 const releasePublicKey = 'RWSG3mCrOrJkGKAhsnHOVBP4a+qs9VJi/47Vv3BQobIJ/ZamvbuQjabm';
