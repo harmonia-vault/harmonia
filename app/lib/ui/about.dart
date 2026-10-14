@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../app/controller.dart';
-import '../app/updater.dart';
+import '../core/api.dart' show appVersion;
 import 'app_icon.dart';
 import 'theme.dart';
 import 'glass.dart';

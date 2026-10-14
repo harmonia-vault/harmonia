@@ -45,7 +45,14 @@ class DebugVault extends Vault {
     if (scenario == DebugScenario.failure) throw VaultException('模拟操作失败，请切换到正常场景后重试。');
   }
 
-  Map<String, dynamic> _device(String id, String name, String platform, String kind, List<Grant> grants) => {
+  Map<String, dynamic> _device(
+    String id,
+    String name,
+    String platform,
+    String kind,
+    List<Grant> grants, {
+    String version = '',
+  }) => {
     'id': id,
     'name': name,
     'platform': platform,
@@ -55,6 +62,7 @@ class DebugVault extends Vault {
     'cert': '',
     'createdAt': 1791763200000,
     'lastSeenAt': 1791792000000,
+    'version': version,
     'grants': grants.map((g) => {...g.toJson(), 'active': g.active, 'position': g.position}).toList(),
   };
 
@@ -67,8 +75,9 @@ class DebugVault extends Vault {
     cache = SyncCache()..self = {'kind': 'manager'};
     cache.manager = {
       'devices': [
-        _device('debug-phone', '示例 iPhone', 'ios', 'manager', []),
-        _device('debug-computer', '开发电脑', 'windows', 'client', [Grant('debug-env-1', 'rw', 0)]),
+        _device('debug-phone', '示例 iPhone', 'ios', 'manager', [], version: '0.4.5'),
+        _device('debug-computer', '开发电脑', 'windows', 'client', [Grant('debug-env-1', 'rw', 0)], version: '0.4.5-rc.1'),
+        // 没有版本：还没升级到会上报版本的命令行。
         _device('debug-mac', '个人 Mac', 'darwin', 'client', [Grant('debug-env-2', 'ro', 0)]),
       ],
     };

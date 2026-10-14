@@ -154,6 +154,7 @@ HashToP256(pk)：
   - 会话令牌的格式为 `<accountId>.<随机串>`，服务端据此定位账号。
   - 不带令牌的账号内请求（设备登录、发起配对、配对状态查询、恢复登录），在请求头 `X-Harmonia-Account` 中给出账号 ID。
   - 以邮箱为入口的请求（注册、查询账号、重置账号、开始恢复），由目录解析邮箱。
+- 客户端版本：App 和 CLI 在每个请求上带请求头 `X-Harmonia-Version`，值是自身的版本号（如 `0.4.5`、`0.4.5-rc.1`），最多 32 个字符，只含字母、数字和 `.`、`-`、`+`。服务端在 `GET /sync` 时把它记到这台设备上，只用于在管理设备上显示，不参与任何权限判断；没有这个请求头或格式不对时忽略，保留上一次记录的值。
 - 邮件验证码：8 位，字符取自 Crockford Base32 字母表（见 2.1），不区分大小写；15 分钟内有效。用途只有注册验证和重置账号。
   - 每次发送验证码，服务端同时返回流程凭证 `flow`（32 字节随机数，b64），验证码与它绑定，校验时必须带上 `flow`。
   - 每个 `flow` 最多尝试 5 次，失败只作废这个 `flow`，不影响别人申请的验证码。
@@ -263,7 +264,7 @@ HashToP256(pk)：
   "manager": {
     "rootSealed": "...",
     "recovery": {"generation": "1", "boxPub": "..."},
-    "devices": [{"id": "...", "name": "...", "platform": "...", "kind": "...", "signPub": "...", "boxPub": "...", "cert": "...", "createdAt": 0, "lastSeenAt": 0, "systemVars": false, "grants": [{"envId": "...", "role": "...", "expiresAt": 0, "active": true, "position": 0}]}]
+    "devices": [{"id": "...", "name": "...", "platform": "...", "kind": "...", "signPub": "...", "boxPub": "...", "cert": "...", "createdAt": 0, "lastSeenAt": 0, "version": "0.4.5", "systemVars": false, "grants": [{"envId": "...", "role": "...", "expiresAt": 0, "active": true, "position": 0}]}]
   }
 }
 ```
@@ -271,6 +272,7 @@ HashToP256(pk)：
 - `environments` 和 `envelopes` 每次都返回当前可访问的**完整列表**。客户端据此清除不在列表中的环境。
 - `variables` 只返回增量：所在环境可见，并且满足 `seq > N`，或者本设备对该环境的授权是在 N 之后获得的。
 - `manager` 字段只返回给管理设备。管理设备的 `role` 恒为 `admin`。
+- `version` 是这台设备最近一次同步时上报的客户端版本（见第 3 节开头的 `X-Harmonia-Version`），由设备自己上报，服务端不校验真伪；设备还没有上报过时是空字符串，响应里没有这个字段时（较旧的服务端）同样按未知处理。
 - `systemVars` 是设备上的“写入系统变量”开关，见 `PATCH /devices/{id}`；响应里没有这个字段时（较旧的服务端）按 false 处理。
 - `active` 和 `position` 是授权上的激活状态和顺序，`position` 从 0 开始，越小越靠前。管理设备的 `environments` 中 `active` 恒为 true，`position` 按环境创建先后排列。
 

@@ -159,3 +159,30 @@ describe("写入系统变量开关", () => {
     expect(wrong.status).toBe(400);
   });
 });
+
+describe("设备版本", () => {
+  it("同步时记录设备上报的版本，只有管理设备能看到；没有上报或格式不对时保留原值", async () => {
+    const s = new TestServer();
+    const a = await TestAccount.create(s);
+    const e1 = await a.createEnv(s, [a.phone.id], "A");
+    const cli = await pairClient(s, a, [{ envId: e1, role: "ro" }]);
+    const sync = (token: string, version?: string) =>
+      s.ok("GET", "/api/v1/sync?since=0", { token, headers: version === undefined ? {} : { "x-harmonia-version": version } });
+    const seen = async () =>
+      (await sync(a.phone.token)).manager.devices.find((d: { id: string }) => d.id === cli.id).version;
+    expect(await seen()).toBe("");
+
+    expect((await sync(cli.token, "0.3.1-rc.13")).manager).toBeUndefined();
+    expect(await seen()).toBe("0.3.1-rc.13");
+    await sync(cli.token);
+    await sync(cli.token, "<b>1.0</b>");
+    await sync(cli.token, "1".repeat(33));
+    expect(await seen()).toBe("0.3.1-rc.13");
+    await sync(cli.token, "0.4.0");
+    expect(await seen()).toBe("0.4.0");
+
+    // 管理设备自己的版本在同一次同步的响应里就是最新的。
+    const own = (await sync(a.phone.token, "0.4.1")).manager.devices.find((d: { id: string }) => d.id === a.phone.id);
+    expect(own.version).toBe("0.4.1");
+  });
+});

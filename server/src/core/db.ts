@@ -165,6 +165,7 @@ const MIGRATIONS: string[][] = [
     `CREATE TABLE pairing_codes (id INTEGER PRIMARY KEY CHECK (id = 1), code_hash TEXT NOT NULL, expires_at INTEGER NOT NULL)`,
     `CREATE TABLE code_failures (net TEXT PRIMARY KEY, count INTEGER NOT NULL, window_start INTEGER NOT NULL, next_at INTEGER NOT NULL)`,
   ],
+  [`ALTER TABLE devices ADD COLUMN version TEXT NOT NULL DEFAULT ''`],
 ];
 
 export function migrate(sql: Sql): void {

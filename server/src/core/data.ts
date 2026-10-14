@@ -7,6 +7,7 @@ import {
   b64,
   bad,
   bin,
+  clientVersion,
   conflict,
   decimal,
   envelopeMsg,
@@ -19,6 +20,7 @@ import {
   utf8,
   varName,
   verifyEd25519,
+  VERSION_HEADER,
   type Role,
 } from "./util";
 
@@ -123,7 +125,8 @@ export function dataRoutes(app: Hono, deps: Deps) {
           ...fresh,
         )
       : [];
-    sql.run(`UPDATE devices SET last_seen_at = ? WHERE id = ?`, deps.now(), d.id);
+    const version = clientVersion(c.req.header(VERSION_HEADER)) ?? d.version;
+    sql.run(`UPDATE devices SET last_seen_at = ?, version = ? WHERE id = ?`, deps.now(), version, d.id);
     const out: Record<string, unknown> = {
       seq,
       self: { id: d.id, kind: d.kind, name: d.name, rotationRequired: !!d.rotation_required, systemVars: !!d.system_vars },
@@ -167,6 +170,7 @@ export function dataRoutes(app: Hono, deps: Deps) {
           cert: x.cert,
           createdAt: x.created_at,
           lastSeenAt: x.last_seen_at,
+          version: x.version,
           systemVars: !!x.system_vars,
           grants: grants
             .filter((g) => g.device_id === x.id)

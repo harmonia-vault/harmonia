@@ -136,6 +136,14 @@ export function label(v: unknown, what: string): string {
   return s;
 }
 
+/** 客户端上报自身版本的请求头（docs/protocol.md 第 3 节）。 */
+export const VERSION_HEADER = "x-harmonia-version";
+
+/** 客户端版本只用于显示：没有上报或格式不对时返回 null，不拒绝请求。 */
+export function clientVersion(v: string | undefined): string | null {
+  return v !== undefined && /^[0-9A-Za-z.+-]{1,32}$/.test(v) ? v : null;
+}
+
 export function varName(v: unknown): string {
   const s = str(v, "变量名", 128);
   if (!/^[A-Za-z_][A-Za-z0-9_]{0,127}$/.test(s)) throw bad("变量名只能包含字母、数字和下划线，且不能以数字开头。");

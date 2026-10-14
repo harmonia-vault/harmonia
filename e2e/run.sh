@@ -186,6 +186,12 @@ expect_eq "$(bash -c ". '$TMP/cli/env.sh'; export MINE=kept; HARMONIA_HOME='$TMP
 # 终端里是旧值时，不加 --env 也以最新值为准（同名变量只传一份）。
 expect_eq "$(bash -c "export OPENAI_API_KEY=stale; HARMONIA_HOME='$TMP/cli' '$TMP/harmonia' exec -- sh -c 'env | grep -c ^OPENAI_API_KEY=; printenv OPENAI_API_KEY'" 2>/dev/null | tr '\n' ' ')" "1 sk-second " "同名变量只传最新值"
 
+step "手机看到各台设备的版本"
+cli sync >/dev/null
+DEVICES=$(manager phone devices)
+expect_eq "$(printf '%s\n' "$DEVICES" | grep e2e-laptop | cut -f5)" "dev" "手机看到电脑的版本"
+expect_eq "$(printf '%s\n' "$DEVICES" | grep 主手机 | cut -f5)" "0.1.0" "手机看到自己的版本"
+
 step "“写入系统变量”开关：手机修改后随同步下发到电脑"
 manager phone system-vars e2e-laptop on >/dev/null
 expect_eq "$(manager phone devices | grep e2e-laptop | cut -f4)" "system-vars" "手机看到开关已打开"

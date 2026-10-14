@@ -50,6 +50,9 @@ String serverFromQr(String raw) {
   return normalizeServer(s);
 }
 
+/// 本机 App 的版本，构建时写入。它随每个请求上报，只用于在管理设备上显示。
+const appVersion = String.fromEnvironment('APP_VERSION', defaultValue: '0.1.0');
+
 class ApiClient {
   ApiClient(this.base, {http.Client? client}) : _http = client ?? http.Client();
 
@@ -71,7 +74,7 @@ class ApiClient {
     String? token,
     Map<String, String>? headers,
   }) async {
-    final h = <String, String>{'content-type': 'application/json'};
+    final h = <String, String>{'content-type': 'application/json', 'x-harmonia-version': appVersion};
     if (token != null) h['authorization'] = 'Bearer $token';
     if (accountId != null) h['x-harmonia-account'] = accountId!;
     if (headers != null) h.addAll(headers);

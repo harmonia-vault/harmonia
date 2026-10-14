@@ -37,6 +37,9 @@ func IsCode(err error, code string) bool {
 	return errors.As(err, &e) && e.Code == code
 }
 
+// Version 是本机 CLI 的版本，由 main 在启动时写入。它随每个请求上报，只用于在管理设备上显示。
+var Version string
+
 // Signer 用设备签名钥对登录挑战签名。
 type Signer interface {
 	DeviceID() string
@@ -99,6 +102,9 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any, o r
 	}
 	if c.AccountID != "" {
 		req.Header.Set("x-harmonia-account", c.AccountID)
+	}
+	if Version != "" {
+		req.Header.Set("x-harmonia-version", Version)
 	}
 	for k, v := range o.headers {
 		req.Header.Set(k, v)

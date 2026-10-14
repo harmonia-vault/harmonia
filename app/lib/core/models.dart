@@ -80,6 +80,8 @@ class DeviceInfo {
   int get createdAt => json['createdAt'] as int;
   int get lastSeenAt => json['lastSeenAt'] as int;
   bool get isManager => kind == 'manager';
+  /// 设备最近一次同步时上报的版本；还没有上报过，或服务端较旧时为空。
+  String get version => json['version'] as String? ?? '';
   /// “写入系统变量”开关，只有 Windows 上的命令行使用；较旧的服务端没有这个字段。
   bool get systemVars => json['systemVars'] as bool? ?? false;
   /// 按激活顺序排列。
