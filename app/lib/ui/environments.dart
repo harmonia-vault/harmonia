@@ -119,8 +119,13 @@ class EnvironmentPage extends StatefulWidget {
 
 class _EnvironmentPageState extends State<EnvironmentPage> {
   final _revealed = <String>{};
+  // 本页自己在删除时，等进度弹窗关闭后再离开，免得推送先到时把弹窗当成本页关掉。
+  bool _deleting = false;
+  bool _left = false;
 
   AppController get c => widget.c;
+
+  bool get _exists => c.vault.environments.any((e) => e.id == widget.envId);
 
   @override
   void initState() {
@@ -136,11 +141,22 @@ class _EnvironmentPageState extends State<EnvironmentPage> {
 
   void _changed() {
     if (!mounted) return;
-    if (!c.vault.environments.any((e) => e.id == widget.envId)) {
-      Navigator.pop(context);
+    if (!_exists) {
+      if (!_deleting) _leave();
       return;
     }
     setState(() {});
+  }
+
+  /// 环境已不存在：关掉本页及其上层页面，只执行一次。
+  void _leave() {
+    if (_left || !mounted) return;
+    final route = ModalRoute.of(context);
+    if (route == null || !route.isActive) return;
+    _left = true;
+    Navigator.of(context)
+      ..popUntil((r) => r == route)
+      ..pop();
   }
 
   Future<void> _menu(String action, Environment env) async {
@@ -157,9 +173,13 @@ class _EnvironmentPageState extends State<EnvironmentPage> {
         danger: true,
       );
       if (!ok || !mounted) return;
-      final nav = Navigator.of(context);
-      final done = await runBusy(context, () => c.guard(() => c.vault.deleteEnvironment(env.id)), done: '已删除环境');
-      if (done) nav.pop();
+      _deleting = true;
+      try {
+        await runBusy(context, () => c.guard(() => c.vault.deleteEnvironment(env.id)), done: '已删除环境');
+      } finally {
+        _deleting = false;
+      }
+      if (!_exists) _leave();
     }
   }
 

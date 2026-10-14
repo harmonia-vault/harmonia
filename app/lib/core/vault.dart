@@ -162,8 +162,23 @@ class Vault with VaultDevices {
 
   // ---- 同步 ----
 
+  Future<void>? _syncing;
+
+  /// 推送和操作完成后的同步可能同时发生；排队执行，避免并发改写缓存和本机文件。
   @override
-  Future<void> sync({bool full = false}) async {
+  Future<void> sync({bool full = false}) {
+    final prev = _syncing;
+    final run = () async {
+      if (prev != null) await prev.catchError((_) {});
+      await _sync(full: full);
+    }();
+    _syncing = run;
+    return run.whenComplete(() {
+      if (identical(_syncing, run)) _syncing = null;
+    });
+  }
+
+  Future<void> _sync({bool full = false}) async {
     final generation = _lockGeneration;
     final since = full ? 0 : cache.seq;
     Map<String, dynamic> res;
@@ -175,7 +190,7 @@ class Vault with VaultDevices {
       rethrow;
     }
     if (generation != _lockGeneration) return;
-    if ((res['seq'] as int) < since) return sync(full: true);
+    if ((res['seq'] as int) < since) return _sync(full: true);
     final next = since == 0 ? SyncCache() : cache;
     if (since == 0) next.variables = {};
     next

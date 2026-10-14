@@ -21,6 +21,7 @@ class MemoryStore implements LocalStore {
 class FileStore implements LocalStore {
   FileStore(this.dir);
   final Directory dir;
+  int _tmpSeq = 0;
 
   File _file(String key) => File('${dir.path}/$key.json');
 
@@ -33,7 +34,8 @@ class FileStore implements LocalStore {
   @override
   Future<void> write(String key, String value) async {
     await dir.create(recursive: true);
-    final tmp = File('${dir.path}/.$key.tmp');
+    // 临时文件名每次不同：同一个键并发写入时，各自的改名互不影响。
+    final tmp = File('${dir.path}/.$key.${_tmpSeq++}.tmp');
     await tmp.writeAsString(value, flush: true);
     await tmp.rename(_file(key).path);
   }
