@@ -1,6 +1,6 @@
 {
   "name": "harmonia-server",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "private": true,
   "type": "module",
   "description": "Harmonia（和弦）服务端：Cloudflare Workers + Durable Object",
