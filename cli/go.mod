@@ -11,4 +11,4 @@ require (
 	golang.org/x/term v0.46.0
 )
 
-require rsc.io/qr v0.2.0 // indirect
+require rsc.io/qr v0.2.0

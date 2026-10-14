@@ -52,6 +52,9 @@ func cmdStatus(ctx context.Context, args []string) error {
 	}
 	if !a.Config.Paired() {
 		fmt.Println("本机还没有接入账号。运行 harmonia login 开始。")
+		if m, err := a.Dir.Manager(); m != nil || err != nil {
+			fmt.Println("管理登录：" + managerSummary(a.Dir))
+		}
 		return nil
 	}
 	if err := refresh(ctx, a); err != nil {
@@ -62,6 +65,7 @@ func cmdStatus(ctx context.Context, args []string) error {
 		{"服务器", a.Config.Server},
 		{"本机", a.Config.DeviceName},
 		{"上次同步", ago(a.Config.LastSync)},
+		{"管理登录", managerSummary(a.Dir)},
 		{"后台服务", serviceSummary()},
 		{shellLabel, shellSummary(a)},
 		{"版本", fmt.Sprintf("%s（%s渠道）", version, updateChannel().Label())},

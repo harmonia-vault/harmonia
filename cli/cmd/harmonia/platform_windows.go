@@ -21,6 +21,11 @@ import (
 // notFoundHint 是找不到要运行的命令时补充的说明。
 const notFoundHint = "。如果它是 cmd 或 PowerShell 自带的命令，请写成 cmd /c <命令> 或 powershell -Command <命令>"
 
+// openBrowser 用系统默认浏览器打开地址。
+func openBrowser(url string) error {
+	return exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
+}
+
 // replaceProcess 运行命令并以它的退出码结束。Windows 不能替换当前进程，只能等它运行完；
 // Ctrl+C 由控制台同时发给它和本进程，本进程不处理，由它决定是否退出。
 func replaceProcess(bin string, args, env []string) error {

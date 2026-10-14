@@ -5,7 +5,8 @@ import (
 	"strings"
 )
 
-func defaultDeviceName() string {
+// DefaultDeviceName 返回这台电脑默认使用的设备名（主机名）。
+func DefaultDeviceName() string {
 	h, err := os.Hostname()
 	if err != nil || h == "" {
 		return "电脑"

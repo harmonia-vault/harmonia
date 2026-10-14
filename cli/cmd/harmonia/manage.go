@@ -135,6 +135,15 @@ func cmdUninstall(ctx context.Context, args []string) error {
 			fmt.Println("暂时无法连接服务器，请在管理设备上手动移除这台设备。")
 		}
 	}
+	if m, merr := a.Dir.Manager(); m != nil || merr != nil {
+		// 通知不到服务器也要继续卸载：数据目录随后整个删除。
+		if err := managerLogout(ctx, a.Dir, true); err != nil {
+			fmt.Println(sentence(err.Error()))
+			if m != nil {
+				fmt.Printf("卸载后请在手机的“设备”页移除“%s”。\n", m.DeviceName)
+			}
+		}
+	}
 	if err := service.Uninstall(); err != nil {
 		return err
 	}

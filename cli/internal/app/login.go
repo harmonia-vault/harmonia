@@ -63,6 +63,11 @@ func Login(ctx context.Context, in LoginInput, prompt PairingPrompt) (*App, int,
 	if !acct.Initialized {
 		return nil, 0, errors.New("这个账号还没有在手机上完成设置。请先在 Harmonia App 中输入这个邮箱，完成设置后再运行 harmonia login")
 	}
+	if m, err := d.Manager(); err != nil {
+		return nil, 0, err
+	} else if m != nil && (m.Server != server || m.AccountID != acct.AccountID || m.RootPub != acct.RootPub) {
+		return nil, 0, fmt.Errorf("这台电脑已经管理登录了账号 %s（%s）。日常登录和管理登录必须是同一个账号；如需更换，请先运行 harmonia manager logout", m.Email, m.Server)
+	}
 	if cfg.AccountID == acct.AccountID && cfg.RootPub != "" && cfg.RootPub != acct.RootPub {
 		return nil, 0, errors.New("服务器返回的账号公钥与本机之前记录的不一致，已停止。请确认服务器地址是否正确")
 	}
@@ -72,11 +77,11 @@ func Login(ctx context.Context, in LoginInput, prompt PairingPrompt) (*App, int,
 	signPub, boxPub := hc.B64(keys.Sign.Pub), hc.B64(keys.Box.Pub[:])
 	name := in.DeviceName
 	if name == "" {
-		name = defaultDeviceName()
+		name = DefaultDeviceName()
 	}
 	body := map[string]any{
 		"name": name, "platform": runtime.GOOS, "signPub": signPub, "boxPub": boxPub, "rootPub": acct.RootPub,
-		"canManage": false, // CLI 还不具备管理功能，不能被批准为管理设备
+		"canManage": false, // 日常登录不具备管理功能；管理登录见 internal/manager
 	}
 	if code := strings.TrimSpace(in.PairingCode); code != "" {
 		body["code"] = code

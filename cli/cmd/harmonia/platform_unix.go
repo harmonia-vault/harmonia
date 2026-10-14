@@ -5,6 +5,8 @@ package main
 import (
 	"context"
 	"os"
+	"os/exec"
+	"runtime"
 	"syscall"
 )
 
@@ -19,6 +21,17 @@ func replaceProcess(bin string, args, env []string) error {
 // background 为后台服务做系统相关的准备；macOS、Linux 上由 systemd、launchd 负责启停，不需要准备。
 func background(ctx context.Context, _ []string) (context.Context, func(), error) {
 	return ctx, func() {}, nil
+}
+
+// openBrowser 用系统默认浏览器打开地址。
+func openBrowser(url string) error {
+	if runtime.GOOS == "darwin" {
+		return exec.Command("open", url).Start()
+	}
+	if os.Getenv("DISPLAY") == "" && os.Getenv("WAYLAND_DISPLAY") == "" {
+		return exec.ErrNotFound
+	}
+	return exec.Command("xdg-open", url).Start()
 }
 
 // newProgramName 是升级时新版本的临时文件名，与 harmonia 放在同一个目录。

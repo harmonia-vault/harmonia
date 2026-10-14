@@ -94,7 +94,7 @@ class _DeviceReviewViewState extends State<DeviceReviewView> {
     final clients = devices.where((d) => !d.isManager);
     return AuthScaffold(
       title: '检查其他设备',
-      subtitle: '恢复不会让账号中的其他设备失效。\n旧手机仍然可以访问全部环境，也能批准和移除设备。',
+      subtitle: '恢复不会让账号中的其他设备失效。\n其他管理设备仍然可以访问全部环境，也能批准和移除设备。',
       children: [
         const Banner2('已丢失或不再使用的设备，请勾选后移除；还在使用的设备不用勾选。', warn: true),
         if (managers.isNotEmpty) ...[const SectionTitle('管理设备'), ...managers.map(_tile)],

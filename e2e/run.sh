@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 端到端流程测试：本地 workerd 服务端 + 真实 harmonia CLI + 无界面管理设备（app/lib/core）。
 # 覆盖：注册验证（含重新注册未初始化的账号）、首次初始化、匿名查询、电脑配对（扫码方式与配对码方式、取消等待、配对码输错）、
-# exec、实时推送、写入、本地覆盖、权限变更、撤销、恢复与轮换、多管理设备。账号没有密码。
+# exec、实时推送、写入、本地覆盖、权限变更、撤销、恢复与轮换、多管理设备、电脑管理登录（本机管理页面的接口）。账号没有密码。
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -17,6 +17,7 @@ expect_eq() { [ "$1" == "$2" ] || fail "$3：期望 [$2]，实际 [$1]"; }
 
 cleanup() {
   [ -n "${DAEMON_PID:-}" ] && kill "$DAEMON_PID" 2>/dev/null || true
+  [ -n "${MGR_PID:-}" ] && kill "$MGR_PID" 2>/dev/null || true
   [ -n "${SERVER_PID:-}" ] && kill "$SERVER_PID" 2>/dev/null || true
   pkill -f "wrangler dev.*$PORT" 2>/dev/null || true
 }
@@ -231,6 +232,81 @@ expect_eq "$(manager phone2 var-get OpenAI OPENAI_API_KEY)" "sk-second" "第二�
 manager phone2 env-create FromPhone2 >/dev/null
 manager phone2 var-set FromPhone2 SHARED "from-phone-2" >/dev/null
 expect_eq "$(manager phone var-get FromPhone2 SHARED)" "from-phone-2" "第一台手机读取第二台手机创建的环境"
+
+step "M13 电脑管理登录：通过本机管理页面的接口登录、解锁、新建环境、批量导入、复制和退出"
+# 设备登录挑战每分钟最多 30 次：先等过这一分钟。
+sleep 61
+MPORT=8798
+MURL="http://127.0.0.1:$MPORT"
+MPASS="E2e-$RANDOM-Mgr"
+# 直接启动程序而不经过 cli 函数，这样 MGR_PID 就是它本身，结束时能关掉。
+HARMONIA_HOME="$TMP/cli" "$TMP/harmonia" manager --no-open --port $MPORT >"$TMP/mgr.out" 2>&1 &
+MGR_PID=$!
+for _ in $(seq 1 50); do grep -q "管理页面" "$TMP/mgr.out" 2>/dev/null && break; sleep 0.2; done
+ACODE=$(grep -ao '#[A-Za-z0-9_-]*' "$TMP/mgr.out" | head -1 | cut -c2-)
+[ -n "$ACODE" ] || { cat "$TMP/mgr.out"; fail "管理页面没有启动"; }
+EMPTY='{}'
+field() { grep -o "\"$1\":\"[^\"]*\"" | head -1 | cut -d'"' -f4; }
+expect_eq "$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: evil.example' "$MURL/")" "403" "Host 不是本机地址时拒绝"
+expect_eq "$(curl -s -o /dev/null -w '%{http_code}' "$MURL/api/state")" "401" "没有令牌时拒绝"
+# 请求内容先放进变量：macOS 自带的 bash 3.2 会把写在 "$(...)" 里的带转义引号的 JSON 拆开。
+B_CODE='{"code":"'$ACODE'"}'
+B_LOGIN='{"deviceName":"e2e 管理","passphrase":"'$MPASS'"}'
+B_PASS='{"passphrase":"'$MPASS'"}'
+MTOKEN=$(curl -s -X POST -H 'Content-Type: application/json' -d "$B_CODE" "$MURL/api/session" | field token)
+[ -n "$MTOKEN" ] || fail "访问码没有换到令牌"
+expect_eq "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d "$B_CODE" "$MURL/api/session")" "403" "访问码只能用一次"
+mapi() { curl -s -X POST -H 'Content-Type: application/json' -H "Authorization: Bearer $MTOKEN" -d "${2:-$EMPTY}" "$MURL$1"; }
+mphase() { mapi /api/ping '{"active":true}' | field phase; }
+expect_eq "$(mphase)" "login" "还没有管理登录"
+mapi /api/login '{"deviceName":"e2e 管理","passphrase":"password1"}' | grep -q "太常见" || fail "常见口令应当被拒绝"
+expect_eq "$(mapi /api/login "$B_LOGIN" | field phase)" "pairing" "发起管理登录"
+MCODE=$(mapi /api/ping | field code)
+[ -n "$MCODE" ] || fail "管理登录没有给出核对码"
+manager phone approve "$MCODE" manager >/dev/null
+for _ in $(seq 1 30); do [ "$(mphase)" == "unlocked" ] && break; sleep 0.5; done
+expect_eq "$(mphase)" "unlocked" "批准后进入管理页面"
+[ -f "$TMP/cli/manager.json" ] || fail "没有保存管理身份"
+grep -q "signSeed\|boxSeed" "$TMP/cli/manager.json" && fail "管理身份的密钥不应以明文保存"
+[ -f "$TMP/cli/keys.json" ] || fail "管理登录不应影响日常登录"
+ENVS=$(mapi /api/envs/list)
+for e in OpenAI Other FromPhone2; do printf %s "$ENVS" | grep -q "\"name\":\"$e\"" || fail "管理页面看不到环境 $e：$ENVS"; done
+NEWENV=$(mapi /api/envs/create '{"name":"FromComputer"}' | field id)
+[ -n "$NEWENV" ] || fail "电脑没能新建环境"
+B_ENV='{"env":"'$NEWENV'"}'
+IMPORT='{"env":"'$NEWENV'","text":"# 注释\nA=1\nB=\"two words\"\nexport C='"'"'x y'"'"'\n1BAD=x\n","names":["A","B","C"]}'
+PREVIEW=$(mapi /api/import/preview "$IMPORT")
+expect_eq "$(printf %s "$PREVIEW" | grep -o '"status":"new"' | wc -l | tr -d ' ')" "3" "导入对比：三个新增"
+printf %s "$PREVIEW" | grep -q '"line":5' || fail "导入对比应当指出第 5 行不合法：$PREVIEW"
+mapi /api/import/apply "$IMPORT" | grep -q '"error"' && fail "批量导入有失败项"
+expect_eq "$(manager phone var-get FromComputer B)" "two words" "手机读取电脑新建环境里导入的变量"
+expect_eq "$(manager phone2 var-get FromComputer C)" "x y" "第二台手机同样能读取"
+expect_eq "$(mapi /api/import/preview "$IMPORT" | grep -o '"status":"same"' | wc -l | tr -d ' ')" "3" "再次对比：三个不变"
+OTHER=$(printf %s "$ENVS" | grep -o '"id":"[^"]*","name":"Other"' | cut -d'"' -f4)
+mapi /api/copy/apply "{\"from\":\"$NEWENV\",\"to\":\"$OTHER\",\"names\":[\"A\"]}" | grep -q '"error"' && fail "跨环境复制失败"
+expect_eq "$(manager phone var-get Other A)" "1" "手机读取复制到其他环境的变量"
+mapi /api/vars/delete "{\"env\":\"$NEWENV\",\"names\":[\"A\",\"B\"]}" | grep -q '"error"' && fail "多选删除失败"
+expect_eq "$(mapi /api/vars/list "$B_ENV" | grep -o '"name":"[^"]*"' | tr -d '\n')" '"name":"C"' "删除后只剩一个变量"
+manager phone var-set FromComputer FROM_PHONE "pushed" >/dev/null
+START=$(date +%s)
+until mapi /api/vars/list "$B_ENV" | grep -q FROM_PHONE; do
+  [ $(( $(date +%s) - START )) -le 5 ] || fail "手机上的修改 5 秒内没有出现在管理页面"
+  sleep 0.2
+done
+expect_eq "$(mapi /api/lock | field phase)" "locked" "手动锁定"
+expect_eq "$(mapi /api/envs/list | field error)" "locked" "锁定后不能读取"
+expect_eq "$(mapi /api/unlock '{"passphrase":"Wrong-pass-1"}' | field error)" "wrong_passphrase" "口令不对"
+expect_eq "$(mapi /api/unlock "$B_PASS" | field phase)" "unlocked" "用口令解锁"
+[[ "$(cli manager status)" == *已登录* ]] || fail "manager status 应当显示已登录"
+[[ "$(cli status)" == *管理登录*已登录* ]] || fail "status 应当显示管理登录"
+[[ "$(manager phone devices)" == *"e2e 管理"* ]] || fail "手机的设备列表里应当有电脑的管理身份"
+mapi /api/envs/delete "$B_ENV" >/dev/null
+if manager phone var-get FromComputer C >/dev/null 2>&1; then fail "电脑删除环境后手机不应还能读取"; fi
+expect_eq "$(mapi /api/logout "$B_PASS" | field phase)" "login" "退出管理登录"
+[ -f "$TMP/cli/manager.json" ] && fail "退出管理登录后应当删除本机的管理密钥"
+[[ "$(manager phone devices)" == *"e2e 管理"* ]] && fail "退出管理登录后手机上不应还有这台电脑的管理身份"
+cli sync >/dev/null || fail "退出管理登录不应影响日常登录"
+kill -INT $MGR_PID; wait $MGR_PID 2>/dev/null || true; MGR_PID=""
 
 step "J7 撤销：在线设备立即清除本机数据"
 manager phone revoke e2e-laptop >/dev/null
