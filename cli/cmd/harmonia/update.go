@@ -129,7 +129,7 @@ func cmdUpdate(ctx context.Context, args []string) error {
 	if len(args) > 0 && args[0] == "channel" {
 		return cmdUpdateChannel(args[1:])
 	}
-	f, err := parseFlags(args)
+	f, err := parseFlags(args, "check")
 	if err != nil {
 		return err
 	}

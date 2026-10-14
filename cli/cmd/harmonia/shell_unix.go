@@ -25,7 +25,8 @@ const (
 )
 
 var shellHelp = [][2]string{
-	{"shell install|uninstall", "在 shell 启动文件中加载变量（--shell zsh|bash 指定 shell）"},
+	{"shell install [--shell zsh|bash] [--yes]", "在 shell 启动文件中加载变量；默认按当前 shell，--yes 不再确认"},
+	{"shell uninstall [--shell zsh|bash]", "移除 shell 启动文件中的加载设置"},
 }
 
 func shellTargets(sh string) ([]shell.Target, error) {
@@ -67,7 +68,7 @@ func shellSummary(a *app.App) string {
 }
 
 func cmdShell(ctx context.Context, args []string) error {
-	f, err := parseFlags(args, "shell")
+	f, err := parseFlags(args, "shell=", "yes")
 	if err != nil {
 		return err
 	}

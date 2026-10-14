@@ -47,7 +47,7 @@ func replaceProcess(bin string, args, env []string) error {
 // background 为后台服务做准备：--home 指定数据目录（计划任务不能设置环境变量），
 // 登记“正在运行”，并在 CLI 要求停止时结束。同一个数据目录已有后台服务时返回错误。
 func background(ctx context.Context, args []string) (context.Context, func(), error) {
-	f, err := parseFlags(args, "home")
+	f, err := parseFlags(args, "home=")
 	if err != nil {
 		return nil, nil, err
 	}

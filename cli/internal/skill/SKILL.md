@@ -11,7 +11,7 @@ Harmonia 让用户在手机上管理环境变量，同步到电脑。变量按�
 
 ## 先核对版本
 
-开始使用前运行 `harmonia version`。如果输出的版本与上面的不同（例如用户升级过），先运行 `harmonia skill`，按输出的新说明操作；你把本说明保存成过技能文件的话，再运行 `harmonia skill install` 覆盖它。运行 `harmonia update` 升级之后也要这样做。
+开始使用前运行 `harmonia version`。如果输出的版本与上面的不同（例如用户升级过），先运行 `harmonia skill`，按输出的新说明操作；你把本说明保存成过技能文件的话，再运行 `harmonia skill install` 覆盖它（技能目录不是 `~/.claude` 或 `~/.agents` 时，加 `--dir <技能目录>`）。运行 `harmonia update` 升级之后也要这样做。
 
 找不到 `harmonia` 命令时：macOS、Linux 上试 `~/.local/bin/harmonia`，Windows 上试 `%LOCALAPPDATA%\Programs\Harmonia\harmonia.exe`。都没有的话，按下一节安装。
 
@@ -79,6 +79,8 @@ harmonia var list [--env 环境]    # 变量名，默认隐藏值
 
 除非用户明确要求查看某个值，不要使用 `--show`。
 
+不确定某条命令的参数时，运行 `harmonia <命令> --help`（例如 `harmonia var --help`），它只输出用法，不执行命令。
+
 ## 使用变量
 
 用 `harmonia exec` 运行需要这些变量的命令，变量只注入给这条命令，值不会出现在输出里：
@@ -94,7 +96,7 @@ harmonia exec --env 环境A --env 环境B -- npm test   # 同上，--env 也可�
 - `harmonia exec` 启动时先同步一次；连不上服务器时使用本机缓存，并在 stderr 提示。`harmonia status`、`harmonia env list`、`harmonia var list` 也是这样。
 - 这台设备没有任何环境的访问权限时，`harmonia exec` 照常运行命令，只在 stderr 提示拿不到变量。这时请用户在管理设备上为这台设备授权。
 - 不要把变量值打印到对话里：避免 `echo $KEY`、`env`、`harmonia export`、`harmonia var list --show`。
-- 确实要把变量写进文件（例如 `.env`）时，先征得用户同意，并确认这个文件不会被提交到版本库。`harmonia export --format dotenv|sh|json` 输出当前生效的变量。
+- 确实要把变量写进文件（例如 `.env`）时，先征得用户同意，并确认这个文件不会被提交到版本库。`harmonia export --format dotenv|sh|json` 输出当前生效的变量，加 `--env` 时只输出这些环境的变量，用法与 `harmonia exec` 相同。
 
 ## 修改变量（需要读写权限，必须联网）
 
@@ -107,6 +109,7 @@ harmonia var rm <环境> <变量名>
 ```
 
 - 从标准输入只读取第一行，首尾空白会被去掉。
+- 变量可以带一条备注，说明用途或来源，会在 `harmonia var list` 中显示。给了 `--note` 时命令不读取标准输入，只改备注、保留原值，所以分两步：先按上面的方式写入值，再运行 `harmonia var set <环境> <变量名> --note 备注`。`--note ""` 清除备注。不要把密钥写进备注。
 - 删除变量、覆盖已有的值之前，先向用户确认。
 - 提示只有只读权限时，告诉用户需要在手机上把这台电脑对这个环境的权限改为读写。
 
@@ -132,6 +135,7 @@ harmonia override list
 - `harmonia uninstall`：完全卸载
 - `harmonia shell uninstall`、`harmonia service uninstall`
 - `harmonia update channel beta|stable`：切换更新渠道
+- `harmonia shell system-vars on|off`（只在 Windows 上）：是否把 `Path`、`TEMP` 这类系统自身使用的变量也写入用户环境变量，写错会影响这台电脑上的所有程序
 
 不要读取或修改 `~/.harmonia` 里的文件，其中 `env.sh` 保存着明文的变量值。
 

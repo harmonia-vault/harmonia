@@ -27,12 +27,19 @@ type flags struct {
 	rest   []string // "--" 之后的参数
 }
 
-// parseFlags 解析参数，允许选项出现在位置参数之后。valued 列出需要取值的选项。
-func parseFlags(args []string, valued ...string) (*flags, error) {
+// usageError 是用法上的错误，输出时提示查看这条命令的帮助。
+type usageError string
+
+func (e usageError) Error() string { return string(e) }
+
+// parseFlags 解析参数，允许选项出现在位置参数之后。spec 列出这条命令认识的选项，
+// 以“=”结尾的需要取值；其他选项一律报错，避免拼错的选项被悄悄忽略。
+func parseFlags(args []string, spec ...string) (*flags, error) {
 	f := &flags{values: map[string]string{}, lists: map[string][]string{}, bools: map[string]bool{}}
-	needs := map[string]bool{}
-	for _, v := range valued {
-		needs[v] = true
+	known := map[string]bool{} // 选项名 → 是否需要取值
+	for _, s := range spec {
+		name, valued := strings.CutSuffix(s, "=")
+		known[name] = valued
 	}
 	for i := 0; i < len(args); i++ {
 		a := args[i]
@@ -45,21 +52,40 @@ func parseFlags(args []string, valued ...string) (*flags, error) {
 			continue
 		}
 		name, val, hasVal := strings.Cut(strings.TrimLeft(a, "-"), "=")
-		if needs[name] {
-			if !hasVal {
-				if i+1 >= len(args) {
-					return nil, fmt.Errorf("选项 --%s 需要一个值", name)
-				}
-				i++
-				val = args[i]
+		valued, ok := known[name]
+		switch {
+		case !ok:
+			return nil, usageError(fmt.Sprintf("不认识的选项 %s", a))
+		case !valued:
+			if hasVal {
+				return nil, usageError(fmt.Sprintf("选项 --%s 不需要值", name))
 			}
-			f.values[name] = val
-			f.lists[name] = append(f.lists[name], val)
-		} else {
 			f.bools[name] = true
+			continue
+		case !hasVal:
+			if i+1 >= len(args) {
+				return nil, usageError(fmt.Sprintf("选项 --%s 需要一个值", name))
+			}
+			i++
+			val = args[i]
 		}
+		f.values[name] = val
+		f.lists[name] = append(f.lists[name], val)
 	}
 	return f, nil
+}
+
+// wantsHelp 判断命令参数里（“--”之前）是否要求查看帮助。
+func wantsHelp(args []string) bool {
+	for _, a := range args {
+		if a == "--" {
+			return false
+		}
+		if a == "-h" || a == "--help" {
+			return true
+		}
+	}
+	return false
 }
 
 var stdin = bufio.NewReader(os.Stdin)
@@ -99,8 +125,16 @@ func main() {
 	defer stop()
 	api.Version = version
 	args := os.Args[1:]
-	if len(args) == 0 || args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
+	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
 		printHelp(os.Stdout)
+		return
+	}
+	if args[0] == "help" {
+		if len(args) < 2 {
+			printHelp(os.Stdout)
+		} else {
+			printCommandHelp(os.Stdout, args[1])
+		}
 		return
 	}
 	commands := map[string]func(context.Context, []string) error{
@@ -128,8 +162,17 @@ func main() {
 		fmt.Fprintf(os.Stderr, "未知命令：%s。运行 harmonia help 查看全部命令。\n", args[0])
 		os.Exit(2)
 	}
+	// 查看帮助不执行命令本身：例如 update --help 不应当开始升级。
+	if wantsHelp(args[1:]) {
+		printCommandHelp(os.Stdout, args[0])
+		return
+	}
 	if err := fn(ctx, args[1:]); err != nil {
-		fmt.Fprintln(os.Stderr, "错误："+sentence(err.Error()))
+		msg := sentence(err.Error())
+		if errors.As(err, new(usageError)) {
+			msg += fmt.Sprintf("运行 harmonia %s --help 查看用法。", args[0])
+		}
+		fmt.Fprintln(os.Stderr, "错误："+msg)
 		os.Exit(1)
 	}
 }

@@ -20,8 +20,9 @@ const (
 )
 
 var shellHelp = [][2]string{
-	{"shell install|uninstall", "开启或关闭“把变量写入 Windows 的用户环境变量”"},
-	{"shell system-vars on|off", "是否写入 Path、TEMP 这类系统自身使用的变量（默认不写入）"},
+	{"shell install [--yes]", "把变量写入 Windows 的用户环境变量；--yes 不再确认"},
+	{"shell uninstall", "停止写入，把用户环境变量恢复原状"},
+	{"shell system-vars [on|off] [--yes]", "查看或设置是否写入 Path、TEMP 这类系统自身使用的变量（默认不写入）"},
 }
 
 func shellInstalledAny(a *app.App) bool {
@@ -54,7 +55,7 @@ func shellNotes(a *app.App) []string {
 }
 
 func cmdShell(ctx context.Context, args []string) error {
-	f, err := parseFlags(args)
+	f, err := parseFlags(args, "yes")
 	if err != nil {
 		return err
 	}

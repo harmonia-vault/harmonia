@@ -20,7 +20,7 @@ import (
 const managerUsage = "用法：harmonia manager [ui] [--port 端口] [--no-open] | login | logout | status"
 
 func cmdManager(ctx context.Context, args []string) error {
-	f, err := parseFlags(args, "port")
+	f, err := parseFlags(args, "port=", "no-open", "yes")
 	if err != nil {
 		return err
 	}
