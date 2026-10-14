@@ -84,7 +84,7 @@ var helpGroups = []struct {
 	cmds  [][2]string
 }{
 	{"接入与同步", [][2]string{
-		{"login [服务器地址] [--code 配对码]", "发起配对，在管理设备上核对并批准后完成接入；配对码可以留空，改用扫码"},
+		{"login [服务器地址] [--email 邮箱] [--code 配对码] [--name 设备名]", "发起配对，在管理设备上核对并批准后完成接入；配对码可以留空，改用扫码；设备名默认用主机名"},
 		{"status", "查看接入状态、环境和后台服务"},
 		{"sync", "立即同步"},
 	}},
@@ -107,12 +107,12 @@ var helpGroups = []struct {
 	}},
 	{"使用变量", [][2]string{
 		{"exec [--env a,b] -- <命令...>", "带上变量运行命令；--env 只用这些环境（可重复给出），靠前的优先"},
-		{"export [--format sh|dotenv|json]", "输出当前生效的变量"},
+		{"export [--env a,b] [--format sh|dotenv|json]", "输出当前生效的变量；--env 只用这些环境，靠前的优先"},
 	}},
 	{"管理登录（让这台电脑成为管理设备，需要在手机上批准）", [][2]string{
 		{"manager [--port 端口] [--no-open]", "在浏览器里打开本机管理页面：管理登录、环境和变量的批量管理"},
 		{"manager login", "同上，直接进入管理登录"},
-		{"manager logout", "退出管理登录，删除这台电脑上的管理密钥"},
+		{"manager logout [--yes]", "退出管理登录，删除这台电脑上的管理密钥；--yes 不再确认"},
 		{"manager status", "查看是否已管理登录"},
 	}},
 	{"安装与维护", slices.Concat(shellHelp, [][2]string{
@@ -120,10 +120,35 @@ var helpGroups = []struct {
 		{"update [--check]", "检查并升级 harmonia"},
 		{"update channel [stable|beta]", "查看或切换更新渠道（正式版 / 测试版）"},
 		{"skill [install [--dir 目录]]", "输出给 AI 助手的使用说明；install 保存成技能文件"},
-		{"logout", "退出账号并清除本机数据（不影响管理登录）"},
-		{"uninstall", uninstallSummary},
+		{"logout [--yes]", "退出账号并清除本机数据（不影响管理登录）；--yes 不再确认"},
+		{"uninstall [--yes]", uninstallSummary + "；--yes 不再确认"},
 		{"version", "显示版本"},
 	})},
+}
+
+// helpWrap 是命令列的最大宽度：更长的命令单独占一行，说明换到下一行，免得把所有说明挤到右边。
+const helpWrap = 44
+
+// printCommands 按共用的命令列宽输出若干条命令和说明。
+func printCommands(out io.Writer, cmds [][2]string, w int) {
+	for _, c := range cmds {
+		if width(c[0]) > w {
+			fmt.Fprintf(out, "  %s\n  %s  %s\n", c[0], pad("", w), c[1])
+		} else {
+			fmt.Fprintf(out, "  %s  %s\n", pad(c[0], w), c[1])
+		}
+	}
+}
+
+// commandWidth 返回命令列的宽度：不超过 helpWrap 的命令中最宽的那个。
+func commandWidth(cmds [][2]string) int {
+	w := 0
+	for _, c := range cmds {
+		if n := width(c[0]); n <= helpWrap {
+			w = max(w, n)
+		}
+	}
+	return w
 }
 
 func printHelp(out io.Writer) {
@@ -131,17 +156,34 @@ func printHelp(out io.Writer) {
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, "用法：harmonia <命令> [参数]")
 	// 所有分组共用一个命令列宽，说明文字从同一列开始。
-	w := 0
+	var all [][2]string
 	for _, g := range helpGroups {
-		for _, c := range g.cmds {
-			w = max(w, width(c[0]))
-		}
+		all = append(all, g.cmds...)
 	}
+	w := commandWidth(all)
 	for _, g := range helpGroups {
 		fmt.Fprintln(out)
 		fmt.Fprintln(out, g.title)
+		printCommands(out, g.cmds, w)
+	}
+	fmt.Fprintln(out)
+	fmt.Fprintln(out, "在命令后加 --help 查看这条命令的用法，例如 harmonia var --help。")
+}
+
+// printCommandHelp 输出一条命令（例如 var）的用法；帮助里没有这条命令时输出全部帮助。
+func printCommandHelp(out io.Writer, name string) {
+	var cmds [][2]string
+	for _, g := range helpGroups {
 		for _, c := range g.cmds {
-			fmt.Fprintf(out, "  %s  %s\n", pad(c[0], w), c[1])
+			if strings.Fields(c[0])[0] == name {
+				cmds = append(cmds, [2]string{"harmonia " + c[0], c[1]})
+			}
 		}
 	}
+	if len(cmds) == 0 {
+		printHelp(out)
+		return
+	}
+	fmt.Fprintln(out, "用法：")
+	printCommands(out, cmds, commandWidth(cmds))
 }

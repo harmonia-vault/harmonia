@@ -46,7 +46,7 @@ func (terminalPrompt) Waiting() {
 }
 
 func cmdLogin(ctx context.Context, args []string) error {
-	f, err := parseFlags(args, "email", "name", "code")
+	f, err := parseFlags(args, "email=", "name=", "code=")
 	if err != nil {
 		return err
 	}
@@ -165,7 +165,7 @@ func cmdEnv(ctx context.Context, args []string) error {
 	return nil
 }
 func cmdVar(ctx context.Context, args []string) error {
-	f, err := parseFlags(args, "env", "note")
+	f, err := parseFlags(args, "env=", "note=", "show")
 	if err != nil {
 		return err
 	}
@@ -216,7 +216,7 @@ func cmdVar(ctx context.Context, args []string) error {
 }
 
 func cmdImport(ctx context.Context, args []string) error {
-	f, err := parseFlags(args, "env")
+	f, err := parseFlags(args, "env=")
 	if err != nil {
 		return err
 	}
@@ -364,9 +364,9 @@ func effective(ctx context.Context, a *app.App, envs string) (map[string]string,
 }
 
 func cmdExec(ctx context.Context, args []string) error {
-	f, err := parseFlags(args, "env")
+	f, err := parseFlags(args, "env=")
 	if err != nil {
-		return err
+		return usageError(err.Error() + "。要传给命令的选项请写在 -- 之后，例如 harmonia exec -- npm test --watch")
 	}
 	cmdArgs := append(f.args, f.rest...)
 	if len(cmdArgs) == 0 {
@@ -397,7 +397,7 @@ func cmdExec(ctx context.Context, args []string) error {
 }
 
 func cmdExport(ctx context.Context, args []string) error {
-	f, err := parseFlags(args, "format", "env")
+	f, err := parseFlags(args, "format=", "env=")
 	if err != nil {
 		return err
 	}

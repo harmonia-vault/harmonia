@@ -92,6 +92,10 @@ func cmdService(ctx context.Context, args []string) error {
 }
 
 func cmdLogout(ctx context.Context, args []string) error {
+	f, err := parseFlags(args, "yes")
+	if err != nil {
+		return err
+	}
 	a, err := app.Load(false)
 	if err != nil {
 		return err
@@ -100,7 +104,6 @@ func cmdLogout(ctx context.Context, args []string) error {
 		fmt.Println("本机没有接入账号。")
 		return nil
 	}
-	f, _ := parseFlags(args)
 	if !f.bools["yes"] && !confirm(fmt.Sprintf("将退出账号 %s，并清除本机保存的密钥和变量。确认？", a.Config.Email)) {
 		fmt.Println("已取消。")
 		return nil
@@ -119,7 +122,10 @@ func cmdLogout(ctx context.Context, args []string) error {
 }
 
 func cmdUninstall(ctx context.Context, args []string) error {
-	f, _ := parseFlags(args)
+	f, err := parseFlags(args, "yes")
+	if err != nil {
+		return err
+	}
 	if !f.bools["yes"] && !confirm("将"+uninstallSummary+"本身。确认？") {
 		fmt.Println("已取消。")
 		return nil

@@ -14,7 +14,7 @@ import (
 )
 
 func cmdSkill(_ context.Context, args []string) error {
-	f, err := parseFlags(args, "dir")
+	f, err := parseFlags(args, "dir=")
 	if err != nil {
 		return err
 	}
