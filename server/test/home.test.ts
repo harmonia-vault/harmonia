@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { homePage } from "../src/core/home";
+import { VERSION } from "../src/core/protocol";
 import { route } from "../src/core/router";
 import { TestServer } from "./helpers";
 
@@ -28,6 +29,11 @@ describe("实例首页", () => {
     expect(html.match(/class="prompt"/g)).toHaveLength(1);
     expect(html.indexOf('class="addr"')).toBeLessThan(html.indexOf('class="ai"'));
     expect(html.indexOf('class="ai"')).toBeLessThan(html.indexOf('class="term"'));
+  });
+
+  it("页头显示服务端版本", async () => {
+    const html = await (await homePage("https://vault.example.com")).text();
+    expect(html).toContain(`<div class="status"><i></i>运行中<span title="服务端版本">v${VERSION}</span></div>`);
   });
 
   it("服务器地址、提示词和每条命令都有复制按钮", async () => {
