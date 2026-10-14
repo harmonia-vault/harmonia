@@ -2,6 +2,7 @@
 // 只带一段内嵌脚本（复制按钮，内容安全策略按哈希放行），不加载任何外部资源，
 // 也不透露这台服务器的配置（是否开放注册、有多少账号）。
 import { encode } from "uqr";
+import { VERSION } from "./protocol";
 
 const REPO = "https://github.com/harmonia-vault/harmonia";
 const FEED = `${REPO}/releases/download/update-feed`;
@@ -79,6 +80,7 @@ a:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius
 .name span{margin-left:6px;font-size:14px;font-weight:400;color:var(--mute)}
 .status{display:inline-flex;align-items:center;gap:8px;margin-left:auto;padding:4px 12px;border:1.5px solid var(--line);border-radius:999px;background:var(--card);font-size:13px}
 .status i{width:8px;height:8px;border-radius:50%;background:var(--ok);animation:beat 2.4s ease-out infinite}
+.status span{padding-left:8px;border-left:1.5px solid var(--line);color:var(--mute);font-variant-numeric:tabular-nums}
 @keyframes beat{0%{box-shadow:0 0 0 0 var(--ok)}70%,100%{box-shadow:0 0 0 7px transparent}}
 @media(prefers-reduced-motion:reduce){.status i{animation:none}}
 h1{margin:56px 0 16px;font-size:clamp(26px,7.4vw,44px);line-height:1.2;font-weight:800;text-wrap:balance}
@@ -204,7 +206,7 @@ function page(origin: string): string {
 <header class="top">
 ${ICON}
 <div class="name">Harmonia<span>和弦</span></div>
-<div class="status"><i></i>运行中</div>
+<div class="status"><i></i>运行中<span title="服务端版本">v${escapeHtml(VERSION)}</span></div>
 </header>
 <main>
 <h1>这是一台 <em>Harmonia</em> 服务器</h1>
