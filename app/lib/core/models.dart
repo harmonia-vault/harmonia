@@ -108,7 +108,7 @@ class PairingRequest {
   int get expiresAt => json['expiresAt'] as int;
 }
 
-/// 管理设备生成的一次性配对码：8 位，5 分钟内有效，用一次即作废（协议 3.2）。
+/// 管理设备生成的一次性配对码：8 位，有效期 5 到 60 分钟，用一次即作废（协议 3.2）。
 class PairingCode {
   PairingCode(this.code, this.expiresAt);
   final String code;

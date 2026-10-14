@@ -168,6 +168,11 @@ const MIGRATIONS: string[][] = [
   [`ALTER TABLE devices ADD COLUMN version TEXT NOT NULL DEFAULT ''`],
   // 去掉 admin 权限，原有的 admin 授权改为读写（docs/protocol.md 4）。
   [`UPDATE grants SET role = 'rw' WHERE role = 'admin'`],
+  // 配对码可以同时有多个，有效期可选（docs/protocol.md 3.2）。
+  [
+    `DROP TABLE pairing_codes`,
+    `CREATE TABLE pairing_codes (code_hash TEXT PRIMARY KEY, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL)`,
+  ],
 ];
 
 export function migrate(sql: Sql): void {

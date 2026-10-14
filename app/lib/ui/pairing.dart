@@ -5,6 +5,7 @@ import '../app/controller.dart';
 import '../core/api.dart';
 import '../core/crypto.dart';
 import '../core/models.dart';
+import 'ai_prompt.dart';
 import 'devices.dart' show GrantEditor, expiryFrom, platformIcon, platformName;
 import 'lock.dart';
 import 'pairing_code.dart';
@@ -16,7 +17,7 @@ import 'glass_controls.dart';
 import 'widgets.dart';
 
 /// “添加设备”按钮：从按钮展开浮动菜单，先选择方式。配对码要在对方发起之前生成，扫码则在对方发起之后，
-/// 两者并列（docs/rewrite-plan.md 5.10）。[trigger] 是展开菜单的按钮，例如设备页的悬浮按钮或标题栏的加号。
+/// 两者并列（docs/rewrite-plan.md 5.10）；另有复制 AI 安装提示词（5.13）。[trigger] 是展开菜单的按钮，例如设备页的悬浮按钮或标题栏的加号。
 class AddDeviceMenu extends StatelessWidget {
   const AddDeviceMenu({super.key, required this.c, required this.trigger, this.onDone});
   final AppController c;
@@ -28,6 +29,8 @@ class AddDeviceMenu extends StatelessWidget {
   Future<void> _select(BuildContext context, String way) async {
     if (way == 'code') {
       await showPairingCode(context, c);
+    } else if (way == 'ai') {
+      await showAiPrompt(context, c);
     } else {
       await Navigator.push(context, MaterialPageRoute(builder: (_) => AddDevicePage(c: c)));
     }
@@ -41,6 +44,7 @@ class AddDeviceMenu extends StatelessWidget {
     items: const [
       (value: 'code', label: '生成配对码', icon: Icons.password_outlined, danger: false),
       (value: 'scan', label: '扫码确认', icon: Icons.qr_code_scanner, danger: false),
+      (value: 'ai', label: '复制 AI 安装提示词', icon: Icons.smart_toy_outlined, danger: false),
     ],
     onSelected: (way) => _select(context, way),
   );

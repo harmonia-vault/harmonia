@@ -241,9 +241,9 @@ export class TestAccount {
     return a;
   }
 
-  /** 管理设备生成配对码。 */
-  async pairingCode(s: TestServer): Promise<string> {
-    return (await s.ok("POST", "/api/v1/pairing-codes", { token: this.phone.token, body: {} })).code;
+  /** 管理设备生成配对码；不给 minutes 时用默认有效期。 */
+  async pairingCode(s: TestServer, minutes?: number): Promise<string> {
+    return (await s.ok("POST", "/api/v1/pairing-codes", { token: this.phone.token, body: minutes ? { minutes } : {} })).code;
   }
 
   async envelope(envId: string, recipient: string, keyVersion = 1) {

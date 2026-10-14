@@ -56,7 +56,7 @@ $env:HARMONIA_YES = '0'; irm https://github.com/harmonia-vault/harmonia/releases
 
 接入只能由用户在手机上批准，你不能自己完成：
 
-1. 向用户要服务器地址和注册 Harmonia 用的邮箱，并请用户在手机 App 的“设备 → 添加设备 → 生成配对码”中生成一个 8 位配对码（5 分钟内有效）。
+1. 向用户要服务器地址和注册 Harmonia 用的邮箱，并请用户在手机 App 的“设备 → 添加设备 → 生成配对码”中生成一个 8 位配对码（默认 10 分钟内有效）。
 2. 运行：
 
    ```bash

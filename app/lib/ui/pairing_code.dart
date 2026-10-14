@@ -1,43 +1,64 @@
-// 一次性配对码：管理设备生成并显示剩余时间；新手机发起接入时可以填写（docs/rewrite-plan.md 5.10）。
+// 一次性配对码：管理设备选好有效期后生成，并显示剩余时间；新手机发起接入时可以填写（docs/rewrite-plan.md 5.10）。
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 
 import '../app/controller.dart';
 import '../core/models.dart';
+import 'glass_controls.dart';
 import 'glass_overlays.dart';
 import 'theme.dart';
 import 'widgets.dart';
 
-/// 在管理设备上生成配对码并显示，到期后可以重新生成。重新生成会作废上一个。
-Future<void> showPairingCode(BuildContext context, AppController c) async {
-  PairingCode? code;
-  final ok = await runBusy(context, () async => code = await c.guard(c.vault.createPairingCode));
-  if (!ok || code == null || !context.mounted) return;
-  await showAppDialog<void>(
-    context: context,
-    useRootNavigator: false,
-    builder: (_) => _PairingCodeDialog(c: c, initial: code!),
+/// 配对码可选的有效期（分钟），默认 10 分钟（协议 3.2）。
+const _minuteChoices = [5, 10, 15, 30, 60];
+
+/// 生成配对码前选择有效期的一行。
+class PairingExpiryRow extends StatelessWidget {
+  const PairingExpiryRow({super.key, required this.minutes, required this.onChanged});
+  final int minutes;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      Expanded(
+        child: Text('有效期', style: TextStyle(color: context.palette.ink)),
+      ),
+      AppSelect<int>(
+        semanticLabel: '配对码的有效期',
+        value: minutes,
+        options: [for (final m in _minuteChoices) (value: m, label: '$m 分钟')],
+        onChanged: onChanged,
+      ),
+    ],
   );
 }
 
+/// 剩余时间，例如 9:58。
+String formatLeft(DateTime expiresAt) {
+  final left = expiresAt.difference(DateTime.now());
+  return '${left.inMinutes}:${(left.inSeconds % 60).toString().padLeft(2, '0')}';
+}
+
+/// 在管理设备上选好有效期后生成配对码并显示，到期后可以重新生成。已有的配对码不受影响。
+Future<void> showPairingCode(BuildContext context, AppController c) => showAppDialog<void>(
+  context: context,
+  useRootNavigator: false,
+  builder: (_) => _PairingCodeDialog(c: c),
+);
+
 class _PairingCodeDialog extends StatefulWidget {
-  const _PairingCodeDialog({required this.c, required this.initial});
+  const _PairingCodeDialog({required this.c});
   final AppController c;
-  final PairingCode initial;
   @override
   State<_PairingCodeDialog> createState() => _PairingCodeDialogState();
 }
 
 class _PairingCodeDialogState extends State<_PairingCodeDialog> {
-  late PairingCode _code = widget.initial;
+  int _minutes = 10;
+  PairingCode? _code;
   Timer? _tick;
-
-  @override
-  void initState() {
-    super.initState();
-    _tick = Timer.periodic(const Duration(seconds: 1), (_) => setState(() {}));
-  }
 
   @override
   void dispose() {
@@ -45,19 +66,22 @@ class _PairingCodeDialogState extends State<_PairingCodeDialog> {
     super.dispose();
   }
 
-  Duration get _left => _code.expiresAt.difference(DateTime.now());
-
-  Future<void> _regenerate() async {
+  Future<void> _generate() async {
     PairingCode? fresh;
-    final ok = await runBusy(context, () async => fresh = await widget.c.guard(widget.c.vault.createPairingCode));
-    if (ok && fresh != null && mounted) setState(() => _code = fresh!);
+    final c = widget.c;
+    final ok = await runBusy(
+      context,
+      () async => fresh = await c.guard(() => c.vault.createPairingCode(minutes: _minutes)),
+    );
+    if (!ok || fresh == null || !mounted) return;
+    _tick ??= Timer.periodic(const Duration(seconds: 1), (_) => setState(() {}));
+    setState(() => _code = fresh);
   }
 
   @override
   Widget build(BuildContext context) {
-    final left = _left;
-    final expired = left <= Duration.zero;
-    final mmss = '${left.inMinutes}:${(left.inSeconds % 60).toString().padLeft(2, '0')}';
+    final code = _code;
+    final valid = code != null && code.expiresAt.isAfter(DateTime.now());
     return AppAlertDialog(
       title: const Text('配对码'),
       content: Column(
@@ -66,19 +90,24 @@ class _PairingCodeDialogState extends State<_PairingCodeDialog> {
         children: [
           Text(tidy('在要接入的电脑（harmonia login）或手机（接入这台手机）上输入这个配对码。')),
           const SizedBox(height: Space.md),
-          Opacity(opacity: expired ? 0.4 : 1, child: CodeBox(_code.formatted, big: true)),
-          const SizedBox(height: Space.sm),
-          Text(
-            expired ? '配对码已过期，请重新生成。' : '剩余 $mmss，只能用一次',
-            style: TextStyle(color: expired ? Theme.of(context).colorScheme.error : context.palette.mute),
-          ),
-          const SizedBox(height: Space.md),
-          const Banner2('对方发起后，这里会直接弹出批准页。批准前仍要核对两边显示的核对码一致。'),
+          if (valid) ...[
+            CodeBox(code.formatted, big: true),
+            const SizedBox(height: Space.sm),
+            Text('剩余 ${formatLeft(code.expiresAt)}，只能用一次', style: TextStyle(color: context.palette.mute)),
+            const SizedBox(height: Space.md),
+            const Banner2('对方发起后，这里会直接弹出批准页。批准前仍要核对两边显示的核对码一致。'),
+          ] else ...[
+            if (code != null) ...[
+              Text('配对码已过期', style: TextStyle(color: Theme.of(context).colorScheme.error)),
+              const SizedBox(height: Space.sm),
+            ],
+            PairingExpiryRow(minutes: _minutes, onChanged: (m) => setState(() => _minutes = m)),
+          ],
         ],
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('关闭')),
-        if (expired) FilledButton(onPressed: _regenerate, child: const Text('重新生成')),
+        if (!valid) FilledButton(onPressed: _generate, child: Text(code == null ? '生成' : '重新生成')),
       ],
     );
   }
