@@ -74,10 +74,12 @@ Future<void> main(List<String> argv) async {
       await (await loaded()).createEnvironment(args[0]);
       print(envId(args[0]));
     case 'var-set':
-      await (await loaded()).setVariable(envId(args[0]), args[1], args[2]);
+      await (await loaded()).setVariable(envId(args[0]), args[1], args[2], args.length > 3 ? args[3] : '');
       print('ok');
     case 'var-get':
-      print((await loaded()).values(envId(args[0]))[args[1]] ?? '');
+      print((await loaded()).entries(envId(args[0]))[args[1]]?.value ?? '');
+    case 'var-note':
+      print((await loaded()).entries(envId(args[0]))[args[1]]?.note ?? '');
     case 'pairing-code':
       // 生成配对码，输出 8 位码。
       print((await (await loaded()).createPairingCode()).code);

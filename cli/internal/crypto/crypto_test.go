@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"os"
 	"testing"
+
+	"golang.org/x/crypto/chacha20poly1305"
 )
 
 // 校验 vectors/crypto.json：保证 Go 与 Dart/TS 的结果一致。
@@ -51,13 +53,16 @@ func TestVectors(t *testing.T) {
 		t.Error("box open", err)
 	}
 
-	kv := int(v["value"]["keyVersion"].(float64))
-	plain, err := DecryptValue(b("value", "key"), s("value", "envId"), kv, s("value", "name"), s("value", "ciphertext"))
-	if err != nil || plain != s("value", "plain") {
-		t.Error("value", err)
+	kv := int(v["var"]["keyVersion"].(float64))
+	e, err := DecryptVar(b("var", "key"), s("var", "envId"), kv, s("var", "name"), s("var", "ciphertext"))
+	if err != nil || e.Value != s("var", "value") || e.Note != s("var", "note") {
+		t.Error("var", err)
 	}
-	if _, err := DecryptValue(b("value", "key"), s("value", "envId"), kv, "OTHER", s("value", "ciphertext")); err == nil {
-		t.Error("value aad must bind name")
+	if e, err := DecryptVar(b("var", "key"), s("var", "envId"), kv, s("var", "noNoteName"), s("var", "noNoteCiphertext")); err != nil || e != (Entry{Value: "v"}) {
+		t.Error("var without note", err)
+	}
+	if _, err := DecryptVar(b("var", "key"), s("var", "envId"), kv, "OTHER", s("var", "ciphertext")); err == nil {
+		t.Error("var aad must bind name")
 	}
 
 	code := b("recovery", "code")
@@ -99,5 +104,37 @@ func TestSealRoundTrip(t *testing.T) {
 	other := BoxKeyFromSeed(Random(32))
 	if _, err := other.Open(sealed); err == nil {
 		t.Fatal("wrong key must fail")
+	}
+}
+
+func TestVarRoundTripKeepsUnknownFields(t *testing.T) {
+	key := Random(32)
+	ct, err := EncryptVar(key, "E", 1, "N", Entry{Value: "a\nb<&>", Note: "只有备注"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e, err := DecryptVar(key, "E", 1, "N", ct); err != nil || e.Value != "a\nb<&>" || e.Note != "只有备注" {
+		t.Fatal("round trip", e, err)
+	}
+	seal := func(plain string) string {
+		aead, _ := chacha20poly1305.NewX(key)
+		nonce := Random(chacha20poly1305.NonceSizeX)
+		return B64(aead.Seal(nonce, nonce, []byte(plain), varAAD("E", 1, "N")))
+	}
+	// 新版本加入的字段：读取时忽略，改写备注后仍然保留。
+	e, err := DecryptVar(key, "E", 1, "N", seal(`{"value":"v","note":"旧","tags":["x"]}`))
+	if err != nil || e.Value != "v" || e.Note != "旧" {
+		t.Fatal("unknown field", e, err)
+	}
+	e.Note = ""
+	ct, _ = EncryptVar(key, "E", 1, "N", e)
+	plain, _ := openVar(key, ct, varAAD("E", 1, "N"))
+	if string(plain) != `{"tags":["x"],"value":"v"}` {
+		t.Fatal("rewrite", string(plain))
+	}
+	for _, bad := range []string{`"v"`, `{}`, `{"value":1}`, `{"value":"v","note":2}`, `null`, `not json`} {
+		if _, err := DecryptVar(key, "E", 1, "N", seal(bad)); err == nil {
+			t.Error("must reject", bad)
+		}
 	}
 }

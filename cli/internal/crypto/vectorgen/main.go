@@ -43,7 +43,9 @@ func main() {
 	canonicalIn := []string{"harmonia.device", "AAAAAAAAAAAAAAAAAAAAAA", "client", "pub-a", "pub-b"}
 	msg := hc.DeviceCertMsg("AAAAAAAAAAAAAAAAAAAAAA", "manager", hc.B64(sign.Pub), hc.B64(boxKey.Pub[:]))
 	sealed := must(hc.Seal([]byte("environment-key-0123456789abcdef"), boxKey.Pub[:]))
-	value := must(hc.EncryptValue(envKey, "BBBBBBBBBBBBBBBBBBBBBB", 1, "OPENAI_API_KEY", "sk-测试 value with 'quote'"))
+	entry := hc.Entry{Value: "sk-测试 value with 'quote'", Note: "测试用的 Key\n第二行"}
+	varCT := must(hc.EncryptVar(envKey, "BBBBBBBBBBBBBBBBBBBBBB", 1, "OPENAI_API_KEY", entry))
+	noNoteCT := must(hc.EncryptVar(envKey, "BBBBBBBBBBBBBBBBBBBBBB", 1, "EMPTY_NOTE", hc.Entry{Value: "v"}))
 	fp := hc.PairingFingerprint("CCCCCCCCCCCCCCCCCCCCCC", hc.B64(sign.Pub), hc.B64(boxKey.Pub[:]), hc.B64(rec.Sign.Pub))
 
 	v := map[string]any{
@@ -56,9 +58,10 @@ func main() {
 			"seed": hc.B64(boxKey.Seed), "pub": hc.B64(boxKey.Pub[:]),
 			"sealed": hc.B64(sealed), "plain": "environment-key-0123456789abcdef",
 		},
-		"value": map[string]any{
+		"var": map[string]any{
 			"key": hc.B64(envKey), "envId": "BBBBBBBBBBBBBBBBBBBBBB", "keyVersion": 1,
-			"name": "OPENAI_API_KEY", "ciphertext": value, "plain": "sk-测试 value with 'quote'",
+			"name": "OPENAI_API_KEY", "ciphertext": varCT, "value": entry.Value, "note": entry.Note,
+			"noNoteName": "EMPTY_NOTE", "noNoteCiphertext": noNoteCT,
 		},
 		"recovery": map[string]any{
 			"code": hc.B64(code), "formatted": hc.FormatRecoveryCode(code),

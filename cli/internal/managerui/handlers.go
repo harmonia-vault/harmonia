@@ -264,7 +264,7 @@ func (s *Server) unlock(ctx context.Context, _ http.ResponseWriter, in struct{ P
 	if err != nil {
 		return nil, err
 	}
-	sess := manager.Open(file, keys)
+	sess := manager.Open(s.dir, file, keys)
 	if err := sess.Sync(ctx); err != nil {
 		if s.dropIfGone(sess, err) {
 			return nil, &httpError{http.StatusConflict, "revoked", revokedNotice}

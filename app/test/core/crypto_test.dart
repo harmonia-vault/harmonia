@@ -41,19 +41,45 @@ void main() {
     expect(c.open(k, sealed), [1, 2, 3]);
   });
 
-  test('变量值', () {
-    final key = b('value', 'key');
-    final kv = v['value']['keyVersion'] as int;
+  test('变量', () {
+    final key = b('var', 'key');
+    final kv = v['var']['keyVersion'] as int;
+    final e = c.decryptVar(
+        key, s('var', 'envId'), kv, s('var', 'name'), s('var', 'ciphertext'));
+    expect((e.value, e.note), (s('var', 'value'), s('var', 'note')));
+    final bare = c.decryptVar(key, s('var', 'envId'), kv,
+        s('var', 'noNoteName'), s('var', 'noNoteCiphertext'));
+    expect((bare.value, bare.note), ('v', ''));
     expect(
-        c.decryptValue(key, s('value', 'envId'), kv, s('value', 'name'),
-            s('value', 'ciphertext')),
-        s('value', 'plain'));
-    expect(
-        () => c.decryptValue(
-            key, s('value', 'envId'), kv, 'OTHER', s('value', 'ciphertext')),
+        () => c.decryptVar(
+            key, s('var', 'envId'), kv, 'OTHER', s('var', 'ciphertext')),
         throwsA(isA<DecryptException>()));
-    final ct = c.encryptValue(key, 'E', 1, 'N', 'hello');
-    expect(c.decryptValue(key, 'E', 1, 'N', ct), 'hello');
+    final ct =
+        c.encryptVar(key, 'E', 1, 'N', const VarEntry('hello', note: '备注'));
+    final back = c.decryptVar(key, 'E', 1, 'N', ct);
+    expect((back.value, back.note), ('hello', '备注'));
+  });
+
+  test('变量里不认识的字段在改写时保留', () {
+    final e = VarEntry.fromJson({
+      'value': 'v',
+      'note': '旧',
+      'tags': ['x']
+    });
+    expect(e.copyWith(note: '').toJson(), {
+      'tags': ['x'],
+      'value': 'v'
+    });
+    for (final bad in <Object?>[
+      'v',
+      {},
+      {'value': 1},
+      {'value': 'v', 'note': 2},
+      null
+    ]) {
+      expect(() => VarEntry.fromJson(bad), throwsFormatException,
+          reason: '$bad');
+    }
   });
 
   // PIN 槽依赖这组参数（协议 2.5），改动后已有的 PIN 就解不开本机数据。

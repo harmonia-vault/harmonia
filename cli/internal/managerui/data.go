@@ -4,8 +4,18 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/harmonia-vault/harmonia/cli/internal/app"
 	"github.com/harmonia-vault/harmonia/cli/internal/manager"
 )
+
+// valuesOnly 把导入的值转成修改：导入不带备注，已有变量的备注保留。
+func valuesOnly(vars map[string]string) map[string]app.VarChange {
+	out := make(map[string]app.VarChange, len(vars))
+	for n, v := range vars {
+		out[n] = app.VarChange{Value: &v}
+	}
+	return out
+}
 
 // dataRoutes 是解锁后对环境和变量的操作。
 func (s *Server) dataRoutes(mux *http.ServeMux) {
@@ -36,7 +46,7 @@ func (s *Server) dataRoutes(mux *http.ServeMux) {
 	}))
 	mux.HandleFunc("POST /api/vars/set", op(s, func(ctx context.Context, sess *manager.Session, in struct {
 		Env  string
-		Vars map[string]string
+		Vars map[string]app.VarChange
 	}) (any, error) {
 		res, err := sess.SetVars(ctx, in.Env, in.Vars)
 		return map[string]any{"results": res}, err
@@ -56,15 +66,15 @@ func (s *Server) dataRoutes(mux *http.ServeMux) {
 	}
 	mux.HandleFunc("POST /api/import/preview", op(s, func(_ context.Context, sess *manager.Session, in importIn) (any, error) {
 		vars, names, errs := manager.ParseDotenv(in.Text)
-		items, err := sess.Diff(in.Env, vars, names)
+		items, err := sess.Diff(in.Env, valuesOnly(vars), names)
 		return map[string]any{"items": items, "errors": errs}, err
 	}))
 	mux.HandleFunc("POST /api/import/apply", op(s, func(ctx context.Context, sess *manager.Session, in importIn) (any, error) {
 		vars, _, _ := manager.ParseDotenv(in.Text)
-		picked := map[string]string{}
+		picked := map[string]app.VarChange{}
 		for _, n := range in.Names {
 			if v, ok := vars[n]; ok {
-				picked[n] = v
+				picked[n] = app.VarChange{Value: &v}
 			}
 		}
 		res, err := sess.SetVars(ctx, in.Env, picked)

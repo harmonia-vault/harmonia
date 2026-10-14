@@ -96,6 +96,10 @@ func (a *App) Sync(ctx context.Context) error {
 		return err
 	}
 	cfg.LastSync = nowMs()
+	// 设备名可以在管理设备上修改，以服务器为准。
+	if res.Self.Name != "" {
+		cfg.DeviceName = res.Self.Name
+	}
 	a.Config = cfg
 	if err := a.Dir.SaveConfig(cfg); err != nil {
 		return err

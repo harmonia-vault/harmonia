@@ -30,7 +30,7 @@ func (f *fixture) sync(t *testing.T, since int64, envs map[string]map[string]str
 		s.Envelopes = append(s.Envelopes, api.Envelope{EnvID: id, KeyVersion: "1", Sealed: hc.B64(sealed),
 			Sig: hc.B64(f.root.Sign(hc.EnvelopeMsg(id, 1, f.dev.ID, sealed)))})
 		for n, v := range vars {
-			ct, _ := hc.EncryptValue(key, id, 1, n, v)
+			ct, _ := hc.EncryptVar(key, id, 1, n, hc.Entry{Value: v})
 			s.Variables = append(s.Variables, api.Variable{EnvID: id, Name: n, Value: ct, KeyVersion: "1"})
 		}
 	}

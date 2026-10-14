@@ -10,6 +10,42 @@ import 'package:sodium/sodium_sumo.dart';
 const pinOpsLimit = 3;
 const pinMemLimit = 64 * 1024 * 1024;
 const maxValueLen = 65536;
+const maxNoteLen = 200;
+const maxVarPlainLen = 512 * 1024;
+
+/// 一个变量的值和备注，两者一起加密（协议 2.6）。
+/// extra 是本版本不认识的字段，改写时原样保留。
+class VarEntry {
+  const VarEntry(this.value, {this.note = '', this.extra = const {}});
+  final String value;
+  final String note;
+  final Map<String, dynamic> extra;
+
+  VarEntry copyWith({String? value, String? note}) =>
+      VarEntry(value ?? this.value, note: note ?? this.note, extra: extra);
+
+  Map<String, dynamic> toJson() => {
+        ...extra,
+        'value': value,
+        if (note.isNotEmpty) 'note': note,
+      };
+
+  /// 不是对象、缺少 value，或 value、note 不是字符串时抛出 FormatException。
+  factory VarEntry.fromJson(Object? json) {
+    if (json is! Map<String, dynamic>) {
+      throw const FormatException('变量内容不是对象');
+    }
+    final value = json['value'];
+    final note = json['note'] ?? '';
+    if (value is! String || note is! String) {
+      throw const FormatException('变量内容格式不对');
+    }
+    final extra = Map<String, dynamic>.of(json)
+      ..remove('value')
+      ..remove('note');
+    return VarEntry(value, note: note, extra: extra);
+  }
+}
 
 String b64(List<int> bytes) => base64Url.encode(bytes).replaceAll('=', '');
 
@@ -151,23 +187,26 @@ class HCrypto {
       )
       .extractBytes();
 
-  Uint8List _valueAad(String envId, int keyVersion, String name) =>
-      canonical(['harmonia.value', envId, '$keyVersion', name]);
+  Uint8List _varAad(String envId, int keyVersion, String name) =>
+      canonical(['harmonia.var', envId, '$keyVersion', name]);
 
-  String encryptValue(
-      Uint8List envKey, String envId, int keyVersion, String name, String value) {
+  /// 加密一个变量的值和备注，明文是 JSON 对象（协议 2.6）。返回 b64(nonce ‖ 密文)。
+  String encryptVar(
+      Uint8List envKey, String envId, int keyVersion, String name, VarEntry e) {
+    final plain = utf8.encode(jsonEncode(e.toJson()));
+    if (plain.length > maxVarPlainLen) throw ArgumentError('变量内容太长');
     final aead = sodium.crypto.aeadXChaCha20Poly1305IETF;
     final nonce = random(aead.nonceBytes);
     final ct = aead.encrypt(
-      message: Uint8List.fromList(utf8.encode(value)),
+      message: Uint8List.fromList(plain),
       nonce: nonce,
       key: sodium.secureCopy(envKey),
-      additionalData: _valueAad(envId, keyVersion, name),
+      additionalData: _varAad(envId, keyVersion, name),
     );
     return b64([...nonce, ...ct]);
   }
 
-  String decryptValue(Uint8List envKey, String envId, int keyVersion,
+  VarEntry decryptVar(Uint8List envKey, String envId, int keyVersion,
       String name, String ciphertext) {
     final aead = sodium.crypto.aeadXChaCha20Poly1305IETF;
     try {
@@ -176,9 +215,9 @@ class HCrypto {
         cipherText: raw.sublist(aead.nonceBytes),
         nonce: raw.sublist(0, aead.nonceBytes),
         key: sodium.secureCopy(envKey),
-        additionalData: _valueAad(envId, keyVersion, name),
+        additionalData: _varAad(envId, keyVersion, name),
       );
-      return utf8.decode(plain);
+      return VarEntry.fromJson(jsonDecode(utf8.decode(plain)));
     } catch (_) {
       throw DecryptException();
     }

@@ -248,15 +248,30 @@ class Vault with VaultDevices {
   Environment environment(String id) =>
       cache.environments.firstWhere((e) => e.id == id, orElse: () => throw VaultException('环境不存在，可能已被删除。'));
 
-  /// 解密一个环境的全部变量。
-  Map<String, String> values(String envId) {
+  /// 解密一个环境的全部变量（值和备注）。解不开的变量不在其中，见 [brokenVariables]。
+  Map<String, VarEntry> entries(String envId) => _decryptAll(envId).entries;
+
+  /// 解不开的变量名，按名称排序。它们仍然可以删除或重新写入。
+  List<String> brokenVariables(String envId) => _decryptAll(envId).broken;
+
+  ({Map<String, VarEntry> entries, List<String> broken}) _decryptAll(String envId) {
+    final key = _envKey(envId);
+    final entries = <String, VarEntry>{};
+    final broken = <String>[];
+    for (final v in (cache.variables[envId] ?? {}).entries) {
+      try {
+        entries[v.key] = crypto.decryptVar(key, envId, v.value.keyVersion, v.key, v.value.value);
+      } on DecryptException {
+        broken.add(v.key);
+      }
+    }
+    return (entries: entries, broken: broken..sort());
+  }
+
+  Uint8List _envKey(String envId) {
     final key = _envKeys[envId];
     if (key == null) throw VaultException('这台设备没有这个环境的密钥。');
-    final out = <String, String>{};
-    for (final entry in (cache.variables[envId] ?? {}).entries) {
-      out[entry.key] = crypto.decryptValue(key, envId, entry.value.keyVersion, entry.key, entry.value.value);
-    }
-    return out;
+    return key;
   }
 
   // ---- 环境与变量 ----
@@ -313,11 +328,23 @@ class Vault with VaultDevices {
     await sync();
   }
 
-  Future<void> setVariable(String envId, String name, String value) async {
+  /// 写入变量的值和备注；已有变量里本版本不认识的内容原样保留。
+  Future<void> setVariable(String envId, String name, String value, String note) async {
     final env = environment(envId);
     final key = _envKeys[envId];
     if (key == null) throw VaultException('这台设备没有这个环境的密钥。');
-    final ct = crypto.encryptValue(key, envId, env.keyVersion, name, value);
+    final old = cache.variables[envId]?[name];
+    var entry = VarEntry(value, note: note.trim());
+    if (old != null) {
+      try {
+        entry = crypto
+            .decryptVar(key, envId, old.keyVersion, name, old.value)
+            .copyWith(value: value, note: note.trim());
+      } on DecryptException {
+        // 原来的内容解不开时直接覆盖。
+      }
+    }
+    final ct = crypto.encryptVar(key, envId, env.keyVersion, name, entry);
     await api!.device(
       'PUT',
       '/api/v1/environments/$envId/variables/$name',

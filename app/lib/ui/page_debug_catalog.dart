@@ -52,7 +52,12 @@ Map<String, List<DebugPageEntry>> debugPages() => {
     DebugPageEntry('编辑变量', (s) {
       if (s.vault.environments.isEmpty) return _environment(s, edit: true);
       final id = s.vault.environments.first.id;
-      return VariableEditPage(c: s.c, envId: id, name: s.vault.values(id).keys.firstOrNull);
+      return VariableEditPage(c: s.c, envId: id, name: s.vault.entries(id).keys.firstOrNull);
+    }),
+    DebugPageEntry('无法解密的变量（删除或重新填写）', (s) {
+      if (s.vault.environments.isEmpty) return _environment(s, edit: true);
+      final id = s.vault.environments.first.id;
+      return VariableEditPage(c: s.c, envId: id, name: s.vault.brokenVariables(id).firstOrNull);
     }),
     DebugPageEntry(
       '设备详情与权限',

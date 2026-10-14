@@ -27,7 +27,8 @@ import {
 type EnvRow = { id: string; name: string; key_version: number };
 type VarRow = { env_id: string; name: string; value: string; key_version: number; deleted: number; seq: number };
 
-const MAX_VALUE_B64 = Math.ceil(((65536 + 40) * 4) / 3);
+// 变量明文是最长 512 KiB 的 JSON（docs/protocol.md 2.6），加上 24 字节 nonce 和 16 字节 tag。
+const MAX_VALUE_B64 = Math.ceil(((512 * 1024 + 40) * 4) / 3);
 
 /** 设备当前可访问的环境（含权限与到期时间）。 */
 type AccessibleEnv = EnvRow & { role: Role; expires_at: number; grant_seq: number; active: number; position: number };

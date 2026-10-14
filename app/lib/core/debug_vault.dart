@@ -82,6 +82,12 @@ class DebugVault extends Vault {
       ],
     };
     requests.clear();
+    _notes
+      ..clear()
+      ..['debug-env-1/API_KEY'] = '示例备注：只用于页面调试\n第二行说明';
+    _broken
+      ..clear()
+      ..add('debug-env-1/OLD_TOKEN');
     if (scenario == DebugScenario.empty) {
       cache.manager = {'devices': <dynamic>[]};
       return;
@@ -95,6 +101,8 @@ class DebugVault extends Vault {
       'debug-env-1': {
         'API_KEY': CachedVariable('demo-key-not-a-secret', 1),
         'API_URL': CachedVariable('https://api.example.invalid', 1),
+        // 模拟解不开的变量，用来检查“无法解密”的显示和删除。
+        'OLD_TOKEN': CachedVariable('', 1),
       },
       'debug-env-2': {'MODEL': CachedVariable('demo-model', 1)},
     };
@@ -170,10 +178,21 @@ class DebugVault extends Vault {
     return true;
   }
 
+  /// 合成数据不加密：变量的值直接存在缓存里，备注和“解不开”的标记另外存放。
+  final _notes = <String, String>{};
+  final _broken = <String>{};
+
   @override
-  Map<String, String> values(String envId) => {
-    for (final e in (cache.variables[envId] ?? {}).entries) e.key: e.value.value,
+  Map<String, VarEntry> entries(String envId) => {
+    for (final e in (cache.variables[envId] ?? {}).entries)
+      if (!_broken.contains('$envId/${e.key}')) e.key: VarEntry(e.value.value, note: _notes['$envId/${e.key}'] ?? ''),
   };
+
+  @override
+  List<String> brokenVariables(String envId) => [
+    for (final n in (cache.variables[envId] ?? {}).keys)
+      if (_broken.contains('$envId/$n')) n,
+  ]..sort();
 
   @override
   Future<void> createEnvironment(String name) async {
@@ -200,16 +219,20 @@ class DebugVault extends Vault {
   }
 
   @override
-  Future<void> setVariable(String envId, String name, String value) async {
+  Future<void> setVariable(String envId, String name, String value, String note) async {
     check();
     environment(envId);
     (cache.variables[envId] ??= {})[name] = CachedVariable(value, 1);
+    _notes['$envId/$name'] = note.trim();
+    _broken.remove('$envId/$name');
   }
 
   @override
   Future<void> deleteVariable(String envId, String name) async {
     check();
     cache.variables[envId]?.remove(name);
+    _notes.remove('$envId/$name');
+    _broken.remove('$envId/$name');
   }
 
   @override

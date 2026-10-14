@@ -127,36 +127,106 @@ func (k BoxKey) Open(sealed []byte) ([]byte, error) {
 	return out, nil
 }
 
-func valueAAD(envID string, keyVersion int, name string) []byte {
-	return Canonical("harmonia.value", envID, strconv.Itoa(keyVersion), name)
+// MaxVarPlainLen 是变量明文（JSON）的最大字节数（docs/protocol.md 2.6）。
+const MaxVarPlainLen = 512 << 10
+
+// Entry 是一个变量的值和备注，两者一起加密（docs/protocol.md 2.6）。
+// extra 是本版本不认识的字段（紧凑 JSON 对象，没有时为空），改写时原样保留。
+type Entry struct {
+	Value string
+	Note  string
+	extra string
 }
 
-// EncryptValue 返回 b64(nonce ‖ ciphertext ‖ tag)。
-func EncryptValue(envKey []byte, envID string, keyVersion int, name, value string) (string, error) {
+func varAAD(envID string, keyVersion int, name string) []byte {
+	return Canonical("harmonia.var", envID, strconv.Itoa(keyVersion), name)
+}
+
+func (e Entry) marshal() ([]byte, error) {
+	var extra map[string]json.RawMessage
+	if e.extra != "" {
+		if err := json.Unmarshal([]byte(e.extra), &extra); err != nil {
+			return nil, err
+		}
+	}
+	fields := map[string]any{"value": e.Value}
+	for k, v := range extra {
+		fields[k] = v
+	}
+	if e.Note != "" {
+		fields["note"] = e.Note
+	}
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(fields); err != nil {
+		return nil, err
+	}
+	out := bytes.TrimRight(buf.Bytes(), "\n")
+	if len(out) > MaxVarPlainLen {
+		return nil, errors.New("变量内容太长")
+	}
+	return out, nil
+}
+
+func unmarshalEntry(plain []byte) (Entry, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(plain, &fields); err != nil || fields == nil {
+		return Entry{}, ErrDecrypt
+	}
+	var e Entry
+	raw, ok := fields["value"]
+	if !ok || json.Unmarshal(raw, &e.Value) != nil {
+		return Entry{}, ErrDecrypt
+	}
+	if raw, ok := fields["note"]; ok && json.Unmarshal(raw, &e.Note) != nil {
+		return Entry{}, ErrDecrypt
+	}
+	delete(fields, "value")
+	delete(fields, "note")
+	if len(fields) > 0 {
+		extra, err := json.Marshal(fields)
+		if err != nil {
+			return Entry{}, ErrDecrypt
+		}
+		e.extra = string(extra)
+	}
+	return e, nil
+}
+
+// EncryptVar 返回 b64(nonce ‖ ciphertext ‖ tag)，明文是 JSON 对象（docs/protocol.md 2.6）。
+func EncryptVar(envKey []byte, envID string, keyVersion int, name string, e Entry) (string, error) {
+	plain, err := e.marshal()
+	if err != nil {
+		return "", err
+	}
 	aead, err := chacha20poly1305.NewX(envKey)
 	if err != nil {
 		return "", err
 	}
 	nonce := Random(chacha20poly1305.NonceSizeX)
-	out := aead.Seal(nonce, nonce, []byte(value), valueAAD(envID, keyVersion, name))
-	return B64(out), nil
+	return B64(aead.Seal(nonce, nonce, plain, varAAD(envID, keyVersion, name))), nil
 }
 
-func DecryptValue(envKey []byte, envID string, keyVersion int, name, ciphertext string) (string, error) {
+func DecryptVar(envKey []byte, envID string, keyVersion int, name, ciphertext string) (Entry, error) {
+	plain, err := openVar(envKey, ciphertext, varAAD(envID, keyVersion, name))
+	if err != nil {
+		return Entry{}, ErrDecrypt
+	}
+	return unmarshalEntry(plain)
+}
+
+func openVar(envKey []byte, ciphertext string, aad []byte) ([]byte, error) {
 	raw, err := UnB64(ciphertext)
 	if err != nil || len(raw) < chacha20poly1305.NonceSizeX+chacha20poly1305.Overhead {
-		return "", ErrDecrypt
+		return nil, ErrDecrypt
 	}
 	aead, err := chacha20poly1305.NewX(envKey)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	n := chacha20poly1305.NonceSizeX
-	plain, err := aead.Open(nil, raw[:n], raw[n:], valueAAD(envID, keyVersion, name))
-	if err != nil {
-		return "", ErrDecrypt
-	}
-	return string(plain), nil
+	return aead.Open(nil, raw[:n], raw[n:], aad)
 }
 
 // ---- 签名原文 ----

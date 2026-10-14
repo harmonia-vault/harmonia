@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/harmonia-vault/harmonia/cli/internal/api"
 	hc "github.com/harmonia-vault/harmonia/cli/internal/crypto"
@@ -50,8 +52,26 @@ func (a *App) writableEnv(nameOrID string) (*api.Environment, error) {
 	return env, nil
 }
 
+// MaxNoteLen 是备注的最大字符数（docs/protocol.md 第 1 节）。
+const MaxNoteLen = 200
+
+// NormalizeNote 去除备注首尾的空白并检查长度。
+func NormalizeNote(note string) (string, error) {
+	note = strings.TrimSpace(note)
+	if utf8.RuneCountInString(note) > MaxNoteLen {
+		return "", fmt.Errorf("备注最长 %d 个字，请缩短后重试", MaxNoteLen)
+	}
+	return note, nil
+}
+
+// VarChange 是对一个变量的修改：Value 或 Note 为 nil 时沿用原来的。
+type VarChange struct {
+	Value *string `json:"value"`
+	Note  *string `json:"note"`
+}
+
 // SetVariables 把变量写入云端，成功后同步到本机。必须在线。
-func (a *App) SetVariables(ctx context.Context, envNameOrID string, vars map[string]string) error {
+func (a *App) SetVariables(ctx context.Context, envNameOrID string, changes map[string]VarChange) error {
 	env, err := a.writableEnv(envNameOrID)
 	if err != nil {
 		return err
@@ -64,19 +84,45 @@ func (a *App) SetVariables(ctx context.Context, envNameOrID string, vars map[str
 	if err != nil {
 		return err
 	}
-	names := make([]string, 0, len(vars))
-	for n := range vars {
+	var (
+		current map[string]hc.Entry
+		broken  []string
+	)
+	entries := make(map[string]hc.Entry, len(changes))
+	names := make([]string, 0, len(changes))
+	for n, ch := range changes {
 		if err := ValidateName(n); err != nil {
 			return err
 		}
-		if len(vars[n]) > hc.MaxValueLen {
+		if (ch.Value == nil || ch.Note == nil) && current == nil {
+			if current, broken, err = vault.Entries(cache, a.Keys, env.ID); err != nil {
+				return err
+			}
+		}
+		e, exists := current[n]
+		if ch.Value == nil && !exists {
+			if slices.Contains(broken, n) {
+				return fmt.Errorf("变量 %s 无法解密，请同时给出它的值，重新写入", n)
+			}
+			return fmt.Errorf("变量 %s 不存在，请同时给出它的值", n)
+		}
+		if ch.Value != nil {
+			e.Value = *ch.Value
+		}
+		if ch.Note != nil {
+			if e.Note, err = NormalizeNote(*ch.Note); err != nil {
+				return err
+			}
+		}
+		if len(e.Value) > hc.MaxValueLen {
 			return fmt.Errorf("变量 %s 的值超过 64 KB", n)
 		}
+		entries[n] = e
 		names = append(names, n)
 	}
 	sort.Strings(names)
 	for _, n := range names {
-		ct, err := hc.EncryptValue(key, env.ID, kv, n, vars[n])
+		ct, err := hc.EncryptVar(key, env.ID, kv, n, entries[n])
 		if err != nil {
 			return err
 		}

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/harmonia-vault/harmonia/cli/internal/api"
+	"github.com/harmonia-vault/harmonia/cli/internal/app"
 	hc "github.com/harmonia-vault/harmonia/cli/internal/crypto"
 	"github.com/harmonia-vault/harmonia/cli/internal/state"
 )
@@ -111,19 +112,19 @@ func newSession(t *testing.T) *Session {
 	keys := state.NewDeviceKeys()
 	keys.ID = hc.NewID()
 	root := hc.SignKeyFromSeed(hc.Random(32))
-	s := Open(&state.ManagerFile{Server: "http://localhost:1", RootPub: hc.B64(root.Pub), DeviceID: keys.ID}, keys)
+	s := Open(nil, &state.ManagerFile{Server: "http://localhost:1", RootPub: hc.B64(root.Pub), DeviceID: keys.ID}, keys)
 	s.root = root
 	for i, env := range []struct {
 		id   string
 		vars map[string]string
-	}{{"a", map[string]string{"SAME": "1", "DIFF": "old", "ONLY_A": "值"}}, {"b", map[string]string{"SAME": "1", "DIFF": "new"}}} {
+	}{{"a", map[string]string{"SAME": "1", "DIFF": "old", "ONLY_A": "值"}}, {"b", map[string]string{"SAME": "1", "DIFF": "new", "NOTE": "n"}}} {
 		key := hc.Random(32)
 		sealed, _ := hc.Seal(key, keys.Box.Pub[:])
 		s.cache.Environments = append(s.cache.Environments, api.Environment{ID: env.id, Name: env.id, KeyVersion: "1", Role: "admin", Position: i})
 		s.cache.Envelopes = append(s.cache.Envelopes, api.Envelope{EnvID: env.id, KeyVersion: "1", Sealed: hc.B64(sealed)})
 		s.cache.Variables[env.id] = map[string]state.CachedVar{}
 		for n, v := range env.vars {
-			ct, _ := hc.EncryptValue(key, env.id, 1, n, v)
+			ct, _ := hc.EncryptVar(key, env.id, 1, n, hc.Entry{Value: v})
 			s.cache.Variables[env.id][n] = state.CachedVar{Value: ct, KeyVersion: 1}
 		}
 	}
@@ -152,8 +153,11 @@ func TestSessionViews(t *testing.T) {
 	if _, err := s.Vars("gone"); err == nil {
 		t.Fatal("不存在的环境应当报错")
 	}
-	diff, err := s.Diff("b", map[string]string{"SAME": "1", "DIFF": "old", "NEW": "x"}, []string{"SAME", "DIFF", "NEW"})
-	want := []DiffItem{{"SAME", "same"}, {"DIFF", "changed"}, {"NEW", "new"}}
+	str := func(v string) *string { return &v }
+	diff, err := s.Diff("b", map[string]app.VarChange{
+		"SAME": {Value: str("1")}, "DIFF": {Value: str("old")}, "NEW": {Value: str("x")}, "NOTE": {Note: str("备注")},
+	}, []string{"SAME", "DIFF", "NEW", "NOTE"})
+	want := []DiffItem{{"SAME", "same"}, {"DIFF", "changed"}, {"NEW", "new"}, {"NOTE", "changed"}}
 	if err != nil || !reflect.DeepEqual(diff, want) {
 		t.Fatalf("对比不对：%+v %v", diff, err)
 	}
@@ -164,5 +168,19 @@ func TestSessionViews(t *testing.T) {
 	}
 	if _, err := s.CopyDiff("a", "a", []string{"SAME"}); err == nil {
 		t.Fatal("复制到同一个环境应当报错")
+	}
+
+	// 解不开的变量单独标出，其他变量照常可用；它只能删除或重新写入。
+	s.cache.Variables["b"]["BROKEN"] = state.CachedVar{Value: hc.B64(hc.Random(48)), KeyVersion: 1}
+	vars, err = s.Vars("b")
+	if err != nil || len(vars) != 4 || vars[0] != (VarInfo{Name: "BROKEN", Broken: true}) {
+		t.Fatalf("解不开的变量没有单独标出：%+v %v", vars, err)
+	}
+	if _, err := s.Value("b", "BROKEN"); err == nil {
+		t.Fatal("解不开的变量取值应当报错")
+	}
+	diff, err = s.Diff("b", map[string]app.VarChange{"BROKEN": {Value: str("x")}}, []string{"BROKEN"})
+	if err != nil || diff[0].Status != "changed" {
+		t.Fatalf("重新写入解不开的变量：%+v %v", diff, err)
 	}
 }

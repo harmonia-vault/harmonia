@@ -20,14 +20,19 @@ export function nameDialog(title, label, initial, action, save) {
   });
 }
 
-// varDialog 添加（name 为空）或编辑一个变量。
-export function varDialog(env, name) {
+// varDialog 添加（v 为空）或编辑一个变量；v 是列表里的 {name, note}。
+export function varDialog(env, v) {
+  const name = v?.name;
   return modal(name ? '编辑变量' : '添加变量', (close) => {
     const nameIn = h('input', { type: 'text', class: 'mono', value: name || '', readOnly: !!name, required: true, maxLength: 128, placeholder: 'OPENAI_API_KEY', spellcheck: false, autocomplete: 'off' });
     const valueIn = h('textarea', { class: 'mono', rows: 5, spellcheck: false, autocomplete: 'off', placeholder: name ? '正在读取……' : '' });
+    const noteIn = h('textarea', { rows: 2, maxLength: 200, value: v?.note || '', placeholder: '例如：用途、从哪里申请、什么时候到期' });
     const error = h('p', { class: 'error', role: 'alert' });
-    const submit = h('button', { class: 'primary', type: 'submit', text: '保存', disabled: !!name });
-    if (name) {
+    const submit = h('button', { class: 'primary', type: 'submit', text: '保存', disabled: !!name && !v.broken });
+    if (v?.broken) {
+      error.textContent = '原来的内容无法解密，请重新填写值和备注，保存后覆盖。';
+      setTimeout(() => valueIn.focus());
+    } else if (name) {
       call('/api/vars/value', { env, name }).then(({ value }) => {
         valueIn.value = value;
         valueIn.placeholder = '';
@@ -43,7 +48,7 @@ export function varDialog(env, name) {
         ev.preventDefault();
         run(submit, '正在保存……', error, async () => {
           const key = nameIn.value.trim();
-          const { results } = await call('/api/vars/set', { env, vars: { [key]: valueIn.value } });
+          const { results } = await call('/api/vars/set', { env, vars: { [key]: { value: valueIn.value, note: noteIn.value } } });
           if (results[0]?.error) throw new Error(results[0].error);
           toast(`已保存 ${key}。`);
           close(true);
@@ -52,6 +57,7 @@ export function varDialog(env, name) {
     },
       field('名称', nameIn, name ? '名称不能修改；需要改名时请新建一个再删除旧的。' : '只能包含字母、数字和下划线，不能以数字开头。'),
       field('值', valueIn),
+      field('备注', noteIn, '可选，最多 200 个字。备注和值一起加密，只有能读取这个环境的设备能看到。'),
       error,
       h('div', { class: 'actions' }, h('button', { type: 'button', text: '取消', onclick: () => close() }), submit));
   });

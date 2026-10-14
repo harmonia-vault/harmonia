@@ -140,6 +140,14 @@ step "J5 电脑写入，手机可读"
 cli var set OpenAI FROM_CLI "written-by-cli" >/dev/null
 expect_eq "$(manager phone var-get OpenAI FROM_CLI)" "written-by-cli" "手机读取电脑写入的值"
 
+step "J5 变量备注：手机写入多行备注，电脑可见；电脑只改备注不动值"
+manager phone var-set OpenAI NOTED "v1" $'第一行备注\n第二行' >/dev/null
+cli var list --env OpenAI | grep -q "NOTED .*第一行备注 …" || fail "电脑的变量列表没有显示备注"
+cli var set OpenAI NOTED --note "电脑改的备注" >/dev/null
+expect_eq "$(manager phone var-get OpenAI NOTED)" "v1" "只改备注时值不变"
+expect_eq "$(manager phone var-note OpenAI NOTED)" "电脑改的备注" "手机读取电脑改的备注"
+cli var rm OpenAI NOTED >/dev/null
+
 step "J6 本地覆盖：只在本机生效，云端删除后失效"
 cli override set OpenAI FROM_CLI "local-only" >/dev/null
 expect_eq "$(cli exec -- printenv FROM_CLI 2>/dev/null)" "local-only" "本地覆盖生效"

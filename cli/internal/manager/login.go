@@ -170,7 +170,7 @@ func (p *Pending) Wait(ctx context.Context, d *state.Dir) (*Session, error) {
 	if err := d.SaveManager(p.file); err != nil {
 		return nil, err
 	}
-	s := Open(p.file, p.keys)
+	s := Open(d, p.file, p.keys)
 	sctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	err = s.Sync(sctx)
