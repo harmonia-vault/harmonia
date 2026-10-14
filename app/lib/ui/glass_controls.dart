@@ -9,7 +9,8 @@ import 'theme.dart';
 
 typedef AppOption<T> = ({T value, String label});
 
-/// 从几项中选一项，例如授权的有效期。玻璃布局下点按后展开玻璃菜单，当前项带对勾。
+/// 从几项中选一项，例如授权的有效期。放在行内作次要选项：触发处是不带底色的次要文字加箭头，
+/// 不与同一行的主要控件抢视觉；玻璃布局下点按后展开玻璃菜单，当前项带对勾。
 class AppSelect<T> extends StatelessWidget {
   const AppSelect({
     super.key,
@@ -29,6 +30,8 @@ class AppSelect<T> extends StatelessWidget {
       return DropdownButton<T>(
         value: value,
         isDense: true,
+        underline: const SizedBox.shrink(),
+        style: TextStyle(color: context.palette.mute, fontSize: 14, fontWeight: FontWeight.w500),
         items: [for (final o in options) DropdownMenuItem(value: o.value, child: Text(o.label))],
         onChanged: (v) => onChanged(v as T),
       );
@@ -59,18 +62,20 @@ class AppSelect<T> extends StatelessWidget {
       triggerBuilder: (context, toggle) => TextButton(
         onPressed: toggle,
         style: TextButton.styleFrom(
-          foregroundColor: p.ink,
-          backgroundColor: p.ink.withValues(alpha: 0.08),
-          minimumSize: const Size(0, 36),
-          padding: const EdgeInsets.symmetric(horizontal: 14),
+          foregroundColor: p.mute,
+          textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+          minimumSize: const Size(0, 32),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          // 左右各留 8 作按压反馈的余量。
+          padding: const EdgeInsets.symmetric(horizontal: 8),
           shape: const StadiumBorder(),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(current),
-            const SizedBox(width: 6),
-            const Icon(CupertinoIcons.chevron_up_chevron_down, size: 14),
+            const SizedBox(width: 4),
+            const Icon(CupertinoIcons.chevron_up_chevron_down, size: 13),
           ],
         ),
       ),

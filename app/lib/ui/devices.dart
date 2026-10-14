@@ -189,54 +189,72 @@ class GrantEditor extends StatelessWidget {
   final VoidCallback onChanged;
 
   @override
-  Widget build(BuildContext context) => Card(
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        for (final (i, e) in envs.indexed) ...[
-          if (i > 0) const Divider(),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(Space.lg, Space.md, Space.lg, Space.md),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(e.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                const SizedBox(height: Space.sm),
-                AppSegmented<String>(
-                  options: const [
-                    (value: 'none', label: '无'),
-                    (value: 'ro', label: '只读'),
-                    (value: 'rw', label: '读写'),
-                    (value: 'admin', label: '管理'),
-                  ],
-                  value: roles[e.id] ?? 'none',
-                  onChanged: (v) {
-                    roles[e.id] = v == 'none' ? null : v;
-                    onChanged();
-                  },
-                ),
-                if (roles[e.id] != null) ...[
+  Widget build(BuildContext context) {
+    final glass = usesGlass(context);
+    // 左右边距和标题字号与同页的列表行一致；分隔线从内容起点开始。
+    final inset = glass ? 18.0 : Space.lg;
+    final titleStyle = Theme.of(context).listTileTheme.titleTextStyle ?? Theme.of(context).textTheme.titleMedium;
+    return Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final (i, e) in envs.indexed) ...[
+            if (i > 0) Divider(indent: inset),
+            Padding(
+              // 名字行比文字高出一截，上边距少留一点，看上去与下边距一致。
+              padding: EdgeInsets.fromLTRB(inset, 10, inset, 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // 有效期跟在环境名右侧；行高固定为选择框的高度，切换“无”时下面的权限行不跳动。
+                  SizedBox(
+                    height: 32,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(e.name, style: titleStyle, overflow: TextOverflow.ellipsis),
+                        ),
+                        if (roles[e.id] != null)
+                          // 玻璃菜单的触发处左右各有 8 的按压余量，向右挪回，让文字与权限分段的右边缘对齐。
+                          Transform.translate(
+                            offset: Offset(glass ? 8 : 0, 0),
+                            child: AppSelect<String>(
+                              semanticLabel: '“${e.name}”的有效期',
+                              value: expiry[e.id] ?? '长期有效',
+                              options: [
+                                for (final k in {..._expiryChoices.keys, if (expiry[e.id] != null) expiry[e.id]!})
+                                  (value: k, label: k),
+                              ],
+                              onChanged: (v) {
+                                expiry[e.id] = v;
+                                onChanged();
+                              },
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
                   const SizedBox(height: Space.sm),
-                  AppSelect<String>(
-                    semanticLabel: '“${e.name}”的有效期',
-                    value: expiry[e.id] ?? '长期有效',
-                    options: [
-                      for (final k in {..._expiryChoices.keys, if (expiry[e.id] != null) expiry[e.id]!})
-                        (value: k, label: k),
+                  AppSegmented<String>(
+                    options: const [
+                      (value: 'none', label: '无'),
+                      (value: 'ro', label: '只读'),
+                      (value: 'rw', label: '读写'),
                     ],
+                    value: roles[e.id] ?? 'none',
                     onChanged: (v) {
-                      expiry[e.id] = v;
+                      roles[e.id] = v == 'none' ? null : v;
                       onChanged();
                     },
                   ),
                 ],
-              ],
+              ),
             ),
-          ),
+          ],
         ],
-      ],
-    ),
-  );
+      ),
+    );
+  }
 }
 
 class DevicePage extends StatefulWidget {

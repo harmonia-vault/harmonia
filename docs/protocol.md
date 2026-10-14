@@ -241,9 +241,9 @@ DEK  = 32 字节随机数，设置管理口令时生成
 | `GET /sync?since=N` | device | 见 3.4 |
 | `GET /events` | device | WebSocket，见 3.5 |
 | `POST /environments` | device（管理设备） | `{id, name, envelopes:[{recipient, keyVersion, sealed, sig}]}`，必须覆盖全部活跃的管理设备和 `recovery` |
-| `PATCH /environments/{id}` | 管理设备或该环境的 admin | `{name}` |
-| `DELETE /environments/{id}` | 管理设备或该环境的 admin | 删除环境和其中全部变量 |
-| `PUT /environments/{id}/variables/{name}` | rw、admin 或管理设备 | `{value, keyVersion}`，`value` 是值和备注一起加密的密文（第 2 节），只改备注也整体重写。请求头带 `Idempotency-Key` |
+| `PATCH /environments/{id}` | device（管理设备） | `{name}` |
+| `DELETE /environments/{id}` | device（管理设备） | 删除环境和其中全部变量 |
+| `PUT /environments/{id}/variables/{name}` | rw 或管理设备 | `{value, keyVersion}`，`value` 是值和备注一起加密的密文（第 2 节），只改备注也整体重写。请求头带 `Idempotency-Key` |
 | `DELETE /environments/{id}/variables/{name}` | 同上 | 请求头带 `Idempotency-Key` |
 | `PUT /devices/{id}/grants` | 管理设备 | `{grants:[{envId, role, expiresAt}], envelopes:[{envId, keyVersion, sealed, sig}]}`，整体替换；新授权的环境必须附带封装。已有授权保留激活状态和顺序，新授权默认激活并排在最后 |
 | `PUT /devices/{id}/activation` | 管理设备；或设备本身，此时 `{id}` 为 `self` | `{envs:[{envId, active}]}`，按顺序从前到后排列（排在前面的覆盖后面的同名变量），必须包含该设备全部未到期的授权环境（可以带上已到期的），不能有未授权的环境，否则返回 `conflict`；没有列出的已到期授权保持原有相对顺序，排在后面。只修改激活状态和顺序 |
@@ -273,7 +273,7 @@ DEK  = 32 字节随机数，设置管理口令时生成
 {
   "kind": "client | manager",
   "cert": "<root 对设备证书的签名>",
-  "grants": [{"envId": "...", "role": "ro|rw|admin", "expiresAt": 0}],
+  "grants": [{"envId": "...", "role": "ro|rw", "expiresAt": 0}],
   "envelopes": [{"envId": "...", "keyVersion": "1", "sealed": "...", "sig": "..."}],
   "rootSealed": "<仅 manager：用新设备加密公钥封装的 root 种子>"
 }
@@ -306,7 +306,7 @@ DEK  = 32 字节随机数，设置管理口令时生成
 
 - `environments` 和 `envelopes` 每次都返回当前可访问的**完整列表**。客户端据此清除不在列表中的环境。
 - `variables` 只返回增量：所在环境可见，并且满足 `seq > N`，或者本设备对该环境的授权是在 N 之后获得的。
-- `manager` 字段只返回给管理设备。管理设备的 `role` 恒为 `admin`。
+- `manager` 字段只返回给管理设备。管理设备的 `role` 恒为 `rw`。
 - `version` 是这台设备最近一次同步时上报的客户端版本（见第 3 节开头的 `X-Harmonia-Version`），由设备自己上报，服务端不校验真伪；设备还没有上报过时是空字符串，响应里没有这个字段时（较旧的服务端）同样按未知处理。
 - `systemVars` 是设备上的“写入系统变量”开关，见 `PATCH /devices/{id}`；响应里没有这个字段时（较旧的服务端）按 false 处理。
 - `active` 和 `position` 是授权上的激活状态和顺序，`position` 从 0 开始，越小越靠前。管理设备的 `environments` 中 `active` 恒为 true，`position` 按环境创建先后排列。
@@ -403,7 +403,7 @@ DEK  = 32 字节随机数，设置管理口令时生成
 
 ## 4. 规则摘要
 
-- **权限**：ro 只读；rw 可写变量；admin 在 rw 之外可改名、删除环境；管理设备拥有全部权限，并且是唯一能批准设备、修改授权、撤销设备、轮换恢复码的角色。
+- **权限**：客户端设备按环境授权，ro 只读，rw 可读写变量（2026-10-14 去掉 admin：客户端设备不能改名或删除环境）。管理设备拥有全部权限，并且是唯一能新建、改名、删除环境，批准设备、修改授权、撤销设备、轮换恢复码的角色。
 - **写入**：同一变量按服务器接受顺序，后写覆盖先写。客户端不做乐观更新，以同步结果为准。
 - **到期**：服务器拒绝已到期的授权；客户端离线时同样停用到期的环境。
 - **激活**：激活状态和顺序只决定设备把哪些环境写入本机环境变量、同名变量由哪个环境提供，不是安全边界；设备能读取什么只由授权决定。新授权默认激活并排在最后。

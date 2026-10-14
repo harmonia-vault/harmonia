@@ -166,6 +166,8 @@ const MIGRATIONS: string[][] = [
     `CREATE TABLE code_failures (net TEXT PRIMARY KEY, count INTEGER NOT NULL, window_start INTEGER NOT NULL, next_at INTEGER NOT NULL)`,
   ],
   [`ALTER TABLE devices ADD COLUMN version TEXT NOT NULL DEFAULT ''`],
+  // 去掉 admin 权限，原有的 admin 授权改为读写（docs/protocol.md 4）。
+  [`UPDATE grants SET role = 'rw' WHERE role = 'admin'`],
 ];
 
 export function migrate(sql: Sql): void {

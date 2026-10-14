@@ -32,7 +32,7 @@ func ago(ms int64) string {
 
 const noEnvNotice = "这台设备还没有任何环境的访问权限。可以在管理设备上为它授权。"
 
-var roleNames = map[string]string{"ro": "只读", "rw": "读写", "admin": "管理"}
+var roleNames = map[string]string{"ro": "只读", "rw": "读写"}
 
 func expiry(ms int64) string {
 	if ms == 0 {

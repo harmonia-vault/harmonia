@@ -90,6 +90,14 @@ describe("配对与权限", () => {
     expect((await put(s, cli.token, env, "FROM_CLI")).status).toBe(200);
     expect((await put(s, cli.token, other, "NOPE")).status).toBe(403);
     expect((await s.call("POST", "/api/v1/pairings/x/approve", { token: cli.token, body: {} })).status).toBe(403);
+    // 客户端设备不能改名或删除环境，也不能被授予 admin。
+    expect((await s.call("PATCH", `/api/v1/environments/${env}`, { token: cli.token, body: { name: "x" } })).status).toBe(403);
+    expect((await s.call("DELETE", `/api/v1/environments/${env}`, { token: cli.token })).status).toBe(403);
+    const admin = await s.call("PUT", `/api/v1/devices/${cli.id}/grants`, {
+      token: a.phone.token,
+      body: { grants: [{ envId: env, role: "admin", expiresAt: 0 }], envelopes: [] },
+    });
+    expect(admin.status).toBe(400);
 
     // 降为只读：写入立即被拒绝。
     await s.ok("PUT", `/api/v1/devices/${cli.id}/grants`, {

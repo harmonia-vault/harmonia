@@ -38,7 +38,7 @@ function accessible(deps: Deps, d: Device): AccessibleEnv[] {
   if (d.kind === "manager") {
     return deps.sql
       .all<EnvRow>(`SELECT id, name, key_version FROM environments ORDER BY created_at`)
-      .map((e, i) => ({ ...e, role: "admin" as Role, expires_at: 0, grant_seq: 0, active: 1, position: i }));
+      .map((e, i) => ({ ...e, role: "rw" as Role, expires_at: 0, grant_seq: 0, active: 1, position: i }));
   }
   return deps.sql.all(
     `SELECT e.id, e.name, e.key_version, g.role, g.expires_at, g.seq AS grant_seq, g.active, g.position
@@ -49,13 +49,17 @@ function accessible(deps: Deps, d: Device): AccessibleEnv[] {
   );
 }
 
-function requireEnvRole(deps: Deps, d: Device, envId: string, need: "rw" | "admin"): EnvRow {
+function requireEnv(deps: Deps, envId: string): EnvRow {
   const env = one<EnvRow>(deps.sql, `SELECT id, name, key_version FROM environments WHERE id = ?`, envId);
   if (!env) throw notFound("环境不存在，可能已被删除。");
+  return env;
+}
+
+function requireWritable(deps: Deps, d: Device, envId: string): EnvRow {
+  const env = requireEnv(deps, envId);
   const r = envRole(deps, d, envId);
   if (!r) throw forbidden("这台设备没有这个环境的访问权限，或授权已到期。");
-  if (need === "rw" && r === "ro") throw forbidden("这台设备对这个环境只有只读权限。");
-  if (need === "admin" && r !== "admin") throw forbidden("只有管理权限才能修改环境。");
+  if (r === "ro") throw forbidden("这台设备对这个环境只有只读权限。");
   return env;
 }
 
@@ -225,8 +229,8 @@ export function dataRoutes(app: Hono, deps: Deps) {
   });
 
   app.patch("/api/v1/environments/:id", async (c) => {
-    const d = await requireDevice(c, deps);
-    const env = requireEnvRole(deps, d, id(c.req.param("id"), "环境 ID"), "admin");
+    await requireDevice(c, deps, { manager: true });
+    const env = requireEnv(deps, id(c.req.param("id"), "环境 ID"));
     const name = label((await readJson(c)).name, "环境名");
     sql.transaction(() => {
       sql.run(`UPDATE environments SET name = ? WHERE id = ?`, name, env.id);
@@ -237,8 +241,8 @@ export function dataRoutes(app: Hono, deps: Deps) {
   });
 
   app.delete("/api/v1/environments/:id", async (c) => {
-    const d = await requireDevice(c, deps);
-    const env = requireEnvRole(deps, d, id(c.req.param("id"), "环境 ID"), "admin");
+    await requireDevice(c, deps, { manager: true });
+    const env = requireEnv(deps, id(c.req.param("id"), "环境 ID"));
     sql.transaction(() => {
       for (const t of ["variables", "envelopes", "grants"]) sql.run(`DELETE FROM ${t} WHERE env_id = ?`, env.id);
       sql.run(`DELETE FROM environments WHERE id = ?`, env.id);
@@ -262,7 +266,7 @@ export function dataRoutes(app: Hono, deps: Deps) {
     const value = bin(body.value, "变量值", undefined, MAX_VALUE_B64);
     const keyVersion = decimal(body.keyVersion, "密钥版本");
     const res = await idempotent(c, deps, d, text, () => {
-      const env = requireEnvRole(deps, d, envId, "rw");
+      const env = requireWritable(deps, d, envId);
       if (env.key_version !== keyVersion) throw conflict("环境密钥已更新，请同步后重试。");
       const seq = bump(sql);
       sql.run(
@@ -287,7 +291,7 @@ export function dataRoutes(app: Hono, deps: Deps) {
     const envId = id(c.req.param("id"), "环境 ID");
     const name = varName(c.req.param("name"));
     const res = await idempotent(c, deps, d, "", () => {
-      requireEnvRole(deps, d, envId, "rw");
+      requireWritable(deps, d, envId);
       const cur = one<{ deleted: number }>(sql, `SELECT deleted FROM variables WHERE env_id = ? AND name = ?`, envId, name);
       if (!cur || cur.deleted) return { seq: headSeq(sql) };
       const seq = bump(sql);
