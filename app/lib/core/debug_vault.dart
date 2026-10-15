@@ -17,6 +17,9 @@ class DebugNetworkClient extends http.BaseClient {
 
 enum DebugScenario { normal, empty, offline, failure }
 
+/// 页面调试里更新源的最新版本：带后缀的版本走测试版渠道。
+String debugCliLatest(String version) => version.contains('-') ? '0.10.1-rc.1' : '0.10.0';
+
 class DebugVault extends Vault {
   DebugVault(HCrypto crypto) : super(crypto, MemoryStore(), MemoryStore()) {
     api = ApiClient('https://debug.invalid', client: DebugNetworkClient());
@@ -25,6 +28,15 @@ class DebugVault extends Vault {
 
   DebugScenario scenario = DebugScenario.normal;
   final _listening = Completer<void>();
+
+  /// 模拟数据在后台变化（例如电脑完成更新）时通知界面刷新，由调试会话设置。
+  void Function()? onSimulatedChange;
+
+  /// 后台服务没有连上服务器的示例电脑。
+  final offlineDevices = <String>{};
+
+  /// 模拟电脑完成更新所用的时间。
+  Duration cliUpdateDelay = const Duration(seconds: 3);
   final requests = <PairingRequest>[];
   final _rotations = <String>{};
   int _nextId = 0;
@@ -76,11 +88,20 @@ class DebugVault extends Vault {
     cache.manager = {
       'devices': [
         _device('debug-phone', '示例 iPhone', 'ios', 'manager', [], version: '0.4.5'),
-        _device('debug-computer', '开发电脑', 'windows', 'client', [Grant('debug-env-1', 'rw', 0)], version: '0.4.5-rc.1'),
-        // 没有版本：还没升级到会上报版本的命令行。
+        // 测试版渠道，有新版本可以更新。
+        _device('debug-computer', '开发电脑', 'windows', 'client', [
+          Grant('debug-env-1', 'rw', 0),
+        ], version: '0.10.1-beta.1'),
+        // 没有版本：还没升级到会上报版本的命令行，也不支持在手机上更新。
         _device('debug-mac', '个人 Mac', 'darwin', 'client', [Grant('debug-env-2', 'ro', 0)]),
+        // 已是最新版本，开着自动更新；后台服务不在线。
+        _device('debug-linux', '构建服务器', 'linux', 'client', [Grant('debug-env-2', 'ro', 0)], version: '0.10.0')
+          ..['autoUpdate'] = true,
       ],
     };
+    offlineDevices
+      ..clear()
+      ..add('debug-linux');
     requests.clear();
     _notes
       ..clear()
@@ -298,6 +319,28 @@ class DebugVault extends Vault {
   Future<void> setSystemVars(String id, bool on) async {
     check();
     _findDevice(id).json['systemVars'] = on;
+  }
+
+  @override
+  Future<void> setAutoUpdate(String id, bool on) async {
+    check();
+    _findDevice(id).json['autoUpdate'] = on;
+  }
+
+  /// 模拟电脑收到更新请求：过一会儿上报新版本，不请求更新源、不发推送。
+  @override
+  Future<void> requestCliUpdate(String id) async {
+    check();
+    if (offlineDevices.contains(id)) {
+      throw ApiException(409, 'device_offline', '这台电脑的后台服务现在没有连上服务器。请确认电脑开机并联网，或在电脑上运行 harmonia update。');
+    }
+    final device = _findDevice(id);
+    final target = debugCliLatest(device.version);
+    Future<void>.delayed(cliUpdateDelay, () {
+      if (!devices.any((d) => d.id == id)) return;
+      device.json['version'] = target;
+      onSimulatedChange?.call();
+    });
   }
 
   @override

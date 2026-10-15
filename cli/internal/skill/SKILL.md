@@ -9,9 +9,11 @@ description: 用 Harmonia 命令行（harmonia）读取、使用和修改从用�
 
 Harmonia 让用户在手机上管理环境变量，同步到电脑。变量按“环境”分组，用户在手机上决定这台电脑能访问哪些环境，以及只读还是可以修改。
 
-## 先核对版本
+## 读取最新说明
 
-开始使用前运行 `harmonia version`。如果输出的版本与上面的不同（例如用户升级过），先运行 `harmonia skill`，按输出的新说明操作；你把本说明保存成过技能文件的话，再运行 `harmonia skill install` 覆盖它（技能目录不是 `~/.claude` 或 `~/.agents` 时，加 `--dir <技能目录>`）。运行 `harmonia update` 升级之后也要这样做。
+本说明由 harmonia 程序输出，随程序一起升级。要保存成技能文件时运行 `harmonia skill install`（技能目录不是 `~/.claude` 或 `~/.agents` 时，加 `--dir <技能目录>`）：它只写一个入口文件，让你每次使用前运行 `harmonia skill` 读取当时的说明，程序升级后不会过期。不要把本说明的全文复制进技能文件或项目文档。
+
+本说明是在会话开始时读取的。会话中途程序可能被后台升级，如果命令报错说选项或用法不对，运行 `harmonia skill` 或 `harmonia <命令> --help` 重新查看。
 
 找不到 `harmonia` 命令时：macOS、Linux 上试 `~/.local/bin/harmonia`，Windows 上试 `%LOCALAPPDATA%\Programs\Harmonia\harmonia.exe`。都没有的话，按下一节安装。
 
@@ -138,6 +140,7 @@ harmonia override list
 - `harmonia uninstall`：完全卸载
 - `harmonia shell uninstall`、`harmonia service uninstall`
 - `harmonia update channel beta|stable`：切换更新渠道
+- `harmonia update auto on|off`：开启或关闭自动更新
 - `harmonia shell system-vars on|off`（只在 Windows 上）：是否把 `Path`、`TEMP` 这类系统自身使用的变量也写入用户环境变量，写错会影响这台电脑上的所有程序
 
 不要读取或修改 `~/.harmonia` 里的文件，其中 `env.sh` 保存着明文的变量值。
@@ -148,7 +151,7 @@ harmonia override list
 
 ## 升级
 
-`harmonia update --check` 检查新版本，`harmonia update` 升级并重启后台服务。升级会覆盖用 `harmonia skill install` 保存过的技能文件；升级之后按“先核对版本”一节重新读取说明。
+`harmonia update --check` 检查新版本，`harmonia update` 升级并重启后台服务。用户也可能开启了自动更新，或在手机上让这台电脑更新，这时程序会在后台换成新版本。升级后运行 `harmonia skill` 重新读取说明。
 
 ## 常见提示
 

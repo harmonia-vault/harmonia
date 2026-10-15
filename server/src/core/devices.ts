@@ -4,7 +4,7 @@ import { bump, headSeq, one, type Sql } from "./db";
 import { readJson, requireDevice, requireInitialized, type Deps, type Device } from "./context";
 import { checkKeyVersions, insertEnvelopes, parseEnvelopes } from "./keys";
 import { parseGrants, writeActivation, writeGrants } from "./grants";
-import { bad, conflict, forbidden, id, label, notFound } from "./util";
+import { ApiError, bad, conflict, forbidden, id, label, notFound } from "./util";
 
 function target(sql: Sql, deviceId: string): Device {
   const d = one<Device>(sql, `SELECT * FROM devices WHERE id = ? AND status = 'active'`, deviceId);
@@ -87,17 +87,31 @@ export function deviceRoutes(app: Hono, deps: Deps) {
     if (param !== "self" && d.kind !== "manager") throw forbidden("只有管理设备可以修改其他设备。");
     const t = param === "self" ? d : target(sql, id(param, "设备 ID"));
     const body = await readJson(c);
-    if (body.name === undefined && body.systemVars === undefined) throw bad("没有要修改的内容。");
+    if (body.name === undefined && body.systemVars === undefined && body.autoUpdate === undefined) throw bad("没有要修改的内容。");
     if (body.name !== undefined && d.kind !== "manager") throw forbidden("只有管理设备可以修改设备名。");
     if (body.systemVars !== undefined && typeof body.systemVars !== "boolean") throw bad("systemVars 只能是 true 或 false。");
+    if (body.autoUpdate !== undefined && typeof body.autoUpdate !== "boolean") throw bad("autoUpdate 只能是 true 或 false。");
     const name = body.name === undefined ? t.name : label(body.name, "设备名");
     const systemVars = body.systemVars === undefined ? t.system_vars : Number(body.systemVars);
+    const autoUpdate = body.autoUpdate === undefined ? t.auto_update : Number(body.autoUpdate);
     sql.transaction(() => {
-      sql.run(`UPDATE devices SET name = ?, system_vars = ? WHERE id = ?`, name, systemVars, t.id);
+      sql.run(`UPDATE devices SET name = ?, system_vars = ?, auto_update = ? WHERE id = ?`, name, systemVars, autoUpdate, t.id);
       bump(sql);
     });
     deps.notifier.send("all", { type: "changed", seq: headSeq(sql) });
     return c.json({ ok: true });
+  });
+
+  // 让电脑的后台服务现在检查更新并升级（docs/protocol.md 3.2、3.5）。
+  app.post("/api/v1/devices/:id/update", async (c) => {
+    await requireDevice(c, deps, { manager: true });
+    const t = target(sql, id(c.req.param("id"), "设备 ID"));
+    if (t.kind !== "client") throw bad("只能让电脑上的命令行更新，手机 App 请在那台手机上检查更新。");
+    if (!deps.notifier.connected(t.id)) {
+      throw new ApiError(409, "device_offline", "这台电脑的后台服务现在没有连上服务器。请确认电脑开机并联网，或在电脑上运行 harmonia update。");
+    }
+    deps.notifier.send({ device: t.id }, { type: "update" });
+    return c.json({});
   });
 
   app.post("/api/v1/devices/self/revoke", async (c) => {

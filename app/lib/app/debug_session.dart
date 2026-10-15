@@ -30,6 +30,7 @@ class DebugSession {
       platform: 'ios',
       prepareGlass: prepareGlass,
     );
+    vault.onSimulatedChange = c.refresh;
     final session = DebugSession._(c, vault, account);
     session.reset();
     return session;

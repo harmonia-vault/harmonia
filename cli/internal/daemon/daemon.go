@@ -20,9 +20,21 @@ const (
 	notPairedWait = 3 * time.Second
 )
 
-// Hooks 允许后台服务挂接额外的周期任务（例如检查更新）。
+// ErrUpgraded 表示程序已经升级，后台服务退出，由系统（或调用方）用新程序重新启动。
+var ErrUpgraded = errors.New("已升级到新版本")
+
+// Hooks 允许后台服务挂接检查更新。
 type Hooks struct {
-	Daily func(ctx context.Context, logf func(string, ...any))
+	// Check 检查更新，并在需要时升级：每天调用一次，自动更新刚开启时也调用；force 为 true 表示
+	// 手机要求更新，不论自动更新是否开启都升级。返回 true 表示程序已被替换。
+	Check func(ctx context.Context, logf func(string, ...any), force bool) bool
+}
+
+// Logf 在后台服务的日志里追加一行，用于 Run 结束之后（例如升级后重新启动新程序）的记录。
+func Logf(format string, args ...any) {
+	if d, err := state.Open(); err == nil {
+		openLog(d).Printf(format, args...)
+	}
 }
 
 func openLog(d *state.Dir) *log.Logger {
@@ -46,12 +58,13 @@ func Run(ctx context.Context, hooks Hooks) error {
 	logger := openLog(d)
 	logf := logger.Printf
 	logf("后台服务启动")
-	lastDaily := time.Time{}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	u := newUpdater(hooks.Check, logf, cancel)
+	if hooks.Check != nil {
+		go u.daily(ctx)
+	}
 	for ctx.Err() == nil {
-		if hooks.Daily != nil && time.Since(lastDaily) > 24*time.Hour {
-			lastDaily = time.Now()
-			go hooks.Daily(ctx, logf)
-		}
 		a, err := app.Load(true)
 		if err != nil {
 			if !errors.Is(err, app.ErrNotPaired) {
@@ -60,15 +73,19 @@ func Run(ctx context.Context, hooks Hooks) error {
 			sleep(ctx, notPairedWait)
 			continue
 		}
-		session(ctx, a, logf)
+		session(ctx, a, logf, u)
 		sleep(ctx, time.Second)
+	}
+	if u.upgraded.Load() {
+		return ErrUpgraded
 	}
 	logf("后台服务停止")
 	return nil
 }
 
 // session 在一个已接入的状态下运行，直到设备被移除、退出登录或 ctx 结束。
-func session(ctx context.Context, a *app.App, logf func(string, ...any)) {
+func session(ctx context.Context, a *app.App, logf func(string, ...any), u *updater) {
+	updateCtx := ctx // 升级不随本轮会话结束而中断
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	trigger := make(chan struct{}, 1)
@@ -84,8 +101,11 @@ func session(ctx context.Context, a *app.App, logf func(string, ...any)) {
 		for ctx.Err() == nil {
 			connected := time.Now()
 			err := a.Client.Listen(ctx, func(ev api.Event) {
-				if ev.Type == "changed" {
+				switch ev.Type {
+				case "changed":
 					poke()
+				case "update":
+					u.run(updateCtx, true)
 				}
 			})
 			if errors.Is(err, api.ErrRevoked) {
@@ -110,6 +130,9 @@ func session(ctx context.Context, a *app.App, logf func(string, ...any)) {
 		err := a.Sync(ctx)
 		switch {
 		case err == nil:
+			if cache, err := a.Dir.Cache(); err == nil {
+				u.observeAuto(updateCtx, cache.AutoUpdate)
+			}
 			return true
 		case errors.Is(err, app.ErrRevokedLocal):
 			logf("本设备已被移除，本机数据已清除")

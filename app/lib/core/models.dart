@@ -8,20 +8,20 @@ class Environment {
   final int expiresAt;
 
   factory Environment.fromJson(Map<String, dynamic> j) => Environment(
-        j['id'] as String,
-        j['name'] as String,
-        int.parse(j['keyVersion'] as String),
-        j['role'] as String,
-        j['expiresAt'] as int,
-      );
+    j['id'] as String,
+    j['name'] as String,
+    int.parse(j['keyVersion'] as String),
+    j['role'] as String,
+    j['expiresAt'] as int,
+  );
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'keyVersion': '$keyVersion',
-        'role': role,
-        'expiresAt': expiresAt,
-      };
+    'id': id,
+    'name': name,
+    'keyVersion': '$keyVersion',
+    'role': role,
+    'expiresAt': expiresAt,
+  };
 }
 
 class Envelope {
@@ -31,15 +31,10 @@ class Envelope {
   final String sealed;
   final String sig;
 
-  factory Envelope.fromJson(Map<String, dynamic> j) => Envelope(
-        j['envId'] as String,
-        int.parse(j['keyVersion'] as String),
-        j['sealed'] as String,
-        j['sig'] as String,
-      );
+  factory Envelope.fromJson(Map<String, dynamic> j) =>
+      Envelope(j['envId'] as String, int.parse(j['keyVersion'] as String), j['sealed'] as String, j['sig'] as String);
 
-  Map<String, dynamic> toJson() =>
-      {'envId': envId, 'keyVersion': '$keyVersion', 'sealed': sealed, 'sig': sig};
+  Map<String, dynamic> toJson() => {'envId': envId, 'keyVersion': '$keyVersion', 'sealed': sealed, 'sig': sig};
 }
 
 class CachedVariable {
@@ -60,8 +55,13 @@ class Grant {
 
   Grant copyWith({bool? active}) => Grant(envId, role, expiresAt, active: active ?? this.active, position: position);
 
-  factory Grant.fromJson(Map<String, dynamic> j) => Grant(j['envId'] as String, j['role'] as String, j['expiresAt'] as int,
-      active: j['active'] as bool? ?? true, position: j['position'] as int? ?? 0);
+  factory Grant.fromJson(Map<String, dynamic> j) => Grant(
+    j['envId'] as String,
+    j['role'] as String,
+    j['expiresAt'] as int,
+    active: j['active'] as bool? ?? true,
+    position: j['position'] as int? ?? 0,
+  );
 
   Map<String, dynamic> toJson() => {'envId': envId, 'role': role, 'expiresAt': expiresAt};
 }
@@ -80,13 +80,20 @@ class DeviceInfo {
   int get createdAt => json['createdAt'] as int;
   int get lastSeenAt => json['lastSeenAt'] as int;
   bool get isManager => kind == 'manager';
+
   /// 设备最近一次同步时上报的版本；还没有上报过，或服务端较旧时为空。
   String get version => json['version'] as String? ?? '';
+
   /// “写入系统变量”开关，只有 Windows 上的命令行使用；较旧的服务端没有这个字段。
   bool get systemVars => json['systemVars'] as bool? ?? false;
+
+  /// “自动更新”开关，只有电脑上的命令行使用，由它的后台服务执行。
+  bool get autoUpdate => json['autoUpdate'] as bool? ?? false;
+
   /// 按激活顺序排列。
-  List<Grant> get grants => (json['grants'] as List).map((g) => Grant.fromJson((g as Map).cast<String, dynamic>())).toList()
-    ..sort((a, b) => a.position.compareTo(b.position));
+  List<Grant> get grants =>
+      (json['grants'] as List).map((g) => Grant.fromJson((g as Map).cast<String, dynamic>())).toList()
+        ..sort((a, b) => a.position.compareTo(b.position));
 }
 
 class PairingRequest {
@@ -99,10 +106,13 @@ class PairingRequest {
   String get signPub => json['signPub'] as String;
   String get boxPub => json['boxPub'] as String;
   String get rootPub => json['rootPub'] as String;
+
   /// 发起请求的网络地址，用于判断是否本人发起和“阻止这个网络”。
   String get ip => json['ip'] as String? ?? '';
+
   /// 发起方的客户端具备管理功能，才能被批准为管理设备。
   bool get canManage => json['canManage'] as bool? ?? false;
+
   /// 由配对码创建：出现在待批准列表中，前台时自动弹出批准页。匿名请求只能扫码或手输核对码取到（协议 3.2）。
   bool get authorized => json['authorized'] as bool? ?? false;
   int get expiresAt => json['expiresAt'] as int;
@@ -129,19 +139,19 @@ class SyncCache {
 
   bool get rotationRequired => self['rotationRequired'] == true;
 
-  List<DeviceInfo> get devices => ((manager?['devices'] as List?) ?? [])
-      .map((d) => DeviceInfo((d as Map).cast<String, dynamic>()))
-      .toList();
+  List<DeviceInfo> get devices =>
+      ((manager?['devices'] as List?) ?? []).map((d) => DeviceInfo((d as Map).cast<String, dynamic>())).toList();
 
   Map<String, dynamic> toJson() => {
-        'seq': seq,
-        'self': self,
-        'environments': environments.map((e) => e.toJson()).toList(),
-        'envelopes': envelopes.map((e) => e.toJson()).toList(),
-        'variables': variables.map((env, vars) => MapEntry(env,
-            vars.map((n, v) => MapEntry(n, {'value': v.value, 'keyVersion': v.keyVersion})))),
-        'manager': manager,
-      };
+    'seq': seq,
+    'self': self,
+    'environments': environments.map((e) => e.toJson()).toList(),
+    'envelopes': envelopes.map((e) => e.toJson()).toList(),
+    'variables': variables.map(
+      (env, vars) => MapEntry(env, vars.map((n, v) => MapEntry(n, {'value': v.value, 'keyVersion': v.keyVersion}))),
+    ),
+    'manager': manager,
+  };
 
   static SyncCache fromJson(Map<String, dynamic> j) {
     final c = SyncCache()
@@ -150,9 +160,7 @@ class SyncCache {
       ..environments = (j['environments'] as List)
           .map((e) => Environment.fromJson((e as Map).cast<String, dynamic>()))
           .toList()
-      ..envelopes = (j['envelopes'] as List)
-          .map((e) => Envelope.fromJson((e as Map).cast<String, dynamic>()))
-          .toList()
+      ..envelopes = (j['envelopes'] as List).map((e) => Envelope.fromJson((e as Map).cast<String, dynamic>())).toList()
       ..manager = (j['manager'] as Map?)?.cast<String, dynamic>();
     final vars = (j['variables'] as Map).cast<String, dynamic>();
     for (final entry in vars.entries) {

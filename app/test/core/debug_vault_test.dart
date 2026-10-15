@@ -113,4 +113,28 @@ void main() {
     await expectLater(client.public('GET', '/'), throwsStateError);
     await expectLater(vault.api!.public('POST', '/'), throwsStateError);
   });
+
+  test('电脑更新只修改模拟状态：开关、在线电脑稍后上报新版本、不在线时报错', () async {
+    vault.cliUpdateDelay = Duration.zero;
+    var changed = 0;
+    vault.onSimulatedChange = () => changed++;
+    DeviceInfo device(String id) => vault.devices.singleWhere((d) => d.id == id);
+
+    await vault.setAutoUpdate('debug-computer', true);
+    expect(device('debug-computer').autoUpdate, isTrue);
+
+    final from = device('debug-computer').version;
+    await vault.requestCliUpdate('debug-computer');
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    expect(device('debug-computer').version, debugCliLatest(from));
+    expect(changed, 1);
+
+    await expectLater(
+      vault.requestCliUpdate('debug-linux'),
+      throwsA(isA<ApiException>().having((e) => e.code, 'code', 'device_offline')),
+    );
+    vault.scenario = DebugScenario.failure;
+    await expectLater(vault.setAutoUpdate('debug-computer', false), throwsA(isA<VaultException>()));
+    expect(device('debug-computer').autoUpdate, isTrue);
+  });
 }

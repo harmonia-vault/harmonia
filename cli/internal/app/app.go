@@ -88,6 +88,7 @@ func (a *App) Sync(ctx context.Context) error {
 		return err
 	}
 	cache.SystemVars = res.Self.SystemVars
+	cache.AutoUpdate = res.Self.AutoUpdate
 	if err := a.Dir.SaveCache(cache); err != nil {
 		return err
 	}

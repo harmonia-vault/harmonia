@@ -55,9 +55,9 @@ Harmonia（和弦，https://你的服务器地址）是用户部署的环境变�
 ```
 
 - `HARMONIA_YES=0` 让安装脚本不再询问，只装命令行，Shell 集成和后台服务都先不装。AI 助手装好后会向你解释这两项的作用、不开启时怎么用，由你决定是否开启（之后也可以自己运行 `harmonia shell install`、`harmonia service install`）。设置 `HARMONIA_YES=1` 则不询问、两项直接装上。
-- `harmonia skill` 输出给 AI 助手的使用说明：怎样接入、用 `harmonia exec` 使用变量、不把变量值打印出来、哪些命令要你同意才运行。`harmonia skill install` 把它保存成技能文件，写到 `~/.claude/skills` 和 `~/.agents/skills`（对应的工具目录存在时），或用 `--dir` 指定的目录。
+- `harmonia skill` 输出给 AI 助手的使用说明：怎样接入、用 `harmonia exec` 使用变量、不把变量值打印出来、哪些命令要你同意才运行。`harmonia skill install` 保存一个技能入口文件，让 AI 助手每次使用前运行 `harmonia skill` 读取当时的说明，程序升级后不会过期；写到 `~/.claude/skills` 和 `~/.agents/skills`（对应的工具目录存在时），或用 `--dir` 指定的目录。
 - 接入时 AI 助手会向你要邮箱和配对码（在 App 的“设备 → 添加设备 → 生成配对码”中获取），并把核对码告诉你，由你在手机上批准。
-- `harmonia update` 会顺带更新保存过的技能文件。说明里写着对应的版本，AI 助手发现版本对不上时会重新读取。
+- 程序升级（包括后台自动升级）后，AI 助手下次运行 `harmonia skill` 就拿到新版本的说明。
 
 #### 自己安装
 
@@ -124,6 +124,7 @@ harmonia override set <环境> <变量名> <值>
                                       设置只在本机生效的值，不上传
 harmonia manager                      在浏览器里打开本机管理页面，批量管理环境和变量（见下一节）
 harmonia update                       升级 harmonia
+harmonia update auto on|off           开启或关闭自动更新（手机上也能切换）
 harmonia skill                        输出给 AI 助手的使用说明（install 保存成技能文件）
 harmonia logout                       退出账号，清除本机数据
 harmonia uninstall                    完全卸载
@@ -198,7 +199,7 @@ ExecStart=/home/me/.local/bin/harmonia exec -- /usr/bin/node /srv/agent/index.js
 
 - **App（Android）**：在“设置 → 检查更新”中升级，也会每天自动检查一次，自动选择当前架构的安装包。安装包经过签名校验，数据保留。`0.3.1-rc.10` 起按架构分包，此前版本需要从 Releases 下载对应 APK 覆盖安装一次，请勿卸载；之后继续应用内更新。
 - **App（iPhone）**：“设置 → 检查更新”会提示新版本。点“下载并导入签名工具”，在弹出的面板里选择安装时使用的签名工具（轻松签、全能签、万能签等），再用它和同一个 Apple ID（或证书）签名安装即可，数据保留。也可以点“打开下载页”自己下载。
-- **命令行**：`harmonia update`。后台服务每天检查一次，有新版本时 `harmonia status` 会提示。
+- **命令行**：`harmonia update`。后台服务每天检查一次，有新版本时 `harmonia status` 会显示，在终端里运行其他命令时每天最多提示一次。`harmonia update auto on` 开启自动更新后，后台服务发现新版本直接升级；也可以在手机“设备 → 这台电脑 → 版本与更新”里打开，或点“更新”让它马上升级（需要安装后台服务）。
 - **服务端**：在你的 Fork 中点击 Sync fork。
 
 ### 更新渠道

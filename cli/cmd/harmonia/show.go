@@ -69,12 +69,13 @@ func cmdStatus(ctx context.Context, args []string) error {
 		{"后台服务", serviceSummary()},
 		{shellLabel, shellSummary(a)},
 		{"版本", fmt.Sprintf("%s（%s渠道）", version, updateChannel().Label())},
+		{"自动更新", autoUpdateSummary(a)},
 	})
 	for _, note := range shellNotes(a) {
 		fmt.Println(note)
 	}
-	if hint := updateHint(); hint != "" {
-		fmt.Println("\n" + hint)
+	if notes := updateNotes(); len(notes) > 0 {
+		fmt.Println("\n" + strings.Join(notes, "\n"))
 	}
 	fmt.Println()
 	return printEnvs(a)

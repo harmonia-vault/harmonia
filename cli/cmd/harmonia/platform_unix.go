@@ -53,3 +53,7 @@ func removeProgram(bin string) {
 	_ = os.Remove(bin)
 	_ = os.Remove(bin + ".old")
 }
+
+// relaunchDaemon 在后台服务升级后调用。systemd（Restart=always）和 launchd（KeepAlive）会在退出后
+// 自动用新程序重新启动，这里不需要做什么。
+func relaunchDaemon(func(string, ...any)) error { return nil }

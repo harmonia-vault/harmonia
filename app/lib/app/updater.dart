@@ -101,7 +101,8 @@ bool verifyMinisign(HCrypto c, String publicKey, Uint8List data, String signatur
   }
 }
 
-Future<UpdateInfo?> fetchUpdate(HCrypto c, UpdateChannel channel) async {
+/// 读取并验证某个渠道的签名清单。
+Future<Map<String, dynamic>> _fetchManifest(HCrypto c, UpdateChannel channel) async {
   if (releasePublicKey.isEmpty) throw Exception('这个版本没有配置更新源（开发版本）。');
   final url = '$_feedBase/${channel.name}.json';
   // 清单与签名同时请求。
@@ -122,6 +123,12 @@ Future<UpdateInfo?> fetchUpdate(HCrypto c, UpdateChannel channel) async {
   final version = m['version'] as String;
   // 正式版渠道只接受正式版本，防止测试版清单被当作正式版下发。
   if (channel == UpdateChannel.stable && isPrerelease(version)) throw Exception('更新信息异常，已拒绝。');
+  return m;
+}
+
+Future<UpdateInfo?> fetchUpdate(HCrypto c, UpdateChannel channel) async {
+  final m = await _fetchManifest(c, channel);
+  final version = m['version'] as String;
   if (!isNewer(version, appVersion)) return null;
   final asset = selectAppUpdateAsset(
     (m['assets'] as Map).cast<String, dynamic>(),
@@ -135,6 +142,21 @@ Future<UpdateInfo?> fetchUpdate(HCrypto c, UpdateChannel channel) async {
     asset['sha256'] as String,
     asset['size'] as int,
   );
+}
+
+/// 电脑上的命令行按版本推断的更新渠道：带后缀的版本在测试版渠道，与命令行的默认规则相同。
+/// 命令行用 update channel 改过渠道时可能不准，只影响显示，实际升级以命令行自己的渠道为准。
+UpdateChannel cliChannelFor(String version) => isPrerelease(version) ? UpdateChannel.beta : UpdateChannel.stable;
+
+final _cliLatest = <UpdateChannel, (String, DateTime)>{};
+
+/// 某个渠道的最新版本，在设备详情里判断电脑能不能更新；10 分钟内复用上次的结果。
+Future<String> fetchLatestCliVersion(HCrypto c, UpdateChannel channel) async {
+  final hit = _cliLatest[channel];
+  if (hit != null && DateTime.now().difference(hit.$2) < const Duration(minutes: 10)) return hit.$1;
+  final version = (await _fetchManifest(c, channel))['version'] as String;
+  _cliLatest[channel] = (version, DateTime.now());
+  return version;
 }
 
 late HCrypto updaterCrypto;

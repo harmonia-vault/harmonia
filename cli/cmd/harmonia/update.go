@@ -3,25 +3,14 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
-	"os/exec"
-	"path/filepath"
-	"runtime"
-	"strings"
-	"time"
 
+	"github.com/harmonia-vault/harmonia/cli/internal/app"
 	"github.com/harmonia-vault/harmonia/cli/internal/service"
 	"github.com/harmonia-vault/harmonia/cli/internal/state"
 	"github.com/harmonia-vault/harmonia/cli/internal/update"
 )
-
-type updateCache struct {
-	Channel   string `json:"channel"`
-	Latest    string `json:"latest"`
-	CheckedAt int64  `json:"checkedAt"`
-}
 
 // settings 是与账号无关的本机设置，退出登录时保留。
 type settings struct {
@@ -63,39 +52,6 @@ func updateChannel() update.Channel {
 	return update.Stable
 }
 
-// updateHint 只读取后台服务缓存的检查结果，不发起网络请求。
-func updateHint() string {
-	data, err := os.ReadFile(stateFile("update.json"))
-	if err != nil {
-		return ""
-	}
-	var c updateCache
-	if json.Unmarshal(data, &c) != nil || c.Channel != string(updateChannel()) || !update.Newer(c.Latest, version) {
-		return ""
-	}
-	return fmt.Sprintf("有新版本 %s 可用，运行 harmonia update 升级。", c.Latest)
-}
-
-// dailyUpdateCheck 由后台服务每天调用一次。
-func dailyUpdateCheck(ctx context.Context, logf func(string, ...any)) {
-	if version == "dev" {
-		return
-	}
-	select {
-	case <-ctx.Done():
-		return
-	case <-time.After(time.Duration(time.Now().UnixNano()%600) * time.Second):
-	}
-	ch := updateChannel()
-	m, err := update.Fetch(ctx, ch)
-	if err != nil {
-		logf("检查更新失败：%v", err)
-		return
-	}
-	data, _ := json.Marshal(updateCache{Channel: string(ch), Latest: m.Version, CheckedAt: time.Now().UnixMilli()})
-	_ = state.WriteAtomic(stateFile("update.json"), data)
-}
-
 func cmdUpdateChannel(args []string) error {
 	if len(args) == 0 {
 		ch := updateChannel()
@@ -129,9 +85,15 @@ func cmdUpdate(ctx context.Context, args []string) error {
 	if len(args) > 0 && args[0] == "channel" {
 		return cmdUpdateChannel(args[1:])
 	}
+	if len(args) > 0 && args[0] == "auto" {
+		return cmdUpdateAuto(ctx, args[1:])
+	}
 	f, err := parseFlags(args, "check")
 	if err != nil {
 		return err
+	}
+	if len(f.args) > 0 {
+		return usageError("不认识的参数 " + f.args[0])
 	}
 	ch := updateChannel()
 	fmt.Printf("正在检查更新（%s渠道）……\n", ch.Label())
@@ -139,6 +101,7 @@ func cmdUpdate(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	saveChecked(ch, m.Version)
 	if !update.Newer(m.Version, version) {
 		fmt.Printf("已是最新版本（%s）。\n", version)
 		return nil
@@ -150,36 +113,46 @@ func cmdUpdate(ctx context.Context, args []string) error {
 	if f.bools["check"] {
 		return nil
 	}
-	key := fmt.Sprintf("cli-%s-%s", runtime.GOOS, runtime.GOARCH)
-	asset, ok := m.Assets[key]
-	if !ok {
-		return fmt.Errorf("新版本没有提供 %s/%s 的安装包", runtime.GOOS, runtime.GOARCH)
-	}
-	bin, err := executable()
-	if err != nil {
-		return err
-	}
 	fmt.Println("正在下载……")
-	data, err := update.Download(ctx, asset)
+	bin, err := installVersion(ctx, m)
 	if err != nil {
 		return err
-	}
-	tmp := filepath.Join(filepath.Dir(bin), newProgramName)
-	if err := os.WriteFile(tmp, data, 0o755); err != nil {
-		return fmt.Errorf("无法写入 %s：%w", filepath.Dir(bin), err)
-	}
-	defer os.Remove(tmp)
-	out, err := exec.Command(tmp, "version").Output()
-	if err != nil || !strings.Contains(string(out), m.Version) {
-		return errors.New("新版本自检失败，已放弃升级，当前版本保持不变")
-	}
-	if err := swapProgram(tmp, bin); err != nil {
-		return fmt.Errorf("替换程序失败：%w", err)
 	}
 	if err := service.Restart(); err != nil {
 		fmt.Println("注意：", err)
 	}
 	fmt.Printf("已升级到 %s。旧版本保留在 %s.old。\n", m.Version, bin)
-	refreshSkills(bin)
+	syncSkillFiles(func(s string) { fmt.Println(s) })
+	fmt.Println("如果是 AI 助手在操作，请运行 harmonia skill 重新读取使用说明。")
+	return nil
+}
+
+func cmdUpdateAuto(ctx context.Context, args []string) error {
+	a, err := app.Load(true)
+	if err != nil {
+		return err
+	}
+	if len(args) == 0 {
+		if err := refresh(ctx, a); err != nil {
+			return err
+		}
+		fmt.Printf("自动更新：%s。修改：harmonia update auto on|off（也可以在手机的设备详情里修改）\n", autoUpdateSummary(a))
+		return nil
+	}
+	if len(args) > 1 || (args[0] != "on" && args[0] != "off") {
+		return usageError("用法：harmonia update auto [on|off]")
+	}
+	on := args[0] == "on"
+	if err := a.SetAutoUpdate(ctx, on); err != nil {
+		return err
+	}
+	if !on {
+		fmt.Println("已关闭自动更新。有新版本时会提示，运行 harmonia update 升级。")
+		return nil
+	}
+	fmt.Println("已开启自动更新：后台服务每天检查一次，发现新版本直接升级。")
+	if !service.Check().Installed {
+		fmt.Println("这台电脑还没有安装后台服务，自动更新不会生效。运行 harmonia service install 安装。")
+	}
 	return nil
 }

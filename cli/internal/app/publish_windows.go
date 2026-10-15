@@ -2,10 +2,7 @@ package app
 
 import (
 	"context"
-	"errors"
-	"fmt"
 
-	"github.com/harmonia-vault/harmonia/cli/internal/api"
 	"github.com/harmonia-vault/harmonia/cli/internal/state"
 	"github.com/harmonia-vault/harmonia/cli/internal/sysenv"
 )
@@ -94,15 +91,7 @@ func (a *App) SetSystemEnv(on bool) error {
 
 // SetSystemVars 修改这台设备的“写入系统变量”开关（保存在服务端，需要联网），再同步一次让它生效。
 func (a *App) SetSystemVars(ctx context.Context, on bool) error {
-	err := a.Client.Device(ctx, "PATCH", "/api/v1/devices/self", map[string]any{"systemVars": on}, nil, nil)
-	var apiErr *api.Error
-	if errors.As(err, &apiErr) && !errors.Is(err, api.ErrRevoked) && (apiErr.Status == 400 || apiErr.Status == 403 || apiErr.Status == 404) {
-		return fmt.Errorf("服务器还不支持这个开关，请先把服务端更新到最新版本（%w）", err)
-	}
-	if err != nil {
-		return a.HandleRevoked(err)
-	}
-	return a.Sync(ctx)
+	return a.patchSelf(ctx, map[string]any{"systemVars": on})
 }
 
 // systemVariable 判断变量是否是 Windows 自带的，导入时不列出。

@@ -60,12 +60,10 @@ Map<String, List<DebugPageEntry>> debugPages() => {
       final id = s.vault.environments.first.id;
       return VariableEditPage(c: s.c, envId: id, name: s.vault.brokenVariables(id).firstOrNull);
     }),
-    DebugPageEntry(
-      '设备详情与权限',
-      (s) => s.vault.devices.isEmpty
-          ? const Center(child: Text('当前没有示例设备，请切换到正常数据。'))
-          : DevicePage(c: s.c, deviceId: s.vault.devices.last.id),
-    ),
+    DebugPageEntry('设备详情与权限', (s) => _devicePage(s, 'debug-computer')),
+    DebugPageEntry('电脑版本与更新：有新版本、让电脑更新、自动更新', (s) => _devicePage(s, 'debug-computer')),
+    DebugPageEntry('电脑版本与更新：已是最新、后台服务不在线', (s) => _devicePage(s, 'debug-linux')),
+    DebugPageEntry('电脑版本与更新：版本未知、不支持在手机上更新', (s) => _devicePage(s, 'debug-mac')),
     DebugPageEntry('扫码添加与核对码弹窗', (s) => AddDevicePage(c: s.c)),
     DebugPageEntry('生成配对码与剩余时间', (s) => DebugOverlay(show: (c) => showPairingCode(c, s.c))),
     DebugPageEntry('复制 AI 安装提示词（仅服务器或含邮箱和配对码）', (s) => DebugOverlay(show: (c) => showAiPrompt(c, s.c))),
@@ -230,6 +228,10 @@ Future<void> _waiting(DebugSession s, {String? code}) async {
   s.prepareAccount();
   s.c.pendingPairing = await s.account.startPairing(s.c.session!, '示例手机', code: code);
 }
+
+Widget _devicePage(DebugSession s, String id) => s.vault.devices.any((d) => d.id == id)
+    ? DevicePage(c: s.c, deviceId: id)
+    : const Center(child: Text('当前没有示例设备，请切换到正常数据。'));
 
 Widget _environment(DebugSession s, {required bool edit}) {
   if (s.vault.environments.isEmpty) return const Center(child: Text('当前没有示例环境，请先在首页创建环境。'));
