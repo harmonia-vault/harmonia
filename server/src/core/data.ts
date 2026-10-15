@@ -3,6 +3,7 @@ import type { Context, Hono } from "hono";
 import { bump, headSeq, one } from "./db";
 import { envRole, readJson, requireDevice, requireInitialized, type Deps, type Device } from "./context";
 import {
+  ApiError,
   arr,
   b64,
   bad,
@@ -29,6 +30,9 @@ type VarRow = { env_id: string; name: string; value: string; key_version: number
 
 // 变量明文是最长 512 KiB 的 JSON（docs/protocol.md 2.6），加上 24 字节 nonce 和 16 字节 tag。
 const MAX_VALUE_B64 = Math.ceil(((512 * 1024 + 40) * 4) / 3);
+
+/** 批量写入一次最多的变量数（docs/protocol.md 3.2）。 */
+const MAX_BATCH = 100;
 
 /** 设备当前可访问的环境（含权限与到期时间）。 */
 type AccessibleEnv = EnvRow & { role: Role; expires_at: number; grant_seq: number; active: number; position: number };
@@ -287,6 +291,66 @@ export function dataRoutes(app: Hono, deps: Deps) {
         d.id,
         deps.now(),
       );
+      return { seq };
+    });
+    changed();
+    return c.json(res);
+  });
+
+  // 批量写入：整批在一个事务中生效，共用一个 seq（docs/protocol.md 3.2）。
+  app.patch("/api/v1/environments/:id/variables", async (c) => {
+    const d = await requireDevice(c, deps);
+    const envId = id(c.req.param("id"), "环境 ID");
+    const text = await c.req.text();
+    if (text.length > 2_000_000) throw new ApiError(413, "invalid_request", "请求内容过大，请分批写入。");
+    let body: Record<string, unknown>;
+    try {
+      body = obj(JSON.parse(text));
+    } catch {
+      throw bad("请求内容不是有效的 JSON。");
+    }
+    const keyVersion = decimal(body.keyVersion, "密钥版本");
+    const set = arr(body.set ?? [], "要写入的变量").map((v) => {
+      const o = obj(v);
+      return { name: varName(o.name), value: bin(o.value, "变量值", undefined, MAX_VALUE_B64) };
+    });
+    const del = arr(body.delete ?? [], "要删除的变量").map((v) => varName(v));
+    const total = set.length + del.length;
+    if (total === 0) throw bad("没有要写入或删除的变量。");
+    if (total > MAX_BATCH) throw bad(`一次最多写入 ${MAX_BATCH} 个变量，请分批写入。`);
+    const names = new Set<string>();
+    for (const n of [...set.map((v) => v.name), ...del]) {
+      if (names.has(n)) throw bad(`变量 ${n} 在同一批中出现了多次。`);
+      names.add(n);
+    }
+    const res = await idempotent(c, deps, d, text, () => {
+      const env = requireWritable(deps, d, envId);
+      if (env.key_version !== keyVersion) throw conflict("环境密钥已更新，请同步后重试。");
+      const seq = bump(sql);
+      for (const v of set) {
+        sql.run(
+          `INSERT OR REPLACE INTO variables (env_id, name, value, key_version, deleted, seq, updated_by, updated_at)
+           VALUES (?, ?, ?, ?, 0, ?, ?, ?)`,
+          envId,
+          v.name,
+          v.value,
+          keyVersion,
+          seq,
+          d.id,
+          deps.now(),
+        );
+      }
+      for (const name of del) {
+        sql.run(
+          `UPDATE variables SET value = '', deleted = 1, seq = ?, updated_by = ?, updated_at = ?
+           WHERE env_id = ? AND name = ? AND deleted = 0`,
+          seq,
+          d.id,
+          deps.now(),
+          envId,
+          name,
+        );
+      }
       return { seq };
     });
     changed();
