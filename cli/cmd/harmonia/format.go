@@ -96,9 +96,9 @@ var helpGroups = []struct {
 	}},
 	{"变量", [][2]string{
 		{"var list [--env 环境] [--show]", "列出变量，默认隐藏值"},
-		{"var set <环境> <变量名> [值] [--note 备注]", "写入变量，不给值时交互输入；只给 --note 时只改备注"},
+		{"var set <环境> <变量名> [值] [--note 备注]", "写入变量并回读校验，不给值时交互输入；只给 --note 时只改备注"},
 		{"var rm <环境> <变量名>", "删除变量"},
-		{"import --env <环境>", "从当前终端的环境变量中勾选导入"},
+		{"import --env <环境> [--file 文件|-] [--format dotenv|json] [--json]", "批量导入：--file 读取 .env 或 JSON（- 为标准输入），不给时从当前终端的变量中勾选；没变的跳过，逐条输出结果，中断后重跑即可续传；--json 输出 JSON 结果"},
 	}},
 	{"本机覆盖", [][2]string{
 		{"override set <环境> <变量名> [值]", "设置只在这台设备生效的值"},
@@ -106,8 +106,8 @@ var helpGroups = []struct {
 		{"override list", "列出本机覆盖"},
 	}},
 	{"使用变量", [][2]string{
-		{"exec [--env a,b,c:变量名] -- <命令...>", "带上变量运行命令；--env 只用这些环境（可重复给出），环境:变量名 只取这个变量，靠前的优先"},
-		{"export [--env a,b,c:变量名] [--format sh|dotenv|json]", "输出当前生效的变量；--env 的写法同 exec"},
+		{"exec [--env a,b,c:变量名] -- <命令...>", "带上变量运行命令；--env 只用这些环境（可重复给出），环境:变量名 只取这个变量，靠前的优先；指定的拿不到时报错，不运行命令"},
+		{"export --all | --env a,b,c:变量名 [--format sh|dotenv|json]", "输出变量的明文：--all 是全部启用环境的变量，--env 的写法同 exec"},
 	}},
 	{"管理登录（让这台电脑成为管理设备，需要在手机上批准）", [][2]string{
 		{"manager [--port 端口] [--no-open]", "在浏览器里打开本机管理页面：管理登录、环境和变量的批量管理"},
@@ -169,6 +169,7 @@ func printHelp(out io.Writer) {
 	}
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, "在命令后加 --help 查看这条命令的用法，例如 harmonia var --help。")
+	fmt.Fprintln(out, "1.0 之前各版本之间不保证兼容：命令用法、本机数据和协议都可能改变，升级时可能需要同时更新服务器（harmonia update 会先检查）。1.0 起冻结协议。")
 }
 
 // printCommandHelp 输出一条命令（例如 var）的用法；帮助里没有这条命令时输出全部帮助。

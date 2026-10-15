@@ -3,9 +3,12 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
+	"time"
 
+	"github.com/harmonia-vault/harmonia/cli/internal/api"
 	"github.com/harmonia-vault/harmonia/cli/internal/app"
 	"github.com/harmonia-vault/harmonia/cli/internal/service"
 	"github.com/harmonia-vault/harmonia/cli/internal/state"
@@ -110,6 +113,12 @@ func cmdUpdate(ctx context.Context, args []string) error {
 	if m.Notes != "" {
 		fmt.Println(m.Notes)
 	}
+	switch err := checkProtocol(ctx, m); {
+	case errors.Is(err, errUnverified):
+		fmt.Println("注意：" + sentence(err.Error()) + "1.0 之前各版本之间不保证兼容，升级后如果连不上服务器，请同时更新服务器。")
+	case err != nil:
+		return err
+	}
 	if f.bools["check"] {
 		return nil
 	}
@@ -153,6 +162,47 @@ func cmdUpdateAuto(ctx context.Context, args []string) error {
 	fmt.Println("已开启自动更新：后台服务每天检查一次，发现新版本直接升级。")
 	if !service.Check().Installed {
 		fmt.Println("这台电脑还没有安装后台服务，自动更新不会生效。运行 harmonia service install 安装。")
+	}
+	return nil
+}
+
+// errUnverified 表示升级前没能连上服务器，无法确认新版本和服务器兼容。
+var errUnverified = errors.New("没能连上服务器，无法确认新版本和服务器兼容")
+
+// checkProtocol 是升级前的兼容预检：向这台电脑接入的服务器（日常身份和管理登录）查询协议版本，
+// 和新版本清单里的 protocol 比较。不一致时返回说明错误；连不上服务器时返回 errUnverified；
+// 没有接入任何服务器时不需要检查。1.0 之前各版本之间不保证兼容，1.0 起它是兼容闸。
+func checkProtocol(ctx context.Context, m *update.Manifest) error {
+	if m.Protocol == 0 {
+		return nil
+	}
+	d, err := state.Open()
+	if err != nil {
+		return err
+	}
+	servers := map[string]bool{}
+	if cfg, err := d.Config(); err == nil && cfg.Paired() {
+		servers[cfg.Server] = true
+	}
+	if mf, err := d.Manager(); err == nil && mf != nil {
+		servers[mf.Server] = true
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	unverified := false
+	for server := range servers {
+		inst, err := api.New(server).InstanceInfo(ctx)
+		if err != nil {
+			unverified = true
+			continue
+		}
+		if inst.Protocol != m.Protocol {
+			return fmt.Errorf("新版本 %s 使用协议 %d，服务器 %s 使用协议 %d（服务器版本 %s），升级后将无法使用。请先更新服务器，再运行 harmonia update",
+				m.Version, m.Protocol, server, inst.Protocol, inst.Version)
+		}
+	}
+	if unverified {
+		return errUnverified
 	}
 	return nil
 }

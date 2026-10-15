@@ -40,7 +40,7 @@ $env:HARMONIA_YES = '0'; irm https://github.com/harmonia-vault/harmonia/releases
 **Shell 集成**（Windows 上叫“写入用户环境变量”）
 
 - 作用：macOS、Linux 上在 shell 启动文件（`~/.zshenv`、`~/.bashrc`）里加几行，用户自己打开的终端自动带上已启用环境的变量，变量有变化时按一次回车即可使用新值。Windows 上把变量写进用户环境变量，新启动的程序（包括图形界面程序）都能读到。
-- 不开启时：终端和其他程序里没有这些变量，需要时用 `harmonia exec -- <命令>` 只给这一条命令注入，或用 `harmonia export` 输出。
+- 不开启时：终端和其他程序里没有这些变量，需要时用 `harmonia exec -- <命令>` 只给这一条命令注入。不开启时本机不保存变量的明文文件。
 - 区别：开启后最省事，在任何终端里直接用；但变量会出现在每个终端（Windows 上是每个新程序）的环境里，同一用户运行的任何程序都能读到，Windows 上还以明文保存在注册表里。不开启时只有通过 `harmonia exec` 启动的程序拿得到变量，范围更小。
 - 开启：`harmonia shell install --yes`（默认按当前 shell；需要时加 `--shell zsh` 或 `--shell bash`）。关闭：`harmonia shell uninstall`，只在用户要求时运行。
 - 开启后，用户已经打开的终端要按命令输出的提示加载一次，或者新开一个终端。
@@ -95,13 +95,14 @@ harmonia exec --env 环境A,环境C:API_KEY -- npm test   # 环境A 的全部变
 ```
 
 - 用户要求只用某个或某几个环境（例如测试环境、生产环境）时用 `--env`：命令只拿到这些环境的变量，即使当前终端里已有其他环境的变量。环境名用 `harmonia env list` 查。
-- 只需要某个环境里的个别变量时写成 `环境:变量名`，同一环境要多个变量就写多项（`环境C:A,环境C:B`）；指定的变量不存在时命令不会运行，并提示怎样查看。
+- 只需要某个环境里的个别变量时写成 `环境:变量名`，同一环境要多个变量就写多项（`环境C:A,环境C:B`）。用 `--env` 指定的环境或变量拿不到（不存在、授权到期、无法解密）时命令不会运行，退出码是 125，stderr 里写明原因和处理办法，照着转告用户。
 - 环境既可以用名称也可以用 ID 指定（`harmonia env list` 的 ID 列）。把命令写进脚本、CI 或配置文件时用 ID：环境改名后 ID 不变。
 - 不要假设当前 shell 里已经有这些变量。Shell 集成主要作用于用户自己的终端，你执行命令的 shell 不一定加载它。
-- `harmonia exec` 启动时先同步一次；连不上服务器时使用本机缓存，并在 stderr 提示。`harmonia status`、`harmonia env list`、`harmonia var list` 也是这样。
+- `harmonia exec` 启动时先同步一次；连不上服务器时使用本机缓存，并在 stderr 说明原因和缓存是多久前的。`harmonia status`、`harmonia env list`、`harmonia var list` 也是这样。
 - 这台设备没有任何环境的访问权限时，`harmonia exec` 照常运行命令，只在 stderr 提示拿不到变量。这时请用户在管理设备上为这台设备授权。
 - 不要把变量值打印到对话里：避免 `echo $KEY`、`env`、`harmonia export`、`harmonia var list --show`。
-- 确实要把变量写进文件（例如 `.env`）时，先征得用户同意，并确认这个文件不会被提交到版本库。`harmonia export --format dotenv|sh|json` 输出当前生效的变量，加 `--env` 时只输出这些环境的变量，用法与 `harmonia exec` 相同。
+- 变量不对劲时先运行 `harmonia status`：“健康”列和“需要处理”一节会列出解不开的变量、到期的授权、失效的本机覆盖值和处理办法。
+- 确实要把变量写进文件（例如 `.env`）时，先征得用户同意，并确认这个文件不会被提交到版本库。`harmonia export` 必须指明范围：`--all` 输出全部启用环境的变量，`--env` 只输出这些环境的变量（用法与 `harmonia exec` 相同）；`--format dotenv|sh|json` 选择格式。
 
 ## 修改变量（需要读写权限，必须联网）
 
@@ -114,6 +115,7 @@ harmonia var rm <环境> <变量名>
 ```
 
 - 从标准输入只读取第一行，首尾空白会被去掉。
+- 写入后会回读校验，输出“已写入 X，回读校验一致”才算成功。之后如果提示“注意：……”（环境没有启用、被排在前面的环境遮住、有本机覆盖值），说明 `harmonia exec` 拿到的不会是刚写的值，把提示转告用户。
 - 变量可以带一条备注，说明用途或来源，会在 `harmonia var list` 中显示。给了 `--note` 时命令不读取标准输入，只改备注、保留原值，所以分两步：先按上面的方式写入值，再运行 `harmonia var set <环境> <变量名> --note 备注`。`--note ""` 清除备注。不要把密钥写进备注。
 - 删除变量、覆盖已有的值之前，先向用户确认。
 - 提示只有只读权限时，告诉用户需要在手机上把这台电脑对这个环境的权限改为读写。
@@ -126,7 +128,17 @@ harmonia override rm <环境> <变量名>
 harmonia override list
 ```
 
-`harmonia import` 要逐个勾选，需要交互输入，不适合你使用；改用 `harmonia var set`。
+一次写入多个变量时用批量导入，从文件或标准输入读取 `.env`（或 JSON 对象）：
+
+```bash
+harmonia import --env <环境> --file .env --json
+printf '%s' "$JSON" | harmonia import --env <环境> --file - --json
+```
+
+- 值和现有的相同的变量会跳过；`--json` 逐条给出 `written`、`unchanged`、`failed`（附原因）。有失败时退出码为 1。
+- 中断或部分失败后，原样再运行一次即可，已写入的会显示 `unchanged`。
+- 文件里有解析不了的行时整份都不写入，stderr 列出行号。
+- 不给 `--file` 时需要交互勾选，不适合你使用。
 
 ## 环境的启用和顺序
 

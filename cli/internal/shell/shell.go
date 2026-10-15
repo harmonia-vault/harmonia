@@ -159,6 +159,23 @@ func Install(path, envFile string) error {
 	return writeKeepMode(path, text, mode)
 }
 
+// Referenced 判断启动文件中是否还有 Harmonia 的加载设置。
+func Referenced(path string) bool {
+	data, err := os.ReadFile(path)
+	return err == nil && strings.Contains(string(data), beginMark)
+}
+
+// RemoveFiles 删除集成脚本和变量文件。已加载集成的终端在下一次提示符出现时发现文件不存在，
+// 把托管的变量恢复原状。
+func RemoveFiles(envFile string) error {
+	for _, f := range []string{IntegrationFile(envFile), envFile} {
+		if err := os.Remove(f); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	return nil
+}
+
 // Uninstall 按标记删除 source 行。
 func Uninstall(path string) error {
 	if fi, err := os.Lstat(path); err == nil && fi.Mode()&os.ModeSymlink != 0 {

@@ -8,8 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
-	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -163,104 +161,6 @@ func cmdEnv(ctx context.Context, args []string) error {
 	}
 	return nil
 }
-func cmdVar(ctx context.Context, args []string) error {
-	f, err := parseFlags(args, "env=", "note=", "show")
-	if err != nil {
-		return err
-	}
-	a, err := app.Load(true)
-	if err != nil {
-		return err
-	}
-	if len(f.args) == 0 || f.args[0] == "list" {
-		if err := refresh(ctx, a); err != nil {
-			return err
-		}
-		return listVars(a, f.values["env"], f.bools["show"])
-	}
-	switch f.args[0] {
-	case "set":
-		if len(f.args) < 3 || len(f.args) > 4 {
-			return errors.New("用法：harmonia var set <环境> <变量名> [值] [--note 备注]")
-		}
-		var ch app.VarChange
-		if note, ok := f.values["note"]; ok {
-			ch.Note = &note
-		}
-		if len(f.args) == 4 {
-			ch.Value = &f.args[3]
-		} else if ch.Note == nil {
-			value, err := promptSecret(fmt.Sprintf("%s 的值：", f.args[2]))
-			if err != nil {
-				return err
-			}
-			ch.Value = &value
-		}
-		if err := a.SetVariables(ctx, f.args[1], map[string]app.VarChange{f.args[2]: ch}); err != nil {
-			return err
-		}
-		fmt.Printf("已写入 %s。\n", f.args[2])
-	case "rm":
-		if len(f.args) != 3 {
-			return errors.New("用法：harmonia var rm <环境> <变量名>")
-		}
-		if err := a.DeleteVariable(ctx, f.args[1], f.args[2]); err != nil {
-			return err
-		}
-		fmt.Printf("已删除 %s。\n", f.args[2])
-	default:
-		return fmt.Errorf("未知操作：%s", f.args[0])
-	}
-	return nil
-}
-
-func cmdImport(ctx context.Context, args []string) error {
-	f, err := parseFlags(args, "env=")
-	if err != nil {
-		return err
-	}
-	if f.values["env"] == "" {
-		return errors.New("用法：harmonia import --env <环境>")
-	}
-	a, err := app.Load(true)
-	if err != nil {
-		return err
-	}
-	cands := app.ImportCandidates()
-	names := make([]string, 0, len(cands))
-	for n := range cands {
-		names = append(names, n)
-	}
-	sort.Strings(names)
-	if len(names) == 0 {
-		fmt.Println("当前终端没有可以导入的变量。")
-		return nil
-	}
-	fmt.Println("当前终端中的变量：")
-	for i, n := range names {
-		fmt.Printf("  %3d  %s=%s\n", i+1, n, mask(cands[n]))
-	}
-	ans, err := prompt("输入要导入的编号（用逗号或空格分隔，直接回车取消）：")
-	if err != nil || ans == "" {
-		fmt.Println("已取消。")
-		return nil
-	}
-	picked := map[string]app.VarChange{}
-	for _, tok := range strings.FieldsFunc(ans, func(r rune) bool { return r == ',' || r == ' ' || r == '，' }) {
-		i, err := strconv.Atoi(tok)
-		if err != nil || i < 1 || i > len(names) {
-			return fmt.Errorf("编号“%s”不对", tok)
-		}
-		v := cands[names[i-1]]
-		picked[names[i-1]] = app.VarChange{Value: &v}
-	}
-	if err := a.SetVariables(ctx, f.values["env"], picked); err != nil {
-		return err
-	}
-	fmt.Printf("已导入 %d 个变量。\n", len(picked))
-	return nil
-}
-
 func cmdOverride(ctx context.Context, args []string) error {
 	f, err := parseFlags(args)
 	if err != nil {
@@ -319,7 +219,7 @@ func envList(f *flags) []string {
 }
 
 // refresh 用较短的超时同步一次，让授权的变化（例如被撤销）在没有后台服务时也能生效；
-// 连不上服务器时提示并继续使用本机缓存。
+// 同步失败时说明具体原因和缓存是多久前的，然后继续使用本机缓存。
 func refresh(ctx context.Context, a *app.App) error {
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
@@ -330,7 +230,11 @@ func refresh(ctx context.Context, a *app.App) error {
 		if errors.Is(err, app.ErrRevokedLocal) {
 			return err
 		}
-		fmt.Fprintln(os.Stderr, "harmonia：暂时无法连接服务器，使用本机缓存的内容。")
+		when := "使用上次同步（" + ago(a.Config.LastSync) + "）的本机缓存"
+		if a.Config.LastSync == 0 {
+			when = "本机还没有同步过，没有缓存可用"
+		}
+		fmt.Fprintf(os.Stderr, "harmonia：同步失败（%s），%s。\n", strings.TrimRight(err.Error(), "。."), when)
 	}
 	return nil
 }
@@ -343,7 +247,7 @@ func effective(ctx context.Context, a *app.App, envs []string) (map[string]strin
 	if len(envs) > 0 {
 		vars, skipped, err := a.Select(envs)
 		for _, s := range skipped {
-			fmt.Fprintln(os.Stderr, "harmonia：", s)
+			fmt.Fprintln(os.Stderr, "harmonia："+sentence(s))
 		}
 		return vars, err
 	}
@@ -353,7 +257,7 @@ func effective(ctx context.Context, a *app.App, envs []string) (map[string]strin
 	}
 	vars, skipped, err := a.Effective()
 	for _, s := range skipped {
-		fmt.Fprintln(os.Stderr, "harmonia：", s)
+		fmt.Fprintln(os.Stderr, "harmonia："+sentence(s))
 	}
 	return vars, err
 }
@@ -394,15 +298,22 @@ func cmdExec(ctx context.Context, args []string) error {
 }
 
 func cmdExport(ctx context.Context, args []string) error {
-	f, err := parseFlags(args, "format=", "env=")
+	f, err := parseFlags(args, "format=", "env=", "all")
 	if err != nil {
 		return err
+	}
+	envs := envList(f)
+	switch {
+	case len(envs) == 0 && !f.bools["all"]:
+		return usageError("export 输出的是明文，需要指明范围：--all 输出全部启用环境的变量，--env 环境[,环境:变量名] 只输出指定的")
+	case len(envs) > 0 && f.bools["all"]:
+		return usageError("--all 和 --env 只能选一个")
 	}
 	a, err := app.Load(true)
 	if err != nil {
 		return err
 	}
-	vars, err := effective(ctx, a, envList(f))
+	vars, err := effective(ctx, a, envs)
 	if err != nil {
 		return err
 	}

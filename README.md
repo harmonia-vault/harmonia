@@ -1,5 +1,5 @@
 > [!WARNING]
-> 项目处于早期版本（v0.x），请先用于非关键密钥。
+> 项目处于早期版本（v0.x），请先用于非关键密钥。1.0 之前各版本之间不保证兼容：命令用法、本机数据和协议都可能改变，升级时可能需要同时更新服务端；1.0 起冻结协议。
 
 # Harmonia / 和弦
 
@@ -117,9 +117,11 @@ harmonia exec -- <命令>               只给这个命令注入变量
 harmonia exec --env OpenAI,Other -- <命令>
                                       只用这几个环境（也可以写成 --env OpenAI --env Other），
                                       靠前的优先；终端里其他环境的变量不会传给命令
-harmonia export --format dotenv       输出当前生效的变量
-harmonia var set <环境> <变量名>       写入变量（需要读写权限，必须联网）
-harmonia import --env <环境>          从当前终端勾选已有的环境变量导入
+harmonia export --all --format dotenv 输出全部启用环境的变量（明文；--env 只输出指定的）
+harmonia var set <环境> <变量名>       写入变量并回读校验（需要读写权限，必须联网）
+harmonia import --env <环境> --file .env
+                                      批量导入 .env 或 JSON（- 为标准输入）；没变的跳过，
+                                      中断后重跑即可续传；不给 --file 时从当前终端勾选
 harmonia override set <环境> <变量名> <值>
                                       设置只在本机生效的值，不上传
 harmonia manager                      在浏览器里打开本机管理页面，批量管理环境和变量（见下一节）
@@ -156,7 +158,7 @@ harmonia manager
 
 ## 在 AI Agent 和常驻服务中使用
 
-shell 启动文件只对终端生效。systemd、launchd、cron 启动的程序不会读取它，可以用下面的方式：
+shell 启动文件只对终端生效。systemd、launchd、cron 启动的程序不会读取它，请用 `harmonia exec` 启动（不再支持在服务配置里引用 `~/.harmonia/env.sh`：没有开启 Shell 集成时这个文件不存在）：
 
 Windows 上开启“写入用户环境变量”后，登录之后新启动的程序都能直接读到变量；需要保证拿到最新值的程序，同样可以用 `harmonia exec` 启动。
 
@@ -173,7 +175,7 @@ harmonia exec -- python agent.py
 ExecStart=/home/me/.local/bin/harmonia exec -- /usr/bin/node /srv/agent/index.js
 ```
 
-`harmonia exec` 启动时会先同步一次；连不上服务器时使用本机缓存。
+`harmonia exec` 启动时会先同步一次；连不上服务器时使用本机缓存，并在 stderr 说明原因。用 `--env` 指定的环境或变量拿不到时不运行命令，退出码为 125。
 
 **launchd（macOS）**：在 `ProgramArguments` 前面加上 `harmonia` 的路径与 `exec`、`--` 两个参数。
 
@@ -189,7 +191,7 @@ ExecStart=/home/me/.local/bin/harmonia exec -- /usr/bin/node /srv/agent/index.js
 
 **不保证的：**
 
-- 变量下发到设备后，风险由使用者承担：同一用户的任何进程（包括 AI Agent）都能读到注入的变量和 `~/.harmonia/env.sh`。撤销收不回已经复制或泄露的值，必要时请到服务商处更换密钥。
+- 变量下发到设备后，风险由使用者承担：同一用户的任何进程（包括 AI Agent）都能读到注入的变量、开启 Shell 集成时的 `~/.harmonia/env.sh`，以及本机的设备密钥。没有开启 Shell 集成时不生成 `env.sh`，本机只保存密文缓存；`harmonia shell uninstall` 会删除它。撤销收不回已经复制或泄露的值，必要时请到服务商处更换密钥。
 - 手机被他人拿到并解开锁屏不在防护范围内，请用另一台管理设备或恢复码移除它。
 - 服务端被攻破时，可能拒绝服务、回滚数据，或假装执行撤销。
 - 服务端能看到变量名、环境名、设备名和访问时间。
@@ -201,6 +203,7 @@ ExecStart=/home/me/.local/bin/harmonia exec -- /usr/bin/node /srv/agent/index.js
 - **App（iPhone）**：“设置 → 检查更新”会提示新版本。点“下载并导入签名工具”，在弹出的面板里选择安装时使用的签名工具（轻松签、全能签、万能签等），再用它和同一个 Apple ID（或证书）签名安装即可，数据保留。也可以点“打开下载页”自己下载。
 - **命令行**：`harmonia update`。后台服务每天检查一次，有新版本时 `harmonia status` 会显示，在终端里运行其他命令时每天最多提示一次。`harmonia update auto on` 开启自动更新后，后台服务发现新版本直接升级；也可以在手机“设备 → 这台电脑 → 版本与更新”里打开，或点“更新”让它马上升级（需要安装后台服务）。
 - **服务端**：在你的 Fork 中点击 Sync fork。
+- **兼容检查**：`harmonia update` 和后台服务升级前会向服务端确认协议版本，服务端还没更新到新版本使用的协议时不升级，提示先更新服务端。
 
 ### 更新渠道
 

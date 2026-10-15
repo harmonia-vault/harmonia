@@ -1,9 +1,8 @@
-package manager
+package app
 
 import (
 	"strings"
 
-	"github.com/harmonia-vault/harmonia/cli/internal/app"
 	hc "github.com/harmonia-vault/harmonia/cli/internal/crypto"
 )
 
@@ -64,7 +63,7 @@ func ParseDotenv(text string) (vars map[string]string, names []string, errs []Pa
 			}
 			value = strings.TrimRight(raw, " \t")
 		}
-		if err := app.ValidateName(name); err != nil {
+		if err := ValidateName(name); err != nil {
 			fail(err.Error())
 			continue
 		}

@@ -74,6 +74,69 @@ describe("环境、变量与同步", () => {
   });
 });
 
+describe("批量写入变量", () => {
+  const batch = (s: TestServer, token: string, env: string, body: object, key = newId()) =>
+    s.call("PATCH", `/api/v1/environments/${env}/variables`, { token, body, headers: { "idempotency-key": key } });
+
+  it("整批写入与删除共用一个 seq，幂等重放返回原结果", async () => {
+    const s = new TestServer();
+    const a = await TestAccount.create(s);
+    const env = await a.createEnv(s, [a.phone.id]);
+    expect((await put(s, a.phone.token, env, "OLD")).status).toBe(200);
+    const before = await s.ok("GET", "/api/v1/sync?since=0", { token: a.phone.token });
+    s.pushes = [];
+    const key = newId();
+    const body = {
+      keyVersion: "1",
+      set: [
+        { name: "A", value: value() },
+        { name: "B", value: value() },
+      ],
+      delete: ["OLD", "MISSING"],
+    };
+    const first = await batch(s, a.phone.token, env, body, key);
+    expect(first.status).toBe(200);
+    expect(s.pushes.filter((p) => p.msg.type === "changed")).toHaveLength(1);
+    const replay = await batch(s, a.phone.token, env, body, key);
+    expect(replay.json.seq).toBe(first.json.seq);
+    expect((await batch(s, a.phone.token, env, { ...body, delete: [] }, key)).status).toBe(409);
+
+    const inc = await s.ok("GET", `/api/v1/sync?since=${before.seq}`, { token: a.phone.token });
+    const changes = inc.variables.map((v: { name: string; deleted: boolean; seq: number }) => [v.name, v.deleted, v.seq]);
+    expect(changes.sort()).toEqual([
+      ["A", false, first.json.seq],
+      ["B", false, first.json.seq],
+      ["OLD", true, first.json.seq],
+    ]);
+  });
+
+  it("任意一项不合法时整批拒绝", async () => {
+    const s = new TestServer();
+    const a = await TestAccount.create(s);
+    const env = await a.createEnv(s, [a.phone.id]);
+    const cases = [
+      { keyVersion: "1", set: [] },
+      { keyVersion: "1", set: [{ name: "A", value: value() }, { name: "1BAD", value: value() }] },
+      { keyVersion: "1", set: [{ name: "A", value: value() }], delete: ["A"] },
+      { keyVersion: "1", set: Array.from({ length: 101 }, (_, i) => ({ name: `V${i}`, value: value() })) },
+    ];
+    for (const body of cases) expect((await batch(s, a.phone.token, env, body)).status).toBe(400);
+    const stale = await batch(s, a.phone.token, env, { keyVersion: "2", set: [{ name: "A", value: value() }] });
+    expect(stale.status).toBe(409);
+    const sync = await s.ok("GET", "/api/v1/sync?since=0", { token: a.phone.token });
+    expect(sync.variables).toHaveLength(0);
+  });
+
+  it("只读设备不能批量写入", async () => {
+    const s = new TestServer();
+    const a = await TestAccount.create(s);
+    const env = await a.createEnv(s, [a.phone.id]);
+    const cli = await pairClient(s, a, [{ envId: env, role: "ro" }]);
+    const res = await batch(s, cli.token, env, { keyVersion: "1", set: [{ name: "A", value: value() }] });
+    expect(res.status).toBe(403);
+  });
+});
+
 describe("配对与权限", () => {
   it("配对、授权、只读拒写、降权、到期与撤销", async () => {
     const s = new TestServer();

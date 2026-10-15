@@ -221,15 +221,45 @@ func TestSelectPicks(t *testing.T) {
 		}
 	}
 
-	// 授权到期的环境连同其中指定的变量一起跳过并说明。
+	// 指定的变量不在这个环境里、但在别的环境里时，指出在哪里。
+	if _, _, err := Select(f.cache, f.dev, parse("开发:API_KEY"), nil, 0); err == nil || !strings.Contains(err.Error(), "--env 生产:API_KEY") {
+		t.Fatalf("应指出其他环境里有这个变量：%v", err)
+	}
+	if _, err := ParsePick(f.cache, "没有"); err == nil || !strings.Contains(err.Error(), "“开发”") || !strings.Contains(err.Error(), "授权") {
+		t.Fatalf("找不到环境时应列出能访问的环境并说明授权：%v", err)
+	}
+
+	// 明确指定的环境授权已到期时报错，不悄悄跳过（不论是整个环境还是其中的变量）。
 	for i := range f.cache.Environments {
 		if f.cache.Environments[i].ID == "env-c" {
 			f.cache.Environments[i].ExpiresAt = 1
 		}
 	}
-	got, skipped, err := Select(f.cache, f.dev, parse("生产:API_KEY", "生产:DB_URL", "开发"), nil, 10)
-	if err != nil || len(skipped) != 1 {
-		t.Fatalf("err %v skipped %v", err, skipped)
+	for _, items := range [][]string{{"生产:API_KEY", "开发"}, {"开发", "生产"}} {
+		if _, _, err := Select(f.cache, f.dev, parse(items...), nil, 10); err == nil || !strings.Contains(err.Error(), "到期") {
+			t.Fatalf("%v：应报授权到期：%v", items, err)
+		}
 	}
-	check(got, map[string]string{"A": "a-a", "SHARED": "a-shared"})
+}
+
+// 解不开的变量只影响它自己：不指定时跳过并说明，其余照常；明确指定时报错。
+func TestBrokenVariableOnlyAffectsItself(t *testing.T) {
+	f := newFixture(t)
+	s := f.sync(t, 0, map[string]map[string]string{"e": {"GOOD": "ok"}},
+		api.Variable{EnvID: "e", Name: "BAD", Value: hc.B64(hc.Random(60)), KeyVersion: "1"})
+	if err := Apply(f.cache, s, 0, hc.B64(f.root.Pub), f.dev.ID); err != nil {
+		t.Fatal(err)
+	}
+	got, skipped := Merge(f.cache, f.dev, []string{"e"}, nil, 0)
+	if got["GOOD"] != "ok" || len(got) != 1 || len(skipped) != 1 || !strings.Contains(skipped[0], "BAD") {
+		t.Fatalf("got %v skipped %v", got, skipped)
+	}
+	if _, _, err := Select(f.cache, f.dev, []Pick{{EnvID: "e", Var: "GOOD"}}, nil, 0); err != nil {
+		t.Fatalf("只取能解开的变量不应报错：%v", err)
+	}
+	for _, p := range []Pick{{EnvID: "e"}, {EnvID: "e", Var: "BAD"}} {
+		if _, _, err := Select(f.cache, f.dev, []Pick{p}, nil, 0); err == nil || !strings.Contains(err.Error(), "var rm") {
+			t.Fatalf("%+v：应报无法解密并给出处理办法：%v", p, err)
+		}
+	}
 }

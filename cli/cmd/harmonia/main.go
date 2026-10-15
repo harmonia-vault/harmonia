@@ -175,6 +175,10 @@ func main() {
 			msg += fmt.Sprintf("运行 harmonia %s --help 查看用法。", args[0])
 		}
 		fmt.Fprintln(os.Stderr, "错误："+msg)
+		if args[0] == "exec" {
+			// 和要运行的命令自己的退出码区分开（同 env、docker 的习惯）。
+			os.Exit(125)
+		}
 		os.Exit(1)
 	}
 }

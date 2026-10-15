@@ -111,6 +111,16 @@ func backgroundCheck(ctx context.Context, logf func(string, ...any), force bool)
 	if force {
 		reason = "收到更新请求"
 	}
+	if err := checkProtocol(ctx, m); err != nil {
+		// 连不上服务器时不冒险升级，下次检查时再试；协议不一致时记下原因，由 status 显示。
+		if !errors.Is(err, errUnverified) {
+			c := loadUpdateCache()
+			c.Failed, c.FailedAt = err.Error(), time.Now().UnixMilli()
+			saveUpdateCache(c)
+		}
+		logf("%s：暂不升级到 %s：%v", reason, m.Version, err)
+		return false
+	}
 	logf("%s：开始升级到 %s（当前 %s）", reason, m.Version, version)
 	if _, err := installVersion(ctx, m); err != nil {
 		c := loadUpdateCache()

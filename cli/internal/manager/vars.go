@@ -3,14 +3,10 @@ package manager
 import (
 	"context"
 	"errors"
-	"fmt"
 	"slices"
 	"sort"
-	"sync"
-	"sync/atomic"
 	"unicode/utf8"
 
-	"github.com/harmonia-vault/harmonia/cli/internal/api"
 	"github.com/harmonia-vault/harmonia/cli/internal/app"
 	hc "github.com/harmonia-vault/harmonia/cli/internal/crypto"
 	"github.com/harmonia-vault/harmonia/cli/internal/vault"
@@ -120,7 +116,7 @@ func apply(e hc.Entry, ch app.VarChange) hc.Entry {
 	return e
 }
 
-// SetVars 把一批变量写入环境，逐个调用变量接口；返回每个变量的结果。必须在线。
+// SetVars 把一批变量写入环境，用批量写入接口每批最多 100 项；返回每个变量的结果。必须在线。
 // 没有给出备注的变量保留原来的备注。
 func (s *Session) SetVars(ctx context.Context, envID string, changes map[string]app.VarChange) ([]Result, error) {
 	s.mu.Lock()
@@ -133,44 +129,51 @@ func (s *Session) setLocked(ctx context.Context, envID string, changes map[strin
 	if err != nil {
 		return nil, err
 	}
-	key, kv, err := vault.EnvKey(s.cache, s.keys, envID)
-	if err != nil {
-		return nil, err
-	}
 	names := make([]string, 0, len(changes))
 	for n := range changes {
 		names = append(names, n)
 	}
 	sort.Strings(names)
-	return s.each(ctx, names, func(name string) error {
-		if err := app.ValidateName(name); err != nil {
-			return err
-		}
-		ch := changes[name]
-		old, exists := cur[name]
-		if ch.Value == nil && !exists {
-			if slices.Contains(broken, name) {
-				return errors.New("变量无法解密，请填写值后重新保存")
-			}
-			return errors.New("变量不存在，可能已在其他设备上删除")
-		}
-		if ch.Note != nil {
-			note, err := app.NormalizeNote(*ch.Note)
-			if err != nil {
-				return err
-			}
-			ch.Note = &note
-		}
-		e := apply(old, ch)
-		if len(e.Value) > hc.MaxValueLen {
-			return errors.New("值超过 64 KB")
-		}
-		ct, err := hc.EncryptVar(key, envID, kv, name, e)
+	out := make([]Result, len(names))
+	var items []app.BatchItem
+	var idx []int
+	for i, name := range names {
+		out[i].Name = name
+		e, err := entryFor(name, changes[name], cur, broken)
 		if err != nil {
-			return err
+			out[i].Error = err.Error()
+			continue
 		}
-		return s.client.PutVariable(ctx, envID, name, ct, fmt.Sprint(kv), hc.NewID())
-	})
+		items = append(items, app.BatchItem{Name: name, Entry: e})
+		idx = append(idx, i)
+	}
+	return s.writeLocked(ctx, envID, out, items, idx)
+}
+
+// entryFor 算出写入后的变量内容，检查名称、备注和长度。
+func entryFor(name string, ch app.VarChange, cur map[string]hc.Entry, broken []string) (hc.Entry, error) {
+	if err := app.ValidateName(name); err != nil {
+		return hc.Entry{}, err
+	}
+	old, exists := cur[name]
+	if ch.Value == nil && !exists {
+		if slices.Contains(broken, name) {
+			return hc.Entry{}, errors.New("变量无法解密，请填写值后重新保存")
+		}
+		return hc.Entry{}, errors.New("变量不存在，可能已在其他设备上删除")
+	}
+	if ch.Note != nil {
+		note, err := app.NormalizeNote(*ch.Note)
+		if err != nil {
+			return hc.Entry{}, err
+		}
+		ch.Note = &note
+	}
+	e := apply(old, ch)
+	if len(e.Value) > hc.MaxValueLen {
+		return hc.Entry{}, errors.New("值超过 64 KB")
+	}
+	return e, nil
 }
 
 // DeleteVars 删除一批变量。
@@ -180,37 +183,35 @@ func (s *Session) DeleteVars(ctx context.Context, envID string, names []string) 
 	if _, err := s.envLocked(envID); err != nil {
 		return nil, err
 	}
-	return s.each(ctx, names, func(name string) error {
-		return s.client.DeleteVariable(ctx, envID, name, hc.NewID())
-	})
+	out := make([]Result, len(names))
+	items := make([]app.BatchItem, len(names))
+	idx := make([]int, len(names))
+	for i, name := range names {
+		out[i].Name = name
+		items[i] = app.BatchItem{Name: name, Delete: true}
+		idx[i] = i
+	}
+	return s.writeLocked(ctx, envID, out, items, idx)
 }
 
-// each 对每个名称执行一次写入（最多 4 个同时进行），收集各自的结果，最后同步一次。
+// writeLocked 用批量写入接口写入 items（idx 是各项在 out 中的位置），把结果记到 out，最后同步一次。
 // 本机已被移除时整体返回 api.ErrRevoked。
-func (s *Session) each(ctx context.Context, names []string, do func(name string) error) ([]Result, error) {
-	out := make([]Result, len(names))
-	var (
-		wg      sync.WaitGroup
-		revoked atomic.Bool
-		slots   = make(chan struct{}, 4)
-	)
-	for i, name := range names {
-		wg.Add(1)
-		slots <- struct{}{}
-		go func() {
-			defer func() { <-slots; wg.Done() }()
-			out[i].Name = name
-			if err := do(name); err != nil {
-				out[i].Error = err.Error()
-				if errors.Is(err, api.ErrRevoked) {
-					revoked.Store(true)
-				}
-			}
-		}()
+func (s *Session) writeLocked(ctx context.Context, envID string, out []Result, items []app.BatchItem, idx []int) ([]Result, error) {
+	if len(items) == 0 {
+		return out, nil
 	}
-	wg.Wait()
-	if revoked.Load() {
-		return nil, api.ErrRevoked
+	key, kv, err := vault.EnvKey(s.cache, s.keys, envID)
+	if err != nil {
+		return nil, err
+	}
+	errs, err := app.WriteBatch(ctx, s.client, envID, key, kv, items)
+	if err != nil {
+		return nil, err
+	}
+	for j, i := range idx {
+		if errs[j] != nil {
+			out[i].Error = errs[j].Error()
+		}
 	}
 	return out, s.syncLocked(ctx)
 }

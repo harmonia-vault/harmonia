@@ -116,7 +116,11 @@ type NewEnvelope struct {
 	Sig        string `json:"sig"`
 }
 
-func (c *Client) Instance(ctx context.Context) (*Instance, error) {
+// Protocol 是这个 CLI 使用的协议版本（docs/protocol.md），发布清单的 protocol 也由它生成。
+const Protocol = 1
+
+// InstanceInfo 读取服务器的实例信息，不检查兼容性（升级前预检用）。
+func (c *Client) InstanceInfo(ctx context.Context) (*Instance, error) {
 	var out Instance
 	if err := c.Public(ctx, "GET", "/api/v1/instance", nil, &out); err != nil {
 		return nil, err
@@ -124,10 +128,19 @@ func (c *Client) Instance(ctx context.Context) (*Instance, error) {
 	if out.Product != "harmonia" {
 		return nil, fmt.Errorf("这个地址不是 Harmonia 服务")
 	}
-	if out.Protocol != 1 {
+	return &out, nil
+}
+
+// Instance 读取实例信息，并确认服务器的协议版本和本机 CLI 一致。
+func (c *Client) Instance(ctx context.Context) (*Instance, error) {
+	out, err := c.InstanceInfo(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if out.Protocol != Protocol {
 		return nil, fmt.Errorf("服务器版本（%s）与本机 CLI 不兼容，请升级 CLI 或服务器", out.Version)
 	}
-	return &out, nil
+	return out, nil
 }
 
 // Lookup 按邮箱匿名查询账号；邮箱没有注册时返回 not_found 错误。
@@ -148,9 +161,9 @@ func (c *Client) PairingStatus(ctx context.Context, id, secret string) (string, 
 	return out.Status, err
 }
 
-// SetActivation 按顺序提交本机全部授权环境的激活状态。
+// SetActivation 按顺序提交本机全部授权环境的激活状态。整体替换，重试是安全的。
 func (c *Client) SetActivation(ctx context.Context, envs []ActivationItem) error {
-	return c.Device(ctx, "PUT", "/api/v1/devices/self/activation", map[string]any{"envs": envs}, nil, nil)
+	return c.DeviceWrite(ctx, "PUT", "/api/v1/devices/self/activation", map[string]any{"envs": envs}, nil, nil)
 }
 
 func (c *Client) Sync(ctx context.Context, since int64) (*Sync, error) {
@@ -158,13 +171,26 @@ func (c *Client) Sync(ctx context.Context, since int64) (*Sync, error) {
 	return &out, c.Device(ctx, "GET", fmt.Sprintf("/api/v1/sync?since=%d", since), nil, &out, nil)
 }
 
-func (c *Client) PutVariable(ctx context.Context, envID, name, value, keyVersion, idemKey string) error {
-	body := map[string]string{"value": value, "keyVersion": keyVersion}
-	return c.Device(ctx, "PUT", "/api/v1/environments/"+envID+"/variables/"+name, body, nil, map[string]string{"idempotency-key": idemKey})
+// VarWrite 是批量写入的一项：名称和密文。
+type VarWrite struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+// PatchVariables 批量写入和删除一个环境里的变量（docs/protocol.md 3.2）：整批生效或整批拒绝。
+func (c *Client) PatchVariables(ctx context.Context, envID, keyVersion string, set []VarWrite, del []string, idemKey string) error {
+	if set == nil {
+		set = []VarWrite{}
+	}
+	if del == nil {
+		del = []string{}
+	}
+	body := map[string]any{"keyVersion": keyVersion, "set": set, "delete": del}
+	return c.DeviceWrite(ctx, "PATCH", "/api/v1/environments/"+envID+"/variables", body, nil, map[string]string{"idempotency-key": idemKey})
 }
 
 func (c *Client) DeleteVariable(ctx context.Context, envID, name, idemKey string) error {
-	return c.Device(ctx, "DELETE", "/api/v1/environments/"+envID+"/variables/"+name, nil, nil, map[string]string{"idempotency-key": idemKey})
+	return c.DeviceWrite(ctx, "DELETE", "/api/v1/environments/"+envID+"/variables/"+name, nil, nil, map[string]string{"idempotency-key": idemKey})
 }
 
 func (c *Client) RevokeSelf(ctx context.Context) error {
