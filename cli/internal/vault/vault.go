@@ -4,9 +4,11 @@ package vault
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/harmonia-vault/harmonia/cli/internal/api"
 	hc "github.com/harmonia-vault/harmonia/cli/internal/crypto"
@@ -76,10 +78,22 @@ func Find(c *state.Cache, nameOrID string) (*api.Environment, error) {
 	case 1:
 		return &match[0], nil
 	case 0:
-		return nil, fmt.Errorf("找不到环境“%s”。运行 harmonia env list 查看可用的环境", nameOrID)
+		return nil, notFound(c, nameOrID)
 	default:
 		return nil, fmt.Errorf("有多个名为“%s”的环境，请改用环境 ID", nameOrID)
 	}
+}
+
+// notFound 说明环境为什么找不到：列出这台设备能访问的环境，并说明没被授权时怎么办。
+func notFound(c *state.Cache, nameOrID string) error {
+	if len(c.Environments) == 0 {
+		return fmt.Errorf("找不到环境“%s”：这台设备还没有任何环境的访问权限。请在管理设备上为这台设备授权", nameOrID)
+	}
+	var names []string
+	for _, e := range Ordered(c) {
+		names = append(names, "“"+e.Name+"”")
+	}
+	return fmt.Errorf("找不到环境“%s”。这台设备能访问的环境：%s。名字没写错的话，需要在管理设备上为这台设备授权这个环境", nameOrID, strings.Join(names, "、"))
 }
 
 // Expired 判断授权是否已到期（离线时同样生效）。
@@ -97,12 +111,12 @@ func EnvKey(c *state.Cache, k *state.DeviceKeys, envID string) ([]byte, int, err
 		}
 		key, err := k.Box.Open(sealed)
 		if err != nil || len(key) != 32 {
-			return nil, 0, errors.New("无法解开环境密钥，可能需要在管理设备上重新授权这台设备")
+			return nil, 0, errors.New("无法解开环境密钥，请在管理设备上重新授权这台设备")
 		}
 		kv, _ := strconv.Atoi(e.KeyVersion)
 		return key, kv, nil
 	}
-	return nil, 0, errors.New("这台设备没有这个环境的密钥")
+	return nil, 0, errors.New("这台设备没有这个环境的密钥，请在管理设备上重新授权这台设备")
 }
 
 // Entries 解密一个环境的全部变量（值和备注）。解不开的变量不放进结果，名称按顺序列在 broken 里，
@@ -126,20 +140,17 @@ func Entries(c *state.Cache, k *state.DeviceKeys, envID string) (map[string]hc.E
 	return out, broken, nil
 }
 
-// Values 解密一个环境的全部变量的值；有变量解不开时整个环境报错。
-func Values(c *state.Cache, k *state.DeviceKeys, envID string) (map[string]string, error) {
+// Values 解密一个环境的全部变量的值；解不开的变量不放进结果，名称列在 broken 里，其余照常使用。
+func Values(c *state.Cache, k *state.DeviceKeys, envID string) (map[string]string, []string, error) {
 	entries, broken, err := Entries(c, k, envID)
 	if err != nil {
-		return nil, err
-	}
-	if len(broken) > 0 {
-		return nil, fmt.Errorf("变量 %s 无法解密，可能数据已损坏。可以用 harmonia var rm 删除它，或在管理设备上重新写入", broken[0])
+		return nil, nil, err
 	}
 	out := make(map[string]string, len(entries))
 	for name, e := range entries {
 		out[name] = e.Value
 	}
-	return out, nil
+	return out, broken, nil
 }
 
 // Ordered 返回按顺序排列的环境副本（靠前的提供同名变量）。
@@ -161,14 +172,13 @@ func ActiveIDs(c *state.Cache) []string {
 }
 
 // Merge 按顺序合并环境：同名变量由排在前面的环境提供；本地覆盖值先替换所在环境中的值。
-// 未授权、已到期或已删除的环境被跳过，并在 skipped 中说明。
+// 未授权、已到期或密钥解不开的环境，以及解不开的变量被跳过，并在 skipped 中逐条说明原因和处理办法。
 func Merge(c *state.Cache, k *state.DeviceKeys, ids []string, ov state.Overrides, nowMs int64) (map[string]string, []string) {
 	picks := make([]Pick, len(ids))
 	for i, id := range ids {
 		picks[i] = Pick{EnvID: id}
 	}
-	// 只选整个环境时不会因为缺少变量而出错。
-	out, skipped, _ := Select(c, k, picks, ov, nowMs)
+	out, skipped, _ := merge(c, k, picks, ov, nowMs, false)
 	return out, skipped
 }
 
@@ -200,9 +210,13 @@ func ParsePick(c *state.Cache, item string) (Pick, error) {
 	return Pick{EnvID: env.ID, Var: name}, nil
 }
 
-// Select 按 picks 的顺序合并：同名变量由排在前面的一项提供，规则同 Merge。
-// 指定的变量在环境中不存在时返回错误；跳过的环境（已到期等）连同其中指定的变量一起跳过。
+// Select 按 picks 的顺序合并：同名变量由排在前面的一项提供，规则同 Merge。picks 是用户明确指定的，
+// 指定的环境拿不到（授权到期、密钥解不开）、其中有变量解不开，或指定的变量不存在时返回错误，说明原因和处理办法。
 func Select(c *state.Cache, k *state.DeviceKeys, picks []Pick, ov state.Overrides, nowMs int64) (map[string]string, []string, error) {
+	return merge(c, k, picks, ov, nowMs, true)
+}
+
+func merge(c *state.Cache, k *state.DeviceKeys, picks []Pick, ov state.Overrides, nowMs int64, strict bool) (map[string]string, []string, error) {
 	var ids []string
 	seen := map[string]bool{}
 	for _, p := range picks {
@@ -211,10 +225,19 @@ func Select(c *state.Cache, k *state.DeviceKeys, picks []Pick, ov state.Override
 			ids = append(ids, p.EnvID)
 		}
 	}
-	var skipped []string
+	srcs, problems := sources(c, k, ids, ov, nowMs)
 	byID := map[string]source{}
-	for _, src := range sources(c, k, ids, ov, nowMs, &skipped) {
+	for _, src := range srcs {
 		byID[src.env.ID] = src
+	}
+	var skipped []string
+	for _, id := range ids {
+		if p, ok := problems[id]; ok {
+			if strict {
+				return nil, nil, errors.New(p)
+			}
+			skipped = append(skipped, p+"，已跳过")
+		}
 	}
 	out := map[string]string{}
 	add := func(name, v string) {
@@ -228,18 +251,46 @@ func Select(c *state.Cache, k *state.DeviceKeys, picks []Pick, ov state.Override
 			continue
 		}
 		if p.Var == "" {
+			for _, name := range src.broken {
+				msg := brokenNote(src.env, name)
+				if strict {
+					return nil, nil, errors.New(msg)
+				}
+				skipped = append(skipped, msg)
+			}
 			for name, v := range src.vals {
 				add(name, v)
 			}
 			continue
 		}
 		v, ok := src.vals[p.Var]
+		if !ok && slices.Contains(src.broken, p.Var) {
+			return nil, nil, errors.New(brokenNote(src.env, p.Var))
+		}
 		if !ok {
-			return nil, nil, fmt.Errorf("环境“%s”里没有变量 %s。运行 harmonia var list --env %s 查看这个环境的变量", src.env.Name, p.Var, src.env.Name)
+			return nil, nil, missingVar(c, src.env, p.Var)
 		}
 		add(p.Var, v)
 	}
 	return out, skipped, nil
+}
+
+func brokenNote(env *api.Environment, name string) string {
+	return fmt.Sprintf("环境“%s”的变量 %s 无法解密，可以用 harmonia var rm %s %s 删除，或在管理设备上重新写入", env.Name, name, env.Name, name)
+}
+
+// missingVar 说明指定的变量不在这个环境里；能访问的其他环境里有同名变量时一并指出。
+func missingVar(c *state.Cache, env *api.Environment, name string) error {
+	var others []string
+	for _, e := range Ordered(c) {
+		if _, ok := c.Variables[e.ID][name]; ok && e.ID != env.ID {
+			others = append(others, e.Name)
+		}
+	}
+	if len(others) > 0 {
+		return fmt.Errorf("环境“%s”里没有变量 %s，“%s”里有，可以写成 --env %s:%s", env.Name, name, strings.Join(others, "”“"), others[0], name)
+	}
+	return fmt.Errorf("环境“%s”里没有变量 %s。运行 harmonia var list --env %s 查看这个环境的变量，或用 harmonia var set %s %s 写入", env.Name, name, env.Name, env.Name, name)
 }
 
 // Conflict 表示一个变量同时出现在多个环境中；Envs 按顺序排列，第一个生效。
@@ -251,7 +302,8 @@ type Conflict struct {
 // Conflicts 列出按 ids 顺序合并时，同名变量分别来自哪些环境（环境名）。
 func Conflicts(c *state.Cache, k *state.DeviceKeys, ids []string, nowMs int64) []Conflict {
 	by := map[string][]string{}
-	for _, src := range sources(c, k, ids, nil, nowMs, nil) {
+	srcs, _ := sources(c, k, ids, nil, nowMs)
+	for _, src := range srcs {
 		for name := range src.vals {
 			by[name] = append(by[name], src.env.Name)
 		}
@@ -267,17 +319,25 @@ func Conflicts(c *state.Cache, k *state.DeviceKeys, ids []string, nowMs int64) [
 }
 
 type source struct {
-	env  *api.Environment
-	vals map[string]string
+	env    *api.Environment
+	vals   map[string]string
+	broken []string
 }
 
-// sources 按 ids 顺序解出各环境的变量（已套用本地覆盖），跳过的原因写入 skipped（可为 nil）。
-func sources(c *state.Cache, k *state.DeviceKeys, ids []string, ov state.Overrides, nowMs int64, skipped *[]string) []source {
-	note := func(s string) {
-		if skipped != nil {
-			*skipped = append(*skipped, s)
-		}
+// Unavailable 说明这个环境为什么拿不到变量（授权到期、密钥解不开），以及怎么处理；能用时返回空。
+func Unavailable(c *state.Cache, k *state.DeviceKeys, env api.Environment, nowMs int64) string {
+	if Expired(env, nowMs) {
+		return fmt.Sprintf("这台设备对环境“%s”的授权已于 %s 到期，请在管理设备上重新授权", env.Name, time.UnixMilli(env.ExpiresAt).Format("2006-01-02 15:04"))
 	}
+	if _, _, err := EnvKey(c, k, env.ID); err != nil {
+		return fmt.Sprintf("环境“%s”：%v", env.Name, err)
+	}
+	return ""
+}
+
+// sources 按 ids 顺序解出各环境的变量（已套用本地覆盖）；拿不到的环境不放进结果，原因记在 problems 里。
+func sources(c *state.Cache, k *state.DeviceKeys, ids []string, ov state.Overrides, nowMs int64) ([]source, map[string]string) {
+	problems := map[string]string{}
 	var out []source
 	for _, id := range ids {
 		var env *api.Environment
@@ -287,16 +347,16 @@ func sources(c *state.Cache, k *state.DeviceKeys, ids []string, ov state.Overrid
 			}
 		}
 		if env == nil {
-			note(fmt.Sprintf("环境 %s 已不可访问，已跳过", id))
+			problems[id] = fmt.Sprintf("环境 %s 已不可访问（授权可能已被撤销）", id)
 			continue
 		}
-		if Expired(*env, nowMs) {
-			note(fmt.Sprintf("环境“%s”的授权已到期，已跳过", env.Name))
+		if p := Unavailable(c, k, *env, nowMs); p != "" {
+			problems[id] = p
 			continue
 		}
-		vals, err := Values(c, k, id)
+		vals, broken, err := Values(c, k, id)
 		if err != nil {
-			note(fmt.Sprintf("环境“%s”：%v", env.Name, err))
+			problems[id] = fmt.Sprintf("环境“%s”：%v", env.Name, err)
 			continue
 		}
 		for name, v := range ov[id] {
@@ -304,9 +364,9 @@ func sources(c *state.Cache, k *state.DeviceKeys, ids []string, ov state.Overrid
 				vals[name] = v
 			}
 		}
-		out = append(out, source{env: env, vals: vals})
+		out = append(out, source{env: env, vals: vals, broken: broken})
 	}
-	return out
+	return out, problems
 }
 
 // Known 返回这台设备能访问的每个环境（含已停用、已到期的）给各变量的值，以及本机覆盖值：
@@ -320,7 +380,7 @@ func Known(c *state.Cache, k *state.DeviceKeys, ov state.Overrides) map[string]m
 		out[name][v] = true
 	}
 	for _, env := range c.Environments {
-		vals, err := Values(c, k, env.ID)
+		vals, _, err := Values(c, k, env.ID)
 		if err != nil {
 			continue
 		}

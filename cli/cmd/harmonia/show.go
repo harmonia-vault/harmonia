@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/harmonia-vault/harmonia/cli/internal/api"
 	"github.com/harmonia-vault/harmonia/cli/internal/app"
 	"github.com/harmonia-vault/harmonia/cli/internal/state"
 	"github.com/harmonia-vault/harmonia/cli/internal/vault"
@@ -78,7 +79,76 @@ func cmdStatus(ctx context.Context, args []string) error {
 		fmt.Println("\n" + strings.Join(notes, "\n"))
 	}
 	fmt.Println()
-	return printEnvs(a)
+	if err := printEnvs(a); err != nil {
+		return err
+	}
+	if problems := statusProblems(a); len(problems) > 0 {
+		fmt.Println("\n需要处理")
+		for _, p := range problems {
+			fmt.Println("  - " + sentence(p))
+		}
+	}
+	return nil
+}
+
+// envHealth 返回环境的健康状况（显示在环境表里），有问题时附上一句原因和处理办法。
+func envHealth(a *app.App, cache *state.Cache, e api.Environment) (string, string) {
+	if p := vault.Unavailable(cache, a.Keys, e, time.Now().UnixMilli()); p != "" {
+		if vault.Expired(e, time.Now().UnixMilli()) {
+			return "授权已到期", p
+		}
+		return "密钥解不开", p
+	}
+	_, broken, err := vault.Entries(cache, a.Keys, e.ID)
+	if err != nil {
+		return "密钥解不开", fmt.Sprintf("环境“%s”：%v", e.Name, err)
+	}
+	if len(broken) > 0 {
+		return fmt.Sprintf("%d 个变量解不开", len(broken)), fmt.Sprintf("环境“%s”的变量 %s 无法解密：可以用 harmonia var rm %s <变量名> 删除，或在管理设备上重新写入",
+			e.Name, strings.Join(broken, "、"), e.Name)
+	}
+	return "正常", ""
+}
+
+// statusProblems 用本机缓存找出需要处理的问题：环境和变量解不开、授权到期、失效的本机覆盖值、长时间没有同步。
+func statusProblems(a *app.App) []string {
+	cache, err := a.Dir.Cache()
+	if err != nil {
+		return []string{err.Error()}
+	}
+	var out []string
+	for _, e := range vault.Ordered(cache) {
+		if _, p := envHealth(a, cache, e); p != "" {
+			out = append(out, p)
+		}
+	}
+	ov, _ := a.Dir.Overrides()
+	ids := make([]string, 0, len(ov))
+	for id := range ov {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		env, err := vault.Find(cache, id)
+		if err != nil {
+			out = append(out, fmt.Sprintf("本机覆盖值所在的环境 %s 已无法访问，覆盖值不生效：用 harmonia override rm %s <变量名> 移除", id, id))
+			continue
+		}
+		var gone []string
+		for name := range ov[id] {
+			if _, ok := cache.Variables[id][name]; !ok {
+				gone = append(gone, name)
+			}
+		}
+		sort.Strings(gone)
+		for _, name := range gone {
+			out = append(out, fmt.Sprintf("环境“%s”里已经没有 %s，本机覆盖值不生效：用 harmonia override rm %s %s 移除", env.Name, name, env.Name, name))
+		}
+	}
+	if a.Config.LastSync != 0 && time.Since(time.UnixMilli(a.Config.LastSync)) > 24*time.Hour {
+		out = append(out, fmt.Sprintf("上次同步是 %s，变量和授权可能不是最新的：运行 harmonia sync；安装后台服务（harmonia service install）可以一直保持同步", ago(a.Config.LastSync)))
+	}
+	return out
 }
 
 func printEnvs(a *app.App) error {
@@ -91,14 +161,15 @@ func printEnvs(a *app.App) error {
 		return nil
 	}
 	fmt.Println("环境（同名变量由排在前面的环境提供）")
-	rows := [][]string{{"", "名称", "权限", "变量", "有效期", "状态", "ID"}}
+	rows := [][]string{{"", "名称", "权限", "变量", "有效期", "状态", "健康", "ID"}}
 	for i, e := range vault.Ordered(cache) {
 		state := "未启用"
 		if e.Active {
 			state = "已启用"
 		}
+		health, _ := envHealth(a, cache, e)
 		rows = append(rows, []string{
-			fmt.Sprint(i + 1), e.Name, roleNames[e.Role], fmt.Sprint(len(cache.Variables[e.ID])), expiry(e.ExpiresAt), state, e.ID,
+			fmt.Sprint(i + 1), e.Name, roleNames[e.Role], fmt.Sprint(len(cache.Variables[e.ID])), expiry(e.ExpiresAt), state, health, e.ID,
 		})
 	}
 	printTable(os.Stdout, "  ", rows)

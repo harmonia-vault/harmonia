@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"os"
@@ -70,67 +71,144 @@ type VarChange struct {
 	Note  *string `json:"note"`
 }
 
-// SetVariables 把变量写入云端，成功后同步到本机。必须在线。
-func (a *App) SetVariables(ctx context.Context, envNameOrID string, changes map[string]VarChange) error {
+// 写入一个变量的结果。
+const (
+	Written   = "written"   // 已写入，并且回读校验一致
+	Unchanged = "unchanged" // 和现有的值、备注相同，跳过
+	Failed    = "failed"    // 失败，原因见 Err
+)
+
+// VarResult 是写入一个变量的结果。
+type VarResult struct {
+	Name   string
+	Status string
+	Err    error
+}
+
+// UnverifiedError 表示变量已经写入云端，但写入后的同步没有完成，没能回读校验。
+type UnverifiedError struct{ Err error }
+
+func (e *UnverifiedError) Error() string {
+	return "已写入云端，但回读校验没有完成（" + e.Err.Error() + "）。稍后运行 harmonia sync 确认"
+}
+
+func (e *UnverifiedError) Unwrap() error { return e.Err }
+
+// digest 是变量内容的 SHA-256，只用于在内存里比较写入的和回读的是否一致。
+func digest(e hc.Entry) [2][32]byte {
+	return [2][32]byte{sha256.Sum256([]byte(e.Value)), sha256.Sum256([]byte(e.Note))}
+}
+
+// SetVariables 把变量写入云端。先同步取得最新状态；skipSame 时跳过值和备注都没变的变量（导入时，
+// 重跑等于从断点继续）；其余用批量写入接口写入。写入后再同步一次，从本机缓存解密回读，核对 SHA-256。
+// 返回每个变量的结果，按名称排序；回读前的同步失败时同时返回 *UnverifiedError。必须在线。
+func (a *App) SetVariables(ctx context.Context, envNameOrID string, changes map[string]VarChange, skipSame bool) ([]VarResult, error) {
+	if err := a.Sync(ctx); err != nil {
+		return nil, err
+	}
 	env, err := a.writableEnv(envNameOrID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	cache, err := a.Dir.Cache()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	key, kv, err := vault.EnvKey(cache, a.Keys, env.ID)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	var (
-		current map[string]hc.Entry
-		broken  []string
-	)
-	entries := make(map[string]hc.Entry, len(changes))
+	current, broken, err := vault.Entries(cache, a.Keys, env.ID)
+	if err != nil {
+		return nil, err
+	}
 	names := make([]string, 0, len(changes))
-	for n, ch := range changes {
+	for n := range changes {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	results := make([]VarResult, len(names))
+	var (
+		items []BatchItem
+		idx   []int
+	)
+	for i, n := range names {
+		results[i].Name = n
+		fail := func(err error) { results[i].Status, results[i].Err = Failed, err }
 		if err := ValidateName(n); err != nil {
-			return err
+			fail(err)
+			continue
 		}
-		if (ch.Value == nil || ch.Note == nil) && current == nil {
-			if current, broken, err = vault.Entries(cache, a.Keys, env.ID); err != nil {
-				return err
-			}
-		}
+		ch := changes[n]
 		e, exists := current[n]
 		if ch.Value == nil && !exists {
 			if slices.Contains(broken, n) {
-				return fmt.Errorf("变量 %s 无法解密，请同时给出它的值，重新写入", n)
+				fail(fmt.Errorf("变量 %s 无法解密，请同时给出它的值，重新写入", n))
+			} else {
+				fail(fmt.Errorf("变量 %s 不存在，请同时给出它的值", n))
 			}
-			return fmt.Errorf("变量 %s 不存在，请同时给出它的值", n)
+			continue
 		}
+		old := e
 		if ch.Value != nil {
 			e.Value = *ch.Value
 		}
 		if ch.Note != nil {
 			if e.Note, err = NormalizeNote(*ch.Note); err != nil {
-				return err
+				fail(err)
+				continue
 			}
 		}
 		if len(e.Value) > hc.MaxValueLen {
-			return fmt.Errorf("变量 %s 的值超过 64 KB", n)
+			fail(fmt.Errorf("变量 %s 的值超过 64 KB", n))
+			continue
 		}
-		entries[n] = e
-		names = append(names, n)
+		if skipSame && exists && digest(old) == digest(e) {
+			results[i].Status = Unchanged
+			continue
+		}
+		items = append(items, BatchItem{Name: n, Entry: e})
+		idx = append(idx, i)
 	}
-	sort.Strings(names)
-	for _, n := range names {
-		ct, err := hc.EncryptVar(key, env.ID, kv, n, entries[n])
-		if err != nil {
-			return err
+	if len(items) == 0 {
+		return results, nil
+	}
+	errs, err := WriteBatch(ctx, a.Client, env.ID, key, kv, items)
+	if err != nil {
+		return nil, a.HandleRevoked(err)
+	}
+	want := map[int]hc.Entry{}
+	for j, i := range idx {
+		if errs[j] != nil {
+			results[i].Status, results[i].Err = Failed, fmt.Errorf("写入 %s 失败：%w", items[j].Name, errs[j])
+			continue
 		}
-		if err := a.Client.PutVariable(ctx, env.ID, n, ct, fmt.Sprint(kv), hc.NewID()); err != nil {
-			return a.HandleRevoked(fmt.Errorf("写入 %s 失败：%w", n, err))
+		results[i].Status = Written
+		want[i] = items[j].Entry
+	}
+	if len(want) == 0 {
+		return results, nil
+	}
+	if err := a.Sync(ctx); err != nil {
+		if errors.Is(err, ErrRevokedLocal) {
+			return nil, err
+		}
+		return results, &UnverifiedError{err}
+	}
+	if cache, err = a.Dir.Cache(); err != nil {
+		return results, &UnverifiedError{err}
+	}
+	got, _, err := vault.Entries(cache, a.Keys, env.ID)
+	if err != nil {
+		return results, &UnverifiedError{err}
+	}
+	for i, w := range want {
+		if g, ok := got[results[i].Name]; !ok || digest(g) != digest(w) {
+			results[i].Status = Failed
+			results[i].Err = fmt.Errorf("%s 已写入，但回读的内容和写入的不一致，可能另一台设备同时修改了它。运行 harmonia var list --env %s 查看", results[i].Name, env.Name)
 		}
 	}
-	return a.Sync(ctx)
+	return results, nil
 }
 
 func (a *App) DeleteVariable(ctx context.Context, envNameOrID, name string) error {

@@ -122,6 +122,13 @@ grep -q "可以访问 1 个环境" "$TMP/login.out" || fail "配对后环境数�
 
 step "J4 授权的环境默认启用，通过 exec 使用"
 expect_eq "$(cli exec -- printenv OPENAI_API_KEY 2>/dev/null)" "sk-first 'quoted' \$(no)" "exec 注入"
+[ -e "$TMP/cli/env.sh" ] && fail "没有开启 Shell 集成时不应生成 env.sh"
+if cli export >/dev/null 2>&1; then fail "export 不指明范围时不应输出"; fi
+expect_eq "$(cli export --all --format json 2>/dev/null | grep -c OPENAI_API_KEY)" "1" "export --all 输出全部启用的变量"
+
+step "开启 Shell 集成后才写出 env.sh"
+mkdir -p "$TMP/home"
+HOME="$TMP/home" cli shell install --yes --shell bash >/dev/null
 expect_eq "$(bash -c ". '$TMP/cli/env.sh'; printf %s \"\$OPENAI_API_KEY\"")" "sk-first 'quoted' \$(no)" "env.sh 内容"
 
 step "在手机上让电脑更新：后台服务不在线时给出下一步"
@@ -151,6 +158,22 @@ cli var set OpenAI NOTED --note "电脑改的备注" >/dev/null
 expect_eq "$(manager phone var-get OpenAI NOTED)" "v1" "只改备注时值不变"
 expect_eq "$(manager phone var-note OpenAI NOTED)" "电脑改的备注" "手机读取电脑改的备注"
 cli var rm OpenAI NOTED >/dev/null
+
+step "批量导入：一次请求写入，重跑跳过已写入的，逐条输出结果"
+printf 'IMPORT_A=1\nIMPORT_B="two words"\n' >"$TMP/import.env"
+cli import --env OpenAI --file "$TMP/import.env" >"$TMP/import.out" || { cat "$TMP/import.out"; fail "导入失败"; }
+grep -q "已写入 2 个" "$TMP/import.out" || fail "第一次导入应写入 2 个：$(cat "$TMP/import.out")"
+expect_eq "$(manager phone var-get OpenAI IMPORT_B)" "two words" "手机读取导入的值"
+expect_eq "$(cli import --env OpenAI --file "$TMP/import.env" --json | grep -c '"unchanged"')" "2" "重跑时全部未变化"
+printf '{"IMPORT_A":"1","IMPORT_C":"3"}' | cli import --env OpenAI --file - >/dev/null || fail "从标准输入导入 JSON 失败"
+expect_eq "$(manager phone var-get OpenAI IMPORT_C)" "3" "JSON 导入"
+printf 'IMPORT_D=4\n没有等号\n' >"$TMP/bad.env"
+if cli import --env OpenAI --file "$TMP/bad.env" >/dev/null 2>&1; then fail "有无法识别的行时不应导入"; fi
+expect_eq "$(manager phone var-get OpenAI IMPORT_D)" "" "解析失败时整份都不应写入"
+RC=0; cli exec --env OpenAI:MISSING -- true 2>/dev/null || RC=$?
+expect_eq "$RC" "125" "exec 自身出错时退出码为 125"
+# 本地测试的请求都来自同一个网络，设备登录挑战每分钟最多 30 次：先等过这一分钟。
+sleep 61
 
 step "J6 本地覆盖：只在本机生效，云端删除后失效"
 cli override set OpenAI FROM_CLI "local-only" >/dev/null
@@ -333,6 +356,12 @@ expect_eq "$(mapi /api/logout "$B_PASS" | field phase)" "login" "退出管理登
 cli sync >/dev/null || fail "退出管理登录不应影响日常登录"
 kill -INT $MGR_PID; wait $MGR_PID 2>/dev/null || true; MGR_PID=""
 
+step "关闭 Shell 集成时删除变量文件，后台服务不再写出"
+HOME="$TMP/home" cli shell uninstall >/dev/null
+[ -e "$TMP/cli/env.sh" ] || [ -e "$TMP/cli/shell.sh" ] && fail "关闭 Shell 集成后 env.sh、shell.sh 应当删除"
+cli sync >/dev/null
+[ -e "$TMP/cli/env.sh" ] && fail "关闭 Shell 集成后同步不应再写出 env.sh"
+
 step "J7 撤销：在线设备立即清除本机数据"
 manager phone revoke e2e-laptop >/dev/null
 START=$(date +%s)
@@ -340,7 +369,7 @@ until [ ! -f "$TMP/cli/keys.json" ]; do
   [ $(( $(date +%s) - START )) -le 5 ] || fail "撤销后 5 秒内本机数据没有清除"
   sleep 0.2
 done
-grep -q "OPENAI_API_KEY" "$TMP/cli/env.sh" && fail "撤销后 env.sh 仍有变量"
+[ -e "$TMP/cli/env.sh" ] && fail "撤销后 env.sh 应当不存在"
 cli status | grep -q "还没有接入账号" || fail "撤销后状态不对"
 
 step "J8 恢复：新手机用恢复码恢复，必须轮换；旧恢复码失效"

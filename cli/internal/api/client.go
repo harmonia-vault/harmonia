@@ -4,14 +4,18 @@ package api
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -20,6 +24,8 @@ type Error struct {
 	Status  int
 	Code    string
 	Message string
+	// RetryAfter 是被限流时服务端给出的等待时间。
+	RetryAfter time.Duration
 }
 
 func (e *Error) Error() string {
@@ -27,6 +33,39 @@ func (e *Error) Error() string {
 		return e.Message
 	}
 	return fmt.Sprintf("服务器返回错误（%d %s）", e.Status, e.Code)
+}
+
+// NetError 表示没有连上服务器（请求可能没有发出，也可能发出后没有收到响应）。
+type NetError struct{ Err error }
+
+func (e *NetError) Error() string { return "无法连接服务器：" + netReason(e.Err) }
+
+func (e *NetError) Unwrap() error { return e.Err }
+
+// netReason 把网络错误说成一句人话：地址解析不了、超时、证书不对、被拒绝。
+func netReason(err error) string {
+	var dns *net.DNSError
+	var cert *tls.CertificateVerificationError
+	var ne net.Error
+	switch {
+	case errors.As(err, &dns):
+		return fmt.Sprintf("无法解析地址 %s，请检查网络或服务器地址", dns.Name)
+	case errors.As(err, &cert):
+		return "服务器证书验证失败，请确认服务器地址，或检查网络中是否有代理替换了证书"
+	case errors.Is(err, context.DeadlineExceeded), errors.As(err, &ne) && ne.Timeout():
+		return "连接超时，请检查网络"
+	case errors.Is(err, syscall.ECONNREFUSED):
+		return "连接被拒绝，服务器可能没有运行"
+	case errors.Is(err, context.Canceled):
+		return "已取消"
+	}
+	return err.Error()
+}
+
+// IsNetwork 判断错误是否是没有连上服务器。
+func IsNetwork(err error) bool {
+	var ne *NetError
+	return errors.As(err, &ne)
 }
 
 // ErrRevoked 表示本设备已被移除，调用方应清除本地数据。
@@ -111,7 +150,7 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any, o r
 	}
 	res, err := c.HTTP.Do(req)
 	if err != nil {
-		return fmt.Errorf("无法连接服务器：%w", err)
+		return &NetError{err}
 	}
 	defer res.Body.Close()
 	data, _ := io.ReadAll(io.LimitReader(res.Body, 64<<20))
@@ -123,7 +162,11 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any, o r
 		if e.Error == "device_revoked" {
 			return ErrRevoked
 		}
-		return &Error{Status: res.StatusCode, Code: e.Error, Message: e.Message}
+		out := &Error{Status: res.StatusCode, Code: e.Error, Message: e.Message}
+		if secs, err := strconv.Atoi(res.Header.Get("retry-after")); err == nil && secs >= 0 {
+			out.RetryAfter = time.Duration(secs) * time.Second
+		}
+		return out
 	}
 	if out != nil {
 		if err := json.Unmarshal(data, out); err != nil {
@@ -162,6 +205,49 @@ func (c *Client) DeviceToken(ctx context.Context) (string, error) {
 	}
 	c.token, c.expires = s.Token, time.UnixMilli(s.ExpiresAt)
 	return c.token, nil
+}
+
+// retryWindow 是写请求短时重试的总时长（docs/protocol.md 第 3 节）。
+var retryWindow = 10 * time.Second
+
+// retryable 判断写请求失败后是否值得重试：没连上、服务器内部错误、被限流。
+func retryable(err error) (bool, time.Duration) {
+	var e *Error
+	switch {
+	case IsNetwork(err):
+		return true, 0
+	case errors.As(err, &e) && e.Code == "rate_limited":
+		return true, e.RetryAfter
+	case errors.As(err, &e) && e.Status >= 500:
+		return true, 0
+	}
+	return false, 0
+}
+
+// DeviceWrite 以设备身份发送幂等的写请求：遇到网络错误、5xx 或限流时，在 retryWindow 内退避重试，
+// 每次发送的都是同一个请求（包括幂等键），服务端不会重复写入。不在本机排队稍后重放。
+func (c *Client) DeviceWrite(ctx context.Context, method, path string, body, out any, headers map[string]string) error {
+	deadline := time.Now().Add(retryWindow)
+	wait := 500 * time.Millisecond
+	for {
+		err := c.Device(ctx, method, path, body, out, headers)
+		ok, after := retryable(err)
+		if err == nil || !ok || ctx.Err() != nil {
+			return err
+		}
+		if after > wait {
+			wait = after
+		}
+		if time.Now().Add(wait).After(deadline) {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return err
+		case <-time.After(wait):
+		}
+		wait *= 2
+	}
 }
 
 // Device 以设备身份调用；会话过期时自动重新登录一次。

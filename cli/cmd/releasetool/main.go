@@ -18,6 +18,7 @@ import (
 
 	"aead.dev/minisign"
 
+	"github.com/harmonia-vault/harmonia/cli/internal/api"
 	"github.com/harmonia-vault/harmonia/cli/internal/update"
 )
 
@@ -100,7 +101,7 @@ func manifest(args []string) error {
 		sum := sha256.Sum256(data)
 		assets[key] = asset{URL: *base + "/" + name, SHA256: hex.EncodeToString(sum[:]), Size: int64(len(data))}
 	}
-	m := map[string]any{"version": *version, "protocol": 1, "notes": *notes, "assets": assets}
+	m := map[string]any{"version": *version, "protocol": api.Protocol, "notes": *notes, "assets": assets}
 	data, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
 		return err

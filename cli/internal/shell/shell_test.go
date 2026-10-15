@@ -100,3 +100,35 @@ func TestSourceOrderRestoresUserValue(t *testing.T) {
 		t.Errorf("user value should come back, got %q", got)
 	}
 }
+
+func TestRemoveFiles(t *testing.T) {
+	dir := t.TempDir()
+	env := filepath.Join(dir, "env.sh")
+	rc := filepath.Join(dir, "rc")
+	if err := Install(rc, env); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(env, Render(map[string]string{"K": "v"}), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if !Referenced(rc) {
+		t.Fatal("安装后应能看到加载设置")
+	}
+	if err := Uninstall(rc); err != nil {
+		t.Fatal(err)
+	}
+	if Referenced(rc) {
+		t.Fatal("移除后仍有加载设置")
+	}
+	if err := RemoveFiles(env); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{env, IntegrationFile(env)} {
+		if _, err := os.Stat(f); !os.IsNotExist(err) {
+			t.Fatalf("%s 没有删除", f)
+		}
+	}
+	if err := RemoveFiles(env); err != nil {
+		t.Fatalf("重复删除不应报错：%v", err)
+	}
+}

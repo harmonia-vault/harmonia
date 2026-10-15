@@ -65,12 +65,12 @@ func (s *Server) dataRoutes(mux *http.ServeMux) {
 		Names []string
 	}
 	mux.HandleFunc("POST /api/import/preview", op(s, func(_ context.Context, sess *manager.Session, in importIn) (any, error) {
-		vars, names, errs := manager.ParseDotenv(in.Text)
+		vars, names, errs := app.ParseDotenv(in.Text)
 		items, err := sess.Diff(in.Env, valuesOnly(vars), names)
 		return map[string]any{"items": items, "errors": errs}, err
 	}))
 	mux.HandleFunc("POST /api/import/apply", op(s, func(ctx context.Context, sess *manager.Session, in importIn) (any, error) {
-		vars, _, _ := manager.ParseDotenv(in.Text)
+		vars, _, _ := app.ParseDotenv(in.Text)
 		picked := map[string]app.VarChange{}
 		for _, n := range in.Names {
 			if v, ok := vars[n]; ok {
