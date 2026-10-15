@@ -61,6 +61,8 @@ export class TestServer {
   clock = 1_800_000_000_000;
   mails: { to: string; purpose: string; code: string }[] = [];
   pushes: Sent[] = [];
+  /** 模拟保持着推送连接的设备。 */
+  online = new Set<string>();
   config = { allowRegistration: false, requireVerification: true, version: "0.1.0" };
   /** 模拟入口总量限制；返回 false 表示超限。 */
   entryLimit?: (key: string) => Promise<boolean>;
@@ -88,6 +90,7 @@ export class TestServer {
         notifier: {
           send: (target, msg) => this.pushes.push({ target, msg, account: id }),
           disconnect: () => {},
+          connected: (deviceId) => this.online.has(deviceId),
         },
         waiters: new FakeWaiters(() => this.clock),
         mailer: {

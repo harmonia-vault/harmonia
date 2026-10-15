@@ -40,18 +40,24 @@ Future<void> main(List<String> argv) async {
     return vault;
   }
 
-  String envId(String name) =>
-      vault.environments.firstWhere((e) => e.name == name || e.id == name).id;
-  DeviceInfo device(String name) =>
-      vault.devices.firstWhere((d) => d.name == name || d.id == name);
+  String envId(String name) => vault.environments.firstWhere((e) => e.name == name || e.id == name).id;
+  DeviceInfo device(String name) => vault.devices.firstWhere((d) => d.name == name || d.id == name);
 
   // 注册会话在 register / verify 与 setup 之间保存在测试目录中。
   Future<void> saveRegistration(AccountSession s) => store.write(
-      'registration', jsonEncode({'server': s.server, 'email': s.email, 'accountId': s.accountId, 'token': s.token}));
+    'registration',
+    jsonEncode({'server': s.server, 'email': s.email, 'accountId': s.accountId, 'token': s.token}),
+  );
   Future<AccountSession> loadRegistration() async {
     final j = (jsonDecode((await store.read('registration'))!) as Map).cast<String, dynamic>();
-    return AccountSession(j['server'] as String, j['email'] as String, j['accountId'] as String, false, null,
-        token: j['token'] as String);
+    return AccountSession(
+      j['server'] as String,
+      j['email'] as String,
+      j['accountId'] as String,
+      false,
+      null,
+      token: j['token'] as String,
+    );
   }
 
   switch (cmd) {
@@ -95,10 +101,11 @@ Future<void> main(List<String> argv) async {
       if (args[1] == 'manager') {
         await v.approvePairing(p, asManager: true);
       } else {
-        await v.approvePairing(p, asManager: false, grants: [
-          for (final g in args.sublist(1))
-            Grant(envId(g.split(':')[0]), g.split(':')[1], 0),
-        ]);
+        await v.approvePairing(
+          p,
+          asManager: false,
+          grants: [for (final g in args.sublist(1)) Grant(envId(g.split(':')[0]), g.split(':')[1], 0)],
+        );
       }
       print(p.id);
     case 'grants':
@@ -121,6 +128,16 @@ Future<void> main(List<String> argv) async {
       final v = await loaded();
       await v.setSystemVars(device(args[0]).id, args[1] == 'on');
       print('ok');
+    case 'auto-update':
+      // 修改某台电脑的“自动更新”开关：auto-update <设备名> on|off。
+      final v = await loaded();
+      await v.setAutoUpdate(device(args[0]).id, args[1] == 'on');
+      print('ok');
+    case 'cli-update':
+      // 让某台电脑现在检查更新并升级：cli-update <设备名>。
+      final v = await loaded();
+      await v.requestCliUpdate(device(args[0]).id);
+      print('ok');
     case 'revoke':
       final v = await loaded();
       await v.revokeDevice(device(args[0]).id);
@@ -129,7 +146,10 @@ Future<void> main(List<String> argv) async {
       final v = await loaded();
       for (final d in v.devices) {
         final grants = d.grants.map((g) => '${v.environment(g.envId).name}:${g.role}${g.active ? '' : ':off'}');
-        print('${d.name}\t${d.kind}\t${grants.join(',')}\t${d.systemVars ? 'system-vars' : ''}\t${d.version}');
+        print(
+          '${d.name}\t${d.kind}\t${grants.join(',')}\t${d.systemVars ? 'system-vars' : ''}\t${d.version}'
+          '\t${d.autoUpdate ? 'auto-update' : ''}',
+        );
       }
     case 'pair':
       // 作为新的管理设备发起配对（可选带配对码），等待管理设备批准。

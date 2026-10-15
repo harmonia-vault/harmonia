@@ -119,6 +119,7 @@ var helpGroups = []struct {
 		{"service install|uninstall|status", "管理后台同步服务"},
 		{"update [--check]", "检查并升级 harmonia"},
 		{"update channel [stable|beta]", "查看或切换更新渠道（正式版 / 测试版）"},
+		{"update auto [on|off]", "查看或切换自动更新：后台服务发现新版本时直接升级；手机上也能切换"},
 		{"skill [install [--dir 目录]]", "输出给 AI 助手的使用说明；install 保存成技能文件"},
 		{"logout [--yes]", "退出账号并清除本机数据（不影响管理登录）；--yes 不再确认"},
 		{"uninstall [--yes]", uninstallSummary + "；--yes 不再确认"},

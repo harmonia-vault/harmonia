@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unicode/utf16"
 
 	"golang.org/x/sys/windows"
 
@@ -123,4 +125,43 @@ func removeProgram(bin string) {
 // defaultInstallDir 是安装脚本放置 harmonia.exe 的目录。
 func defaultInstallDir() string {
 	return filepath.Join(os.Getenv("LOCALAPPDATA"), "Programs", "Harmonia")
+}
+
+// relaunchDaemon 在后台服务升级后调用：计划任务要等下一次定时检查（最多 10 分钟）才会重新启动，
+// 所以按计划任务里的同一条命令先把新程序启动起来，再退出。调用前已经释放了“正在运行”的标记。
+// 计划任务的作业对象不允许子进程脱离，本进程退出时会把直接启动的子进程一起结束，所以通过 WMI
+// （Win32_Process.Create）启动：新进程由系统服务创建，不在这个作业里。普通用户权限即可。
+func relaunchDaemon(logf func(string, ...any)) error {
+	bin, err := executable()
+	if err != nil {
+		return err
+	}
+	// 升级时运行中的程序被改名为 .old；无论系统报告的是哪个名字，都启动原位置上的新程序。
+	bin = strings.TrimSuffix(bin, ".old")
+	d, err := state.Open()
+	if err != nil {
+		return err
+	}
+	system, err := windows.GetSystemDirectory()
+	if err != nil {
+		return err
+	}
+	line := fmt.Sprintf(`"%s" --headless "%s" daemon --home "%s"`, filepath.Join(system, "conhost.exe"), bin, d.Path)
+	quote := func(s string) string { return "'" + strings.ReplaceAll(s, "'", "''") + "'" }
+	script := fmt.Sprintf("$r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{CommandLine=%s; CurrentDirectory=%s}; exit $r.ReturnValue",
+		quote(line), quote(filepath.Dir(bin)))
+	// -EncodedCommand 接受 UTF-16LE 的 Base64，路径里有引号、空格或中文时也不需要再转义。
+	u := utf16.Encode([]rune(script))
+	raw := make([]byte, 0, len(u)*2)
+	for _, c := range u {
+		raw = append(raw, byte(c), byte(c>>8))
+	}
+	cmd := exec.Command(filepath.Join(system, "WindowsPowerShell", "v1.0", "powershell.exe"),
+		"-NoProfile", "-NonInteractive", "-EncodedCommand", base64.StdEncoding.EncodeToString(raw))
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: windows.CREATE_NO_WINDOW}
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("通过 WMI 启动失败（%w）", err)
+	}
+	logf("已启动新版本的后台服务")
+	return nil
 }

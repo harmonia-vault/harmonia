@@ -137,6 +137,29 @@ mixin VaultDevices {
     await sync();
   }
 
+  /// 修改某台电脑的“自动更新”开关（docs/protocol.md 3.2）。
+  Future<void> setAutoUpdate(String id, bool on) async {
+    try {
+      await api!.device('PATCH', '/api/v1/devices/$id', body: {'autoUpdate': on});
+    } on ApiException catch (e) {
+      if (e.status != 400) rethrow;
+      throw ApiException(e.status, e.code, '服务器还不支持这个开关，请先把服务端更新到最新版本。');
+    }
+    await sync();
+  }
+
+  /// 让某台电脑的后台服务现在检查更新并升级（docs/protocol.md 3.2）。升级完成后电脑上报新版本，
+  /// 服务端推送 changed，设备列表随下一次同步更新。
+  Future<void> requestCliUpdate(String id) async {
+    try {
+      await api!.device('POST', '/api/v1/devices/$id/update');
+    } on ApiException catch (e) {
+      // 较旧的服务端没有这个接口；设备不存在时同样是 404，但说明不同。
+      if (e.status != 404 || !e.message.startsWith('接口不存在')) rethrow;
+      throw ApiException(e.status, e.code, '服务器还不支持在手机上更新电脑，请先把服务端更新到最新版本。');
+    }
+  }
+
   /// 按顺序设置某台设备各环境的激活状态，排在前面的环境提供同名变量（docs/protocol.md 3.2）。
   Future<void> setActivation(String deviceId, List<Grant> ordered) async {
     await api!.device(

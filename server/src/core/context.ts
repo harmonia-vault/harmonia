@@ -6,13 +6,15 @@ import { sweepGuard } from "./guard";
 import { networkId } from "./net";
 import { ApiError, b64, forbidden, obj, randomB64, rateLimited, sha256, unauthorized, type Role } from "./util";
 
-export type PushMessage = { type: "changed"; seq: number } | { type: "pairing" } | { type: "revoked" };
+export type PushMessage = { type: "changed"; seq: number } | { type: "pairing" } | { type: "revoked" } | { type: "update" };
 export type PushTarget = "all" | "managers" | { device: string };
 
 export interface Notifier {
   send(target: PushTarget, msg: PushMessage): void;
   /** 断开某台设备的全部推送连接。 */
   disconnect(deviceId: string): void;
+  /** 这台设备现在是否有推送连接。 */
+  connected(deviceId: string): boolean;
 }
 
 /** 发给配对发起方的最终结果。 */
@@ -51,6 +53,7 @@ export type Device = {
   status: string;
   rotation_required: number;
   system_vars: number;
+  auto_update: number;
   /** 设备最近一次同步时上报的客户端版本，没有上报过时为空。 */
   version: string;
   created_at: number;

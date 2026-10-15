@@ -15,10 +15,23 @@ import (
 //go:embed SKILL.md
 var text string
 
-// Render 返回填入版本号的使用说明。Windows 上检出的源码可能是 CRLF 换行，统一成 LF。
+//go:embed STUB.md
+var stubBody string
+
+// lf 统一换行：Windows 上检出的源码可能是 CRLF。
+func lf(s string) string { return strings.ReplaceAll(s, "\r\n", "\n") }
+
+// Render 返回填入版本号的完整使用说明，由 harmonia skill 输出。
 func Render(version string) []byte {
-	s := strings.ReplaceAll(text, "\r\n", "\n")
-	return []byte(strings.ReplaceAll(s, "{{version}}", version))
+	return []byte(strings.ReplaceAll(lf(text), "{{version}}", version))
+}
+
+// Stub 返回保存到技能目录的入口文件：与完整说明相同的头部（name、description），正文只让 AI 助手
+// 运行 harmonia skill 读取当时的说明，所以程序升级后不会过期（docs/rewrite-plan.md 5.13）。
+func Stub() []byte {
+	full := lf(text)
+	end := strings.Index(full[4:], "\n---\n") + 4 + len("\n---\n")
+	return []byte(full[:end] + "\n" + lf(stubBody))
 }
 
 // File 返回技能目录下 Harmonia 的技能文件路径。

@@ -2,11 +2,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 
@@ -20,6 +20,8 @@ func cmdSkill(_ context.Context, args []string) error {
 	}
 	usage := errors.New("用法：harmonia skill [install [--dir 目录]]")
 	if len(f.args) == 0 && f.values["dir"] == "" {
+		// 输出要原样交给 AI 助手，顺带更新保存过的技能文件时不打印任何内容。
+		syncSkillFiles(nil)
 		_, err := os.Stdout.Write(skill.Render(version))
 		return err
 	}
@@ -44,13 +46,13 @@ func cmdSkill(_ context.Context, args []string) error {
 			return errors.New("没有找到 ~/.claude 或 ~/.agents。请用 --dir 指定 AI 工具的技能目录，或运行 harmonia skill 直接查看使用说明")
 		}
 	}
-	content := skill.Render(version)
+	content := skill.Stub()
 	for _, p := range targets {
 		if err = skill.Write(p, content); err != nil {
 			err = fmt.Errorf("无法写入 %s：%w", p, err)
 			break
 		}
-		fmt.Println("已写入 " + p)
+		fmt.Println("已写入 " + p + "（入口文件：让 AI 助手每次使用前运行 harmonia skill 读取当时的说明，升级后不会过期）")
 		if !slices.Contains(s.SkillFiles, p) {
 			s.SkillFiles = append(s.SkillFiles, p)
 		}
@@ -58,33 +60,33 @@ func cmdSkill(_ context.Context, args []string) error {
 	return errors.Join(err, saveSettings(s))
 }
 
-// refreshSkills 在升级后用新程序的使用说明覆盖保存过的技能文件；用户已经删掉的不再写回。
-func refreshSkills(bin string) {
+// syncSkillFiles 把保存过的技能文件更新为当前的入口文件，内容相同的不动；用户已经删掉的不再写回。
+// 早期版本保存的是完整说明，会在这里换成入口文件。say 为 nil 时不输出。
+func syncSkillFiles(say func(string)) {
 	s := loadSettings()
+	stub := skill.Stub()
 	var kept []string
 	for _, p := range s.SkillFiles {
-		if _, err := os.Stat(p); err == nil {
-			kept = append(kept, p)
+		data, err := os.ReadFile(p)
+		if err != nil {
+			continue
 		}
-	}
-	if len(kept) > 0 {
-		if out, err := exec.Command(bin, "skill").Output(); err != nil {
-			fmt.Println("没能更新技能文件，可以运行 harmonia skill install 重试。")
-		} else {
-			for _, p := range kept {
-				if err := skill.Write(p, out); err != nil {
-					fmt.Printf("无法更新 %s：%v。可以运行 harmonia skill install 重试。\n", p, err)
-				} else {
-					fmt.Println("已更新技能文件 " + p)
-				}
+		kept = append(kept, p)
+		if bytes.Equal(data, stub) {
+			continue
+		}
+		if err := skill.Write(p, stub); err != nil {
+			if say != nil {
+				say(fmt.Sprintf("无法更新技能文件 %s：%v。可以运行 harmonia skill install 重试。", p, err))
 			}
+		} else if say != nil {
+			say("已更新技能文件 " + p)
 		}
 	}
 	if len(kept) != len(s.SkillFiles) {
 		s.SkillFiles = kept
 		_ = saveSettings(s)
 	}
-	fmt.Println("如果是 AI 助手在操作，请运行 harmonia skill 重新读取使用说明。")
 }
 
 // removeSkills 在卸载时删除保存过的技能文件。

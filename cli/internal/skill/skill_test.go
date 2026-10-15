@@ -84,3 +84,20 @@ func TestWriteAndRemove(t *testing.T) {
 		t.Fatal("目录里还有其他文件时不应删除")
 	}
 }
+
+func TestStub(t *testing.T) {
+	stub, full := string(Stub()), string(Render("1.2.3"))
+	header := full[:strings.Index(full, "\n---\n")+len("\n---\n")]
+	if !strings.HasPrefix(stub, header) {
+		t.Fatalf("入口文件的头部应与完整说明相同：%q", stub[:min(len(stub), 80)])
+	}
+	if !strings.Contains(stub, "harmonia skill") || strings.Contains(stub, "{{") {
+		t.Fatal("入口文件应让 AI 助手运行 harmonia skill，且不含占位符")
+	}
+	if strings.Contains(stub, "1.2.3") || strings.Count(stub, "\n---\n") != 1 {
+		t.Fatal("入口文件不应带版本号，也不应带上完整说明的正文")
+	}
+	if strings.Contains(stub, "\r") {
+		t.Fatal("应统一为 LF 换行")
+	}
+}

@@ -39,6 +39,7 @@ type CachedVar struct {
 type Cache struct {
 	Seq          int64                           `json:"seq"`
 	SystemVars   bool                            `json:"systemVars"`
+	AutoUpdate   bool                            `json:"autoUpdate"`
 	Environments []api.Environment               `json:"environments"`
 	Envelopes    []api.Envelope                  `json:"envelopes"`
 	Variables    map[string]map[string]CachedVar `json:"variables"`

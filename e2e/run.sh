@@ -124,6 +124,10 @@ step "J4 授权的环境默认启用，通过 exec 使用"
 expect_eq "$(cli exec -- printenv OPENAI_API_KEY 2>/dev/null)" "sk-first 'quoted' \$(no)" "exec 注入"
 expect_eq "$(bash -c ". '$TMP/cli/env.sh'; printf %s \"\$OPENAI_API_KEY\"")" "sk-first 'quoted' \$(no)" "env.sh 内容"
 
+step "在手机上让电脑更新：后台服务不在线时给出下一步"
+OFFLINE=$(manager phone cli-update e2e-laptop 2>&1 || true)
+[[ "$OFFLINE" == *"后台服务现在没有连上服务器"* ]] || fail "后台服务没运行时应当提示不在线，实际：$OFFLINE"
+
 step "J4 实时推送：后台服务 3 秒内收到手机上的修改"
 HARMONIA_HOME="$TMP/cli" "$TMP/harmonia" daemon &
 DAEMON_PID=$!
@@ -215,6 +219,13 @@ grep -q '"systemVars": true' "$TMP/cli/cache.json" || fail "电脑没有收到�
 manager phone system-vars e2e-laptop off >/dev/null
 cli sync >/dev/null
 grep -q '"systemVars": false' "$TMP/cli/cache.json" || fail "电脑没有收到关闭后的开关"
+
+step "自动更新开关：电脑和手机两边都能修改；后台服务在线时手机可以让电脑更新"
+cli update auto on >/dev/null
+expect_eq "$(manager phone devices | grep e2e-laptop | cut -f6)" "auto-update" "手机看到电脑打开的自动更新"
+manager phone auto-update e2e-laptop off >/dev/null
+[[ "$(cli update auto)" == *"未开启"* ]] || fail "电脑应当看到手机关闭的自动更新"
+expect_eq "$(manager phone cli-update e2e-laptop)" "ok" "后台服务在线时手机可以让电脑更新"
 
 step "J7 降为只读后写入被拒绝；未授权环境不可见"
 manager phone grants e2e-laptop OpenAI:ro >/dev/null

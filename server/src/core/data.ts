@@ -109,6 +109,14 @@ export function dataRoutes(app: Hono, deps: Deps) {
     const sinceRaw = c.req.query("since") ?? "0";
     if (!/^[0-9]{1,15}$/.test(sinceRaw)) throw bad("since 参数格式不对。");
     const since = Number(sinceRaw);
+    // 版本变化时通知管理设备，设备列表随之显示新版本（docs/protocol.md 3.4）。
+    const version = clientVersion(c.req.header(VERSION_HEADER)) ?? d.version;
+    const versionChanged = version !== d.version;
+    sql.transaction(() => {
+      sql.run(`UPDATE devices SET last_seen_at = ?, version = ? WHERE id = ?`, deps.now(), version, d.id);
+      if (versionChanged) bump(sql);
+    });
+    if (versionChanged) deps.notifier.send("managers", { type: "changed", seq: headSeq(sql) });
     const seq = headSeq(sql);
     const envs = accessible(deps, d);
     const ids = envs.map((e) => e.id);
@@ -130,11 +138,9 @@ export function dataRoutes(app: Hono, deps: Deps) {
           ...fresh,
         )
       : [];
-    const version = clientVersion(c.req.header(VERSION_HEADER)) ?? d.version;
-    sql.run(`UPDATE devices SET last_seen_at = ?, version = ? WHERE id = ?`, deps.now(), version, d.id);
     const out: Record<string, unknown> = {
       seq,
-      self: { id: d.id, kind: d.kind, name: d.name, rotationRequired: !!d.rotation_required, systemVars: !!d.system_vars },
+      self: { id: d.id, kind: d.kind, name: d.name, rotationRequired: !!d.rotation_required, systemVars: !!d.system_vars, autoUpdate: !!d.auto_update },
       environments: envs.map((e) => ({
         id: e.id,
         name: e.name,
@@ -177,6 +183,7 @@ export function dataRoutes(app: Hono, deps: Deps) {
           lastSeenAt: x.last_seen_at,
           version: x.version,
           systemVars: !!x.system_vars,
+          autoUpdate: !!x.auto_update,
           grants: grants
             .filter((g) => g.device_id === x.id)
             .map((g) => ({ envId: g.env_id, role: g.role, expiresAt: g.expires_at, active: g.active === 1, position: g.position })),

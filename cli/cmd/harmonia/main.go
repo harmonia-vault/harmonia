@@ -167,7 +167,9 @@ func main() {
 		printCommandHelp(os.Stdout, args[0])
 		return
 	}
-	if err := fn(ctx, args[1:]); err != nil {
+	err := fn(ctx, args[1:])
+	dailyHint(args[0])
+	if err != nil {
 		msg := sentence(err.Error())
 		if errors.As(err, new(usageError)) {
 			msg += fmt.Sprintf("运行 harmonia %s --help 查看用法。", args[0])

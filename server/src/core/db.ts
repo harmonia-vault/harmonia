@@ -173,6 +173,8 @@ const MIGRATIONS: string[][] = [
     `DROP TABLE pairing_codes`,
     `CREATE TABLE pairing_codes (code_hash TEXT PRIMARY KEY, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL)`,
   ],
+  // CLI 的自动更新开关（docs/protocol.md 3.2）。
+  [`ALTER TABLE devices ADD COLUMN auto_update INTEGER NOT NULL DEFAULT 0`],
 ];
 
 export function migrate(sql: Sql): void {

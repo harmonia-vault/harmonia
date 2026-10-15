@@ -247,7 +247,8 @@ DEK  = 32 字节随机数，设置管理口令时生成
 | `DELETE /environments/{id}/variables/{name}` | 同上 | 请求头带 `Idempotency-Key` |
 | `PUT /devices/{id}/grants` | 管理设备 | `{grants:[{envId, role, expiresAt}], envelopes:[{envId, keyVersion, sealed, sig}]}`，整体替换；新授权的环境必须附带封装。已有授权保留激活状态和顺序，新授权默认激活并排在最后 |
 | `PUT /devices/{id}/activation` | 管理设备；或设备本身，此时 `{id}` 为 `self` | `{envs:[{envId, active}]}`，按顺序从前到后排列（排在前面的覆盖后面的同名变量），必须包含该设备全部未到期的授权环境（可以带上已到期的），不能有未授权的环境，否则返回 `conflict`；没有列出的已到期授权保持原有相对顺序，排在后面。只修改激活状态和顺序 |
-| `PATCH /devices/{id}` | 管理设备；或设备本身，此时 `{id}` 为 `self` | `{name, systemVars}`，两项都可以省略，但至少要有一项。`systemVars`（布尔）表示这台设备是否把系统自身使用的变量名写入系统环境，目前只有 Windows 上的 CLI 使用，默认 false。设备本身只能修改 `systemVars` |
+| `PATCH /devices/{id}` | 管理设备；或设备本身，此时 `{id}` 为 `self` | `{name, systemVars, autoUpdate}`，各项都可以省略，但至少要有一项。`systemVars`（布尔）表示这台设备是否把系统自身使用的变量名写入系统环境，目前只有 Windows 上的 CLI 使用，默认 false。`autoUpdate`（布尔）表示这台设备的后台服务发现新版本时是否自动升级，只有 CLI 使用，默认 false。设备本身只能修改 `systemVars` 和 `autoUpdate` |
+| `POST /devices/{id}/update` | 管理设备 | 无请求体 → `{}`。让这台设备的后台服务现在检查更新并升级（设计文档 5.11），服务端向它推送 `{"type":"update"}`。只能用于 `kind` 为 `client` 的设备，否则返回 `invalid_request`；这台设备当前没有推送连接时返回 `device_offline` |
 | `POST /devices/{id}/revoke` | 管理设备 | 撤销。不能撤销最后一台管理设备 |
 | `POST /devices/self/revoke` | device | 本机退出。最后一台管理设备需要带上 `{confirmLast:true}` |
 | `POST /recovery/session` | 请求头 `X-Harmonia-Account` | `{nonce, signature}` → `{token, expiresAt}` |
@@ -292,14 +293,14 @@ DEK  = 32 字节随机数，设置管理口令时生成
 ```json
 {
   "seq": 42,
-  "self": {"id": "...", "kind": "client", "name": "...", "rotationRequired": false, "systemVars": false},
+  "self": {"id": "...", "kind": "client", "name": "...", "rotationRequired": false, "systemVars": false, "autoUpdate": false},
   "environments": [{"id": "...", "name": "...", "keyVersion": "1", "role": "rw", "expiresAt": 0, "active": true, "position": 0}],
   "envelopes": [{"envId": "...", "keyVersion": "1", "sealed": "...", "sig": "..."}],
   "variables": [{"envId": "...", "name": "K", "value": "<密文>", "keyVersion": "1", "deleted": false, "seq": 40}],
   "manager": {
     "rootSealed": "...",
     "recovery": {"generation": "1", "boxPub": "..."},
-    "devices": [{"id": "...", "name": "...", "platform": "...", "kind": "...", "signPub": "...", "boxPub": "...", "cert": "...", "createdAt": 0, "lastSeenAt": 0, "version": "0.4.5", "systemVars": false, "grants": [{"envId": "...", "role": "...", "expiresAt": 0, "active": true, "position": 0}]}]
+    "devices": [{"id": "...", "name": "...", "platform": "...", "kind": "...", "signPub": "...", "boxPub": "...", "cert": "...", "createdAt": 0, "lastSeenAt": 0, "version": "0.4.5", "systemVars": false, "autoUpdate": false, "grants": [{"envId": "...", "role": "...", "expiresAt": 0, "active": true, "position": 0}]}]
   }
 }
 ```
@@ -309,6 +310,8 @@ DEK  = 32 字节随机数，设置管理口令时生成
 - `manager` 字段只返回给管理设备。管理设备的 `role` 恒为 `rw`。
 - `version` 是这台设备最近一次同步时上报的客户端版本（见第 3 节开头的 `X-Harmonia-Version`），由设备自己上报，服务端不校验真伪；设备还没有上报过时是空字符串，响应里没有这个字段时（较旧的服务端）同样按未知处理。
 - `systemVars` 是设备上的“写入系统变量”开关，见 `PATCH /devices/{id}`；响应里没有这个字段时（较旧的服务端）按 false 处理。
+- `autoUpdate` 是设备上的“自动更新”开关，见 `PATCH /devices/{id}`；没有这个字段时按 false 处理。
+- 设备同步时上报的 `version` 与记录的不同时，服务端更新记录、`head_seq + 1`，并向管理设备推送 `changed`，让设备列表显示新版本。
 - `active` 和 `position` 是授权上的激活状态和顺序，`position` 从 0 开始，越小越靠前。管理设备的 `environments` 中 `active` 恒为 true，`position` 按环境创建先后排列。
 
 ### 3.5 推送
@@ -318,6 +321,7 @@ DEK  = 32 字节随机数，设置管理口令时生成
 - `{"type":"changed","seq":N}`：客户端收到后调用 `/sync`
 - `{"type":"pairing"}`：只推送给管理设备，表示待批准列表有变化。匿名配对请求自身的变化不推送，见 3.5.1
 - `{"type":"revoked"}`：推送后服务端关闭连接
+- `{"type":"update"}`：只推送给被 `POST /devices/{id}/update` 指定的设备，表示现在检查更新并升级。不带版本号，客户端按自己的更新渠道检查，只安装签名有效且比当前版本新的安装包
 
 客户端每 30 秒发送一次文本 `ping`，服务端自动回复 `pong`。
 
@@ -359,6 +363,7 @@ DEK  = 32 字节随机数，设置管理口令时生成
 | `not_found` | 404 | 不存在 |
 | `conflict` | 409 | 状态冲突，例如邮箱已注册并初始化、配对已处理、幂等键对应的内容不同、代际不对 |
 | `rate_limited` | 429 | 请求过于频繁 |
+| `device_offline` | 409 | 目标设备现在没有连上服务器（例如电脑上没有运行后台服务、关机或断网） |
 | `pairing_blocked` | 429 | 这个 IP 发起的配对请求刚被拒绝并阻止，30 分钟内不能再发起 |
 | `email_unverified` | 403 | 邮箱还没有验证 |
 | `email_unavailable` | 503 | 服务器没有配置发信，无法发送验证码 |

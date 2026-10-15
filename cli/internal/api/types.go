@@ -73,6 +73,8 @@ type Sync struct {
 		RotationRequired bool   `json:"rotationRequired"`
 		// SystemVars 是这台设备的“写入系统变量”开关，只有 Windows 上使用。
 		SystemVars bool `json:"systemVars"`
+		// AutoUpdate 是这台设备的“自动更新”开关，由后台服务执行。
+		AutoUpdate bool `json:"autoUpdate"`
 	} `json:"self"`
 	Environments []Environment `json:"environments"`
 	Envelopes    []Envelope    `json:"envelopes"`

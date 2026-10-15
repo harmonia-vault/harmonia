@@ -98,6 +98,7 @@ export class Account extends DurableObject<Env> {
       disconnect: (deviceId: string) => {
         for (const ws of ctx.getWebSockets(deviceId)) ws.close(4001, "revoked");
       },
+      connected: (deviceId: string) => ctx.getWebSockets(deviceId).length > 0,
     };
     const waiters: PairingWaiters = {
       accept: (pairingId) => {

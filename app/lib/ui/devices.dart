@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../app/controller.dart';
 import '../core/models.dart';
 import 'activation.dart';
+import 'device_update.dart';
 import 'environments.dart' show askName;
 import 'lock.dart';
 import 'pairing.dart';
@@ -391,6 +392,7 @@ class _DevicePageState extends State<DevicePage> {
             const SizedBox(height: Space.lg),
             FilledButton(onPressed: _dirty ? () => _save(d) : null, child: const Text('保存权限')),
             if (d.grants.isNotEmpty) ActivationEditor(c: c, device: d),
+            CliUpdateSection(c: c, deviceId: d.id),
             if (d.platform == 'windows') ...[
               const SectionTitle('系统变量'),
               Card(

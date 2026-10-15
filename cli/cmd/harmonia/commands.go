@@ -323,7 +323,10 @@ func envList(f *flags) []string {
 func refresh(ctx context.Context, a *app.App) error {
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	if err := a.Sync(ctx); err != nil {
+	checked := startStaleCheck(ctx)
+	err := a.Sync(ctx)
+	checked()
+	if err != nil {
 		if errors.Is(err, app.ErrRevokedLocal) {
 			return err
 		}
@@ -385,6 +388,8 @@ func cmdExec(ctx context.Context, args []string) error {
 	if err != nil {
 		return fmt.Errorf("找不到命令 %s%s", cmdArgs[0], notFoundHint)
 	}
+	// 命令运行后本进程不再回来（或直接以它的退出码结束），更新提示只能放在前面。
+	dailyHint("exec")
 	return replaceProcess(bin, cmdArgs, env)
 }
 
@@ -422,5 +427,16 @@ func cmdDaemon(ctx context.Context, args []string) error {
 		return err
 	}
 	defer done()
-	return daemon.Run(ctx, daemon.Hooks{Daily: dailyUpdateCheck})
+	// 新程序启动时把保存过的技能文件换成当前的入口文件（早期版本保存的是完整说明）。
+	syncSkillFiles(func(s string) { fmt.Fprintln(os.Stderr, s) })
+	err = daemon.Run(ctx, daemon.Hooks{Check: backgroundCheck})
+	if errors.Is(err, daemon.ErrUpgraded) {
+		// 退出后由系统用新程序重新启动；Windows 的计划任务不会马上重启，由这里先启动新程序。
+		done()
+		if err := relaunchDaemon(daemon.Logf); err != nil {
+			daemon.Logf("没能启动新版本的后台服务（%v），系统稍后会重新启动它", err)
+		}
+		return nil
+	}
+	return err
 }
