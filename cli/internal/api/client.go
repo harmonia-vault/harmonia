@@ -15,7 +15,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -54,7 +53,7 @@ func netReason(err error) string {
 		return "服务器证书验证失败，请确认服务器地址，或检查网络中是否有代理替换了证书"
 	case errors.Is(err, context.DeadlineExceeded), errors.As(err, &ne) && ne.Timeout():
 		return "连接超时，请检查网络"
-	case errors.Is(err, syscall.ECONNREFUSED):
+	case refused(err):
 		return "连接被拒绝，服务器可能没有运行"
 	case errors.Is(err, context.Canceled):
 		return "已取消"
