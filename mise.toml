@@ -32,6 +32,18 @@ description = "CLI 的 Windows 部分静态检查（交叉编译，不需要 Win
 dir = "cli"
 run = "GOOS=windows go vet ./..."
 
+[tasks.test-installer-linux]
+description = "在 Linux Bash、Zsh 中验证安装脚本和 PATH 配置"
+dir = "cli"
+run = '''
+set -eu
+test_dir=$(mktemp -d)
+trap 'rm -rf "$test_dir"' EXIT
+GOOS=linux CGO_ENABLED=0 go test -c -o "$test_dir/installer.test" .
+cp install.sh "$test_dir/install.sh"
+docker run --rm -v "$test_dir:/tests:ro" -w /tests bash:5.2.21 sh -c 'apk add --no-cache curl zsh >/dev/null && ./installer.test -test.v'
+'''
+
 [tasks.fmt-cli]
 description = "格式化 CLI 代码"
 dir = "cli"

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Harmonia CLI 安装脚本：按更新渠道下载当前系统对应的 harmonia 到 ~/.local/bin，并校验 SHA-256。
+# Harmonia CLI 安装脚本：下载并校验 harmonia，安装到 ~/.local/bin 并配置 PATH。
 #   curl -fsSL https://github.com/harmonia-vault/harmonia/releases/download/update-feed/install.sh | sh
 #   没有 curl 时：wget -qO- <同一个地址> | sh
 #   安装测试版：在 sh 前加上 HARMONIA_CHANNEL=beta
@@ -74,9 +74,39 @@ if [ "$CHANNEL" = "beta" ]; then
   echo "已设置为测试版渠道，之后 harmonia update 会继续获取测试版。"
 fi
 
-case ":$PATH:" in
-  *":$DEST:"*) ;;
-  *) echo "提示：$DEST 不在 PATH 中，请在 shell 配置文件中加入：export PATH=\"$DEST:\$PATH\"" ;;
+# 安装器由管道里的 sh 执行；用用户的登录 shell 选择启动文件。
+# 路径按单引号字面量写入，不能把目录名里的 $、反引号等当作代码。
+quoted_dest="'$(printf '%s' "$DEST" | sed "s/'/'\\\\''/g")'"
+path_export="export PATH=${quoted_dest}\"\${PATH:+:\$PATH}\""
+path_line="case \":\${PATH-}:\" in *:${quoted_dest}:*) ;; *) ${path_export} ;; esac"
+configure_path() {
+  if [ -f "$1" ] && grep -Fqx "$path_line" "$1"; then
+    return
+  fi
+  if ! { mkdir -p "$(dirname "$1")" && printf '\n# Harmonia CLI\n%s\n' "$path_line" >> "$1"; }; then
+    printf '无法更新 %s，请检查文件权限后重新安装。\n' "$1" >&2
+    exit 1
+  fi
+  printf '已配置命令路径：%s\n' "$1"
+}
+
+user_shell=${SHELL:-/bin/sh}
+case "${user_shell##*/}" in
+  zsh) configure_path "${ZDOTDIR:-$HOME}/.zshrc" ;;
+  bash)
+    configure_path "$HOME/.bashrc"
+    # Bash 只读取第一个存在且可读的登录文件，不能新建文件遮住原配置。
+    profile="$HOME/.profile"
+    for candidate in "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.profile"; do
+      if [ -f "$candidate" ] && [ -r "$candidate" ]; then
+        profile=$candidate
+        break
+      fi
+    done
+    configure_path "$profile"
+    ;;
+  sh) configure_path "$HOME/.profile" ;;
+  *) printf '未自动配置 %s，请将 %s 加入该终端的 PATH。\n' "${user_shell##*/}" "$DEST" ;;
 esac
 # HARMONIA_YES=1 时不询问，直接安装 shell 集成和后台服务；HARMONIA_YES=0 时不询问，两项都不装；
 # 否则有终端可以交互时询问，直接回车即安装；没有终端时只提示命令。
@@ -109,4 +139,21 @@ elif [ "${HARMONIA_YES:-}" != 0 ] && (exec </dev/tty) 2>/dev/null; then
 else
   echo "提示：运行 harmonia shell install 启用终端变量，运行 harmonia service install 安装后台服务。"
 fi
+case ":$PATH:" in
+  *":$DEST:"*) ;;
+  *)
+    echo
+    case "${user_shell##*/}" in
+      zsh|bash|sh)
+        echo "当前终端先运行以下命令，即可使用 harmonia；新终端自动生效："
+        printf '  %s\n' "$path_export"
+        ;;
+      *)
+        printf '当前终端可用完整路径登录：\n  %s/harmonia login <服务器地址>\n' "$quoted_dest"
+        exit 0
+        ;;
+    esac
+    ;;
+esac
+echo
 echo "下一步：运行 harmonia login <服务器地址>"
