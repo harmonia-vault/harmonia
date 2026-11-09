@@ -229,7 +229,7 @@ class _AccountResetPageState extends State<AccountResetPage> {
       subtitle: '只有在恢复码和所有管理设备都丢失时才需要重置。',
       onBack: () => Navigator.pop(context),
       children: [
-        const Banner2('重置会永久删除这个账号的全部环境、变量和已授权设备，无法撤销，也无法找回数据。\n之后可以用同一个邮箱重新注册。', warn: true),
+        const Banner2('重置会永久删除这个账号的全部变量库、环境和已授权设备，无法撤销，也无法找回数据。\n之后可以用同一个邮箱重新注册。', warn: true),
         const SizedBox(height: Space.lg),
         TextField(
           autofillHints: AppScope.isSimulated(context) ? null : const [AutofillHints.email],

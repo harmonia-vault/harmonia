@@ -139,8 +139,9 @@ class _CliUpdateSectionState extends State<CliUpdateSection> {
       if (_waitingFrom != null) {
         title = _waitTooLong ? '电脑还没有完成更新' : '已通知电脑更新';
         subtitle = _waitTooLong ? '可以稍后回来查看，或在电脑上运行 harmonia update 看看原因。' : '电脑下载并换上新版本后，这里会显示新的版本号，通常不到一分钟。';
-        if (!_waitTooLong)
+        if (!_waitTooLong) {
           trailing = const SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2));
+        }
       } else if (snap.connectionState != ConnectionState.done) {
         title = '当前 ${d.version}';
         subtitle = '正在检查${channel.label}的最新版本…';

@@ -268,19 +268,19 @@ class AccountService {
     final signPub = b64(sign.pub), boxPub = b64(box.pub);
     final envelopes = <Map<String, dynamic>>[];
     for (final e in (m['envelopes'] as List).cast<Map>()) {
-      final envId = e['envId'] as String;
+      final vaultId = e['vaultId'] as String;
       final kv = int.parse(e['keyVersion'] as String);
       final sealed = unb64(e['sealed'] as String);
-      if (!crypto.verify(root.pub, envelopeMsg(envId, kv, 'recovery', sealed), unb64(e['sig'] as String))) {
-        throw VaultException('服务器返回的环境密钥签名无效，已停止。');
+      if (!crypto.verify(root.pub, envelopeMsg(vaultId, kv, 'recovery', sealed), unb64(e['sig'] as String))) {
+        throw VaultException('服务器返回的变量库密钥签名无效，已停止。');
       }
       final key = crypto.open(rec.box, sealed);
       final mine = crypto.seal(key, box.pub);
       envelopes.add({
-        'envId': envId,
+        'vaultId': vaultId,
         'keyVersion': '$kv',
         'sealed': b64(mine),
-        'sig': b64(crypto.sign(root, envelopeMsg(envId, kv, deviceId, mine))),
+        'sig': b64(crypto.sign(root, envelopeMsg(vaultId, kv, deviceId, mine))),
       });
     }
     await c.withToken(token, 'POST', '/api/v1/recovery/enroll', {

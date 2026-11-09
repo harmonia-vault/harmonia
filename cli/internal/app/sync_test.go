@@ -3,8 +3,10 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -14,11 +16,14 @@ import (
 	"github.com/harmonia-vault/harmonia/cli/internal/state"
 )
 
-// vaultServer 是一个有状态的模拟服务器：一个环境 E（名称 dev），按批量写入接口保存变量，同步时全部返回。
+// vaultServer 是一个有状态的模拟服务器：变量库 E（名称“共享”）和引用它全部变量的环境 ENV（名称 dev），
+// 按批量写入接口保存变量，同步时全部返回。
 type vaultServer struct {
 	mu      sync.Mutex
 	name    string
 	envs    []api.Environment
+	rename  map[string]string // 变量库里的原名 → 环境里的名字
+	locked  bool              // 为 true 时引用不允许修改
 	envKey  []byte
 	sealed  api.Envelope
 	vars    map[string]string // 变量名 → 密文
@@ -38,19 +43,38 @@ func (s *vaultServer) handler(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`{"token":"t","expiresAt":4102444800000}`))
 	case r.URL.Path == "/api/v1/sync":
 		vars := []api.Variable{}
-		for n, v := range s.vars {
-			vars = append(vars, api.Variable{EnvID: "E", Name: n, Value: v, KeyVersion: "1"})
+		var items []api.EnvItem
+		for _, n := range slices.Sorted(maps.Keys(s.vars)) {
+			vars = append(vars, api.Variable{VaultID: "E", Name: n, Value: s.vars[n], KeyVersion: "1"})
+			name := n
+			if s.rename[n] != "" {
+				name = s.rename[n]
+			}
+			items = append(items, api.EnvItem{Name: name, VaultID: "E", Source: n, Writable: !s.locked})
 		}
 		envelopes := []api.Envelope{}
+		envs := slices.Clone(s.envs)
+		for i := range envs {
+			envs[i].Items = items
+			if !s.locked {
+				envs[i].CreateVaults = []string{"E"}
+			}
+		}
 		if len(s.envs) > 0 {
 			envelopes = append(envelopes, s.sealed)
 		}
 		json.NewEncoder(w).Encode(map[string]any{
 			"seq":          s.seq,
+			"full":         true,
 			"self":         map[string]any{"id": "D", "kind": "client", "name": s.name},
-			"environments": s.envs, "envelopes": envelopes, "variables": vars,
+			"environments": envs, "envelopes": envelopes, "variables": vars,
+			"vaultNames": []api.VaultName{{ID: "E", Name: "共享"}}, "vaults": []api.Vault{{ID: "E", KeyVersion: "1"}},
 		})
-	case r.Method == "PATCH" && r.URL.Path == "/api/v1/environments/E/variables":
+	case r.Method == "DELETE" && strings.HasPrefix(r.URL.Path, "/api/v1/vaults/E/variables/"):
+		s.seq++
+		delete(s.vars, strings.TrimPrefix(r.URL.Path, "/api/v1/vaults/E/variables/"))
+		w.Write([]byte(`{"seq":1}`))
+	case r.Method == "PATCH" && r.URL.Path == "/api/v1/vaults/E/variables":
 		var body struct {
 			Set    []api.VarWrite
 			Delete []string
@@ -85,9 +109,9 @@ func fakeDevice(t *testing.T, name string) (*state.Dir, *vaultServer) {
 	ct, _ := hc.EncryptVar(envKey, "E", 1, "A", hc.Entry{Value: "旧值", Note: "旧备注"})
 	fs := &vaultServer{
 		name:   name,
-		envs:   []api.Environment{{ID: "E", Name: "dev", KeyVersion: "1", Role: "rw", Active: true}},
+		envs:   []api.Environment{{ID: "ENV", Name: "dev", Role: "rw", Active: true, LocalDecrypt: true}},
 		envKey: envKey,
-		sealed: api.Envelope{EnvID: "E", KeyVersion: "1", Sealed: hc.B64(sealed), Sig: hc.B64(root.Sign(hc.EnvelopeMsg("E", 1, "D", sealed)))},
+		sealed: api.Envelope{VaultID: "E", KeyVersion: "1", Sealed: hc.B64(sealed), Sig: hc.B64(root.Sign(hc.EnvelopeMsg("E", 1, "D", sealed)))},
 		vars:   map[string]string{"A": ct},
 		seq:    1,
 	}
@@ -120,7 +144,7 @@ func (s *vaultServer) entry(t *testing.T, name string) hc.Entry {
 
 func set1(t *testing.T, a *App, name string, ch VarChange) VarResult {
 	t.Helper()
-	res, err := a.SetVariables(context.Background(), "dev", map[string]VarChange{name: ch}, false)
+	res, err := a.SetVariables(context.Background(), "dev", false, map[string]VarChange{name: ch}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,7 +192,7 @@ func TestImportSkipsUnchangedAndBatches(t *testing.T) {
 	for n, v := range vals {
 		changes[n] = VarChange{Value: &v}
 	}
-	res, err := a.SetVariables(context.Background(), "dev", changes, true)
+	res, err := a.SetVariables(context.Background(), "共享", true, changes, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -193,7 +217,7 @@ func TestImportSkipsUnchangedAndBatches(t *testing.T) {
 	}
 	// 重跑：全部未变化，不再写入。
 	delete(changes, "1BAD")
-	res, err = a.SetVariables(context.Background(), "dev", changes, true)
+	res, err = a.SetVariables(context.Background(), "共享", true, changes, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -236,10 +260,10 @@ func TestShadowing(t *testing.T) {
 		t.Fatal(err)
 	}
 	cache, _ := d.Cache()
-	cache.Environments = append([]api.Environment{{ID: "F", Name: "prod", Role: "rw", Active: true, Position: -1}}, cache.Environments...)
-	cache.Variables["F"] = map[string]state.CachedVar{"A": {Value: "x", KeyVersion: 1}}
+	prod := api.Environment{ID: "F", Name: "prod", Role: "rw", Active: true, Position: -1, Items: []api.EnvItem{{Name: "A", VaultID: "V2", Source: "A"}}}
+	cache.Environments = append([]api.Environment{prod}, cache.Environments...)
 	d.SaveCache(cache)
-	d.SaveOverrides(state.Overrides{"E": {"A": "本机"}})
+	d.SaveOverrides(state.Overrides{"ENV": {"A": "本机"}})
 	notes, err := a.Shadowing("dev", "A")
 	if err != nil || len(notes) != 2 || !strings.Contains(notes[0], "覆盖") || !strings.Contains(notes[1], "prod") {
 		t.Fatalf("提示不对：%q %v", notes, err)
@@ -267,5 +291,47 @@ func TestSyncPicksUpNewDeviceName(t *testing.T) {
 	}
 	if cfg.DeviceName != "新名字" || a.Config.DeviceName != "新名字" {
 		t.Fatalf("设备名没有更新：%q / %q", cfg.DeviceName, a.Config.DeviceName)
+	}
+}
+
+// 两层结构下的写入（设计文档 17.2）：通过环境用改名后的名字修改，写回变量库里的原变量；
+// 新增变量必须指定变量库；引用不允许修改时拒绝。
+func TestWriteThroughEnvironmentAndVault(t *testing.T) {
+	_, fs := fakeDevice(t, "电脑")
+	fs.rename = map[string]string{"A": "LLM_KEY"}
+	a, err := Load(true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	value := "改过的"
+	if r := set1(t, a, "LLM_KEY", VarChange{Value: &value}); r.Status != Written {
+		t.Fatalf("用改名后的名字修改：%+v", r)
+	}
+	if e := fs.entry(t, "A"); e.Value != "改过的" || e.Note != "旧备注" {
+		t.Fatalf("应写回原变量 A：%+v", e)
+	}
+	if r := set1(t, a, "NEW_KEY", VarChange{Value: &value}); r.Status != Failed || !strings.Contains(r.Err.Error(), "共享") {
+		t.Fatalf("通过环境新增变量应失败并列出变量库：%+v", r)
+	}
+	res, err := a.SetVariables(ctx, "共享", false, map[string]VarChange{"NEW_KEY": {Value: &value}}, false)
+	if err != nil || res[0].Status != Written {
+		t.Fatalf("指定变量库新增：%+v %v", res, err)
+	}
+	if notice := a.WriteNotice("dev", "LLM_KEY", false); !strings.Contains(notice, "共享") || !strings.Contains(notice, " A，") {
+		t.Fatalf("修改已有变量前应提示影响变量库里的原变量：%q", notice)
+	}
+	if notice := a.WriteNotice("共享", "BRAND_NEW", false); notice != "" {
+		t.Fatalf("新增变量不需要确认：%q", notice)
+	}
+	if err := a.DeleteVariable(ctx, "dev", "LLM_KEY"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := fs.vars["A"]; ok {
+		t.Fatal("应删除变量库里的原变量 A")
+	}
+	fs.locked = true
+	if r := set1(t, a, "NEW_KEY", VarChange{Value: &value}); r.Status != Failed || !strings.Contains(r.Err.Error(), "不允许修改") {
+		t.Fatalf("引用不允许修改时应拒绝：%+v", r)
 	}
 }

@@ -107,16 +107,19 @@ harmonia exec --env 环境A,环境C:API_KEY -- npm test   # 环境A 的全部变
 把值从标准输入传进去，不要写在命令参数里（参数会留在 shell 历史和进程列表中）：
 
 ```bash
-printf '%s' "$VALUE" | harmonia var set <环境> <变量名>
-harmonia var set <环境> <变量名> < value.txt
-harmonia var rm <环境> <变量名>
+printf '%s' "$VALUE" | harmonia var set <变量库|环境> <变量名>
+harmonia var set <变量库|环境> <变量名> < value.txt
+harmonia var rm <变量库|环境> <变量名>
 ```
+
+- 变量保存在变量库里，环境只是引用变量库里的变量（可以改名）。新增变量必须指定变量库；修改或删除已有变量时也可以写环境，用环境里的名字。目标写成环境、变量又不存在时，报错信息会列出可以新增变量的变量库，照着改用变量库。
+- 写入的是变量库里的原变量，所有引用它的环境都会看到新值，stderr 会提示这一点。
 
 - 从标准输入只读取第一行，首尾空白会被去掉。
 - 写入后会回读校验，输出“已写入 X，回读校验一致”才算成功。之后如果提示“注意：……”（环境没有启用、被排在前面的环境遮住、有本机覆盖值），说明 `harmonia exec` 拿到的不会是刚写的值，把提示转告用户。
-- 变量可以带一条备注，说明用途或来源，会在 `harmonia var list` 中显示。给了 `--note` 时命令不读取标准输入，只改备注、保留原值，所以分两步：先按上面的方式写入值，再运行 `harmonia var set <环境> <变量名> --note 备注`。`--note ""` 清除备注。不要把密钥写进备注。
+- 变量可以带一条备注，说明用途或来源，会在 `harmonia var list` 中显示。给了 `--note` 时命令不读取标准输入，只改备注、保留原值，所以分两步：先按上面的方式写入值，再运行 `harmonia var set <变量库|环境> <变量名> --note 备注`。`--note ""` 清除备注。不要把密钥写进备注。
 - 删除变量、覆盖已有的值之前，先向用户确认。
-- 提示只有只读权限时，告诉用户需要在手机上把这台电脑对这个环境的权限改为读写。
+- 提示只有只读权限、或这条引用不允许修改时，把提示转告用户：需要在手机上把这台电脑对这个环境的权限改为读写，或在环境里为这个变量库开启“可以修改”。
 
 只想在这台电脑上用另一个值、不改动其他设备时，用本机覆盖（不上传）：
 
@@ -129,8 +132,8 @@ harmonia override list
 一次写入多个变量时用批量导入，从文件或标准输入读取 `.env`（或 JSON 对象）：
 
 ```bash
-harmonia import --env <环境> --file .env --json
-printf '%s' "$JSON" | harmonia import --env <环境> --file - --json
+harmonia import --vault <变量库> --file .env --json
+printf '%s' "$JSON" | harmonia import --vault <变量库> --file - --json
 ```
 
 - 值和现有的相同的变量会跳过；`--json` 逐条给出 `written`、`unchanged`、`failed`（附原因）。有失败时退出码为 1。

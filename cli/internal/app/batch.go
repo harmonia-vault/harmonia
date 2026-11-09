@@ -29,9 +29,9 @@ type batch struct {
 	size int
 }
 
-// WriteBatch 把各项加密后分批调用批量写入接口。一批整体成功或整体失败，返回每一项的错误（nil 表示成功），
+// WriteBatch 把各项加密后分批写入一个变量库（Name 是变量库里的原名）。一批整体成功或整体失败，返回每一项的错误（nil 表示成功），
 // 顺序同 items。本机已被移除时返回 api.ErrRevoked，其余错误都记在各项上。
-func WriteBatch(ctx context.Context, c *api.Client, envID string, key []byte, kv int, items []BatchItem) ([]error, error) {
+func WriteBatch(ctx context.Context, c *api.Client, vaultID string, key []byte, kv int, items []BatchItem) ([]error, error) {
 	errs := make([]error, len(items))
 	var batches []*batch
 	cur := &batch{}
@@ -39,7 +39,7 @@ func WriteBatch(ctx context.Context, c *api.Client, envID string, key []byte, kv
 		size := len(it.Name) + 32
 		var w *api.VarWrite
 		if !it.Delete {
-			ct, err := hc.EncryptVar(key, envID, kv, it.Name, it.Entry)
+			ct, err := hc.EncryptVar(key, vaultID, kv, it.Name, it.Entry)
 			if err != nil {
 				errs[i] = err
 				continue
@@ -63,7 +63,7 @@ func WriteBatch(ctx context.Context, c *api.Client, envID string, key []byte, kv
 		batches = append(batches, cur)
 	}
 	for _, b := range batches {
-		err := c.PatchVariables(ctx, envID, fmt.Sprint(kv), b.set, b.del, hc.NewID())
+		err := c.PatchVariables(ctx, vaultID, fmt.Sprint(kv), b.set, b.del, hc.NewID())
 		if errors.Is(err, api.ErrRevoked) {
 			return nil, err
 		}

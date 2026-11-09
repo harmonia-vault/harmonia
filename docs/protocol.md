@@ -11,7 +11,7 @@
 | 变量名 | `^[A-Za-z_][A-Za-z0-9_]{0,127}$`，不能以 `__HARMONIA_` 开头（不区分大小写） |
 | 变量值 | UTF-8，最长 65536 字节，可以为空 |
 | 变量备注 | UTF-8，去除首尾空白后最长 200 个字符，可以换行，可以为空 |
-| 环境名、设备名 | 去除首尾空白后 1–64 个字符 |
+| 变量库名、环境名、设备名 | 去除首尾空白后 1–64 个字符 |
 | 时间 | Unix 毫秒整数 |
 | 规范数组 | 字符串数组的紧凑 JSON 的 UTF-8 字节，记作 `C([...])`。数组元素只允许 ASCII 可打印字符（ID、b64、十进制数字、固定单词），因此 Go、Dart、JS 的输出一致 |
 
@@ -21,7 +21,7 @@
 
 | 用途 | 构件 |
 | --- | --- |
-| 变量加密 | XChaCha20-Poly1305-IETF，值和备注一起加密，明文见 2.6。密文 = b64(nonce24 ‖ ciphertext ‖ tag16)。AAD = `C(["harmonia.var", envId, keyVersion, name])` |
+| 变量加密 | XChaCha20-Poly1305-IETF，值和备注一起加密，明文见 2.6。密文 = b64(nonce24 ‖ ciphertext ‖ tag16)。AAD = `C(["harmonia.var", vaultId, keyVersion, name])` |
 | 封装 | libsodium `crypto_box_seal`（X25519 + XSalsa20-Poly1305） |
 | 加密密钥对 | 由 32 字节种子按 `crypto_box_seed_keypair` 派生：sk = SHA-512(seed)[0:32]，pk = X25519(sk, 基点) |
 | 签名 | Ed25519，由 32 字节种子派生（`crypto_sign_seed_keypair`） |
@@ -37,7 +37,8 @@
 | 账号根签名钥（root） | 32 字节随机种子 → Ed25519 | 全部管理设备；另封装给恢复钥。`rootPub` 公开 |
 | 设备签名钥 | 32 字节随机种子 → Ed25519 | 设备自己 |
 | 设备加密钥 | 32 字节随机种子 → box 密钥对 | 设备自己 |
-| 环境钥 | 32 字节随机数 | 管理设备、获授权设备、恢复钥（都是封装形式） |
+| 库钥 | 32 字节随机数，每个变量库一把（2026-11-09 由“环境钥”改名） | 管理设备、恢复钥，以及对引用它的环境开启了“允许本机解密”的设备（都是封装形式） |
+| 临时密钥对 | 每个批准请求在 CLI 内存中生成的 box 密钥对（32 字节随机种子），用完即丢 | 发起请求的 CLI 进程 |
 | 恢复码 | 16 字节随机数 | 用户离线保存 |
 | 恢复签名钥 | HKDF(恢复码, info=`harmonia.recovery.sign`) → Ed25519 种子 | 由恢复码派生 |
 | 恢复加密钥 | HKDF(恢复码, info=`harmonia.recovery.box`) → box 种子 | 由恢复码派生 |
@@ -53,12 +54,14 @@
 | 名称 | 原文 | 签名者 | 验证者 |
 | --- | --- | --- | --- |
 | 设备证书 | `C(["harmonia.device", deviceId, kind, signPub, boxPub])` | root | 管理设备：为某设备封装任何东西之前必须验证 |
-| 封装签名 | `C(["harmonia.envelope", envId, keyVersion, recipient, b64(SHA-256(sealed))])` | root | 接收方：使用环境钥之前必须验证 |
+| 封装签名 | `C(["harmonia.envelope", vaultId, keyVersion, recipient, b64(SHA-256(sealed))])` | root | 接收方：使用库钥之前必须验证 |
 | 恢复根封装签名 | `C(["harmonia.root-recovery", generation, b64(SHA-256(sealed))])` | 恢复签名钥 | 恢复中的设备 |
 | 设备登录 | `C(["harmonia.auth", deviceId, nonce])` | 设备签名钥 | 服务端 |
 | 恢复登录 | `C(["harmonia.recovery-auth", nonce])` | 恢复签名钥 | 服务端 |
+| 批准请求 | `C(["harmonia.approval-request", requestId, deviceId, b64(SHA-256(detail)), b64(SHA-256(payload))])` | 设备签名钥 | 管理设备：处理请求之前必须验证（3.9） |
+| 批准结果 | `C(["harmonia.approval-grant", requestId, b64(SHA-256(sealed))])` | root | 发起请求的 CLI：解开结果之前必须验证（3.9） |
 
-`kind` 取 `manager` 或 `client`；`recipient` 为设备 ID 或字面量 `recovery`；`keyVersion`、`generation` 为十进制字符串。
+`detail`、`payload` 是请求中这两个字符串字段的 UTF-8 字节，没有 `payload` 时按空字符串计算；签名覆盖原样的字节，不重新序列化。`kind` 取 `manager` 或 `client`；`recipient` 为设备 ID 或字面量 `recovery`；`keyVersion`、`generation` 为十进制字符串。
 
 管理设备收到的 root 封装（内容为 root 种子）不需要签名：解封后由种子派生公钥，必须等于本机钉住的 `rootPub`。
 
@@ -97,7 +100,7 @@ PIN 槽（必有）：
   槽    = AES-256-GCM(K_bio, DEK)，IV 由 Keystore 生成，与密文一起保存
 ```
 
-配置 JSON 中含设备签名种子和加密种子。缓存中的环境钥封装和变量值本来就是密文，不再加密。
+配置 JSON 中含设备签名种子和加密种子。缓存中的库钥封装和变量值本来就是密文，不再加密。
 
 规则：
 
@@ -241,23 +244,45 @@ DEK  = 32 字节随机数，设置管理口令时生成
 | `POST /pairings/{id}/reject` | device（管理设备） | `{block?: bool}`；`block` 为 true 时，30 分钟内拒绝来自该请求 IP 的新配对请求 |
 | `GET /sync?since=N` | device | 见 3.4 |
 | `GET /events` | device | WebSocket，见 3.5 |
-| `POST /environments` | device（管理设备） | `{id, name, envelopes:[{recipient, keyVersion, sealed, sig}]}`，必须覆盖全部活跃的管理设备和 `recovery` |
-| `PATCH /environments/{id}` | device（管理设备） | `{name}` |
-| `DELETE /environments/{id}` | device（管理设备） | 删除环境和其中全部变量 |
-| `PUT /environments/{id}/variables/{name}` | rw 或管理设备 | `{value, keyVersion}`，`value` 是值和备注一起加密的密文（第 2 节），只改备注也整体重写。请求头带 `Idempotency-Key` |
-| `DELETE /environments/{id}/variables/{name}` | 同上 | 请求头带 `Idempotency-Key` |
-| `PATCH /environments/{id}/variables` | 同上 | 批量写入（2026-10-15 增加）：`{keyVersion, set:[{name, value}], delete:[name]}`。`set` 与 `delete` 合计 1 到 100 项，同一个变量名只能出现一次；`value` 的格式同单个写入，`keyVersion` 对整批生效。整个请求在一个事务中完成：任意一项不合法、权限不足或 `keyVersion` 不是环境当前的密钥版本时整体拒绝，什么都不写；成功后整批共用一个新的 `seq`，返回 `{seq}`，只推送一次 `changed`。删除不存在的变量不报错。请求头带 `Idempotency-Key`，请求体最大约 2 MB。导入、复制和多选删除用它，免得逐个调用撞上 3.8 的入口限流 |
-| `PUT /devices/{id}/grants` | 管理设备 | `{grants:[{envId, role, expiresAt}], envelopes:[{envId, keyVersion, sealed, sig}]}`，整体替换；新授权的环境必须附带封装。已有授权保留激活状态和顺序，新授权默认激活并排在最后 |
-| `PUT /devices/{id}/activation` | 管理设备；或设备本身，此时 `{id}` 为 `self` | `{envs:[{envId, active}]}`，按顺序从前到后排列（排在前面的覆盖后面的同名变量），必须包含该设备全部未到期的授权环境（可以带上已到期的），不能有未授权的环境，否则返回 `conflict`；没有列出的已到期授权保持原有相对顺序，排在后面。只修改激活状态和顺序 |
+| `POST /vaults` | device（管理设备） | `{id, name, envelopes:[{recipient, keyVersion, sealed, sig}]}`，必须覆盖全部活跃的管理设备和 `recovery`（2026-11-09 由 `POST /environments` 改名） |
+| `PATCH /vaults/{id}` | device（管理设备） | `{name}` |
+| `DELETE /vaults/{id}` | device（管理设备） | 删除变量库和其中全部变量，以及全部给它的封装。引用它的环境保留这条引用，标记为已失效（3.4 的 `missing`） |
+| `PUT /vaults/{id}/variables/{name}` | 管理设备，或有写权限的设备（见下） | `{value, keyVersion}`，`value` 是值和备注一起加密的密文（第 2 节），只改备注也整体重写。请求头带 `Idempotency-Key` |
+| `DELETE /vaults/{id}/variables/{name}` | 同上 | 请求头带 `Idempotency-Key` |
+| `PATCH /vaults/{id}/variables` | 同上 | 批量写入（2026-10-15 增加）：`{keyVersion, set:[{name, value}], delete:[name]}`。`set` 与 `delete` 合计 1 到 100 项，同一个变量名只能出现一次；`value` 的格式同单个写入，`keyVersion` 对整批生效。整个请求在一个事务中完成：任意一项不合法、权限不足或 `keyVersion` 不是变量库当前的密钥版本时整体拒绝，什么都不写；成功后整批共用一个新的 `seq`，返回 `{seq}`，只推送一次 `changed`。删除不存在的变量不报错。请求头带 `Idempotency-Key`，请求体最大约 2 MB。导入、复制、多选删除和手机批准的写入用它，免得逐个调用撞上 3.8 的入口限流 |
+| `POST /environments` | device（管理设备） | `{id, name, refs, envelopes}`，`refs` 的格式见下；最终名字有重复时返回 `conflict`，`message` 指出重复的名字。`envelopes` 新建时为空 |
+| `PUT /environments/{id}` | device（管理设备） | `{name, refs, envelopes:[{recipient, vaultId, keyVersion, sealed, sig}]}`，整体替换。新引用的变量库必须为每台对这个环境开启了 `localDecrypt` 且还没有这个变量库封装的设备附带封装，缺少时返回 `conflict`；不再被某台设备任何 `localDecrypt` 授权用到的变量库，服务端删除给它的封装。引用改变后推送 `changed` |
+| `DELETE /environments/{id}` | device（管理设备） | 删除环境和对它的全部授权（同样清理不再用到的封装），变量库不受影响 |
+| `PUT /devices/{id}/grants` | 管理设备 | `{grants:[{environmentId, role, expiresAt, localDecrypt}], envelopes:[{vaultId, keyVersion, sealed, sig}]}`，整体替换。`localDecrypt` 为 true 的授权，它引用到的每个变量库都必须有给这台设备的封装（已有的不用重复附带），否则返回 `conflict`；不再用到的封装由服务端删除。已有授权保留激活状态和顺序，新授权默认激活并排在最后 |
+| `PUT /devices/{id}/activation` | 管理设备；或设备本身，此时 `{id}` 为 `self` | `{envs:[{environmentId, active}]}`，按顺序从前到后排列（排在前面的覆盖后面的同名变量），必须包含该设备全部未到期的授权环境（可以带上已到期的），不能有未授权的环境，否则返回 `conflict`；没有列出的已到期授权保持原有相对顺序，排在后面。只修改激活状态和顺序 |
 | `PATCH /devices/{id}` | 管理设备；或设备本身，此时 `{id}` 为 `self` | `{name, systemVars, autoUpdate}`，各项都可以省略，但至少要有一项。`systemVars`（布尔）表示这台设备是否把系统自身使用的变量名写入系统环境，目前只有 Windows 上的 CLI 使用，默认 false。`autoUpdate`（布尔）表示这台设备的后台服务发现新版本时是否自动升级，只有 CLI 使用，默认 false。设备本身只能修改 `systemVars` 和 `autoUpdate` |
 | `POST /devices/{id}/update` | 管理设备 | 无请求体 → `{}`。让这台设备的后台服务现在检查更新并升级（设计文档 5.11），服务端向它推送 `{"type":"update"}`。只能用于 `kind` 为 `client` 的设备，否则返回 `invalid_request`；这台设备当前没有推送连接时返回 `device_offline` |
 | `POST /devices/{id}/revoke` | 管理设备 | 撤销。不能撤销最后一台管理设备 |
 | `POST /devices/self/revoke` | device | 本机退出。最后一台管理设备需要带上 `{confirmLast:true}` |
 | `POST /recovery/session` | 请求头 `X-Harmonia-Account` | `{nonce, signature}` → `{token, expiresAt}` |
-| `GET /recovery/material` | recovery | `{rootPub, generation, rootEnvelope:{sealed, sig}, environments:[{id, name, keyVersion}], envelopes:[{envId, keyVersion, sealed, sig}]}` |
+| `GET /recovery/material` | recovery | `{rootPub, generation, rootEnvelope:{sealed, sig}, vaults:[{id, name, keyVersion}], envelopes:[{vaultId, keyVersion, sealed, sig}]}` |
 | `POST /recovery/enroll` | recovery | `{device:{id, name, platform, signPub, boxPub, cert}, rootSealed, envelopes:[...]}`；新设备成为 `rotationRequired=true` 的管理设备，恢复会话随即作废 |
 | `POST /recovery/rotate` | device（管理设备） | 见 3.6 |
 | `GET /recovery/rotate/{key}` | device（管理设备） | `{state: "complete" \| "absent", generation?}` |
+| `POST /approvals` | device（客户端设备） | 发起批准请求，见 3.9 |
+| `GET /approvals/{id}/events` | device（发起请求的设备） | 发起方的等待连接（WebSocket），见 3.9 |
+| `GET /approvals/{id}/status` | device（发起请求的设备） | `{status, result?}`，只在等待连接意外断开后查询一次 |
+| `GET /approvals` | device（管理设备） | 列出发起方仍在等待的请求 |
+| `POST /approvals/{id}/approve` | device（管理设备） | 见 3.9；发起方已离开时返回 `conflict` |
+| `POST /approvals/{id}/reject` | device（管理设备） | 无请求体 → `{}` |
+| `GET /authorizations` | device（管理设备，或设备本身） | 正在生效的授权（有效时长不是“仅这一次”的已批准请求）：`[{id, deviceId, items, scope, expiresAt}]`，见 3.9 |
+| `POST /authorizations/{id}/end` | 管理设备，或设备本身 | 结束一项正在生效的授权，向那台设备推送 `{"type":"authorization-ended","id"}` |
+
+**引用的格式**（2026-11-09）：
+
+```json
+{"vaultId": "...", "scope": "all | pick", "writable": false, "items": [{"name": "OPENAI_API_KEY", "as": "LLM_KEY"}]}
+```
+
+- `scope` 为 `pick` 时，`items` 列出勾选的变量，`as` 可选，是在环境里的名字；为 `all` 时包含变量库的全部变量，`items` 只列出要改名的那几个（`as` 必填）。`items` 里的 `name` 不需要在变量库中已经存在（变量可能稍后才写入），不存在的不提供变量。
+- 同一个 `vaultId` 在一个环境中只能出现一次，`refs` 最多 50 条。
+- **最终名字**：按 `refs` 的顺序展开，每个变量取 `as`（没有时取原名）。保存时只检查当时的最终名字；以后 `all` 引用的变量库新增了重复的名字，排在前面的引用优先，3.4 的 `items` 里只保留优先的那个，另在 `shadowed` 中列出被遮住的。
+- **写权限**：客户端设备写入或删除 `/vaults/{id}/variables/{name}` 时，必须有一项未到期、`role` 为 `rw`、`localDecrypt` 为 true 的授权，其环境中有一条 `writable` 为 true 的引用覆盖这个变量：`pick` 时 `name` 在 `items` 中，`all` 时任何变量都算（包括新增）。没有开启 `localDecrypt` 的设备通过 3.9 的写入请求由管理设备代为写入。
 
 #### 3.2.1 首次初始化
 
@@ -276,16 +301,16 @@ DEK  = 32 字节随机数，设置管理口令时生成
 {
   "kind": "client | manager",
   "cert": "<root 对设备证书的签名>",
-  "grants": [{"envId": "...", "role": "ro|rw", "expiresAt": 0}],
-  "envelopes": [{"envId": "...", "keyVersion": "1", "sealed": "...", "sig": "..."}],
+  "grants": [{"environmentId": "...", "role": "ro|rw", "expiresAt": 0, "localDecrypt": false}],
+  "envelopes": [{"vaultId": "...", "keyVersion": "1", "sealed": "...", "sig": "..."}],
   "rootSealed": "<仅 manager：用新设备加密公钥封装的 root 种子>"
 }
 ```
 
 - 新设备的 ID 等于配对 ID。
 - `kind=manager` 只能用于 `canManage=true` 的请求，否则返回 `invalid_request`。管理设备不限平台，取决于客户端是否具备管理功能。
-- `kind=manager` 时不带 grants，envelopes 必须覆盖全部环境。
-- `kind=client` 时，每条授权都必须带对应环境的封装。
+- `kind=manager` 时不带 grants，envelopes 必须覆盖全部变量库。
+- `kind=client` 时，`localDecrypt` 为 true 的授权引用到的每个变量库都必须带封装；其他授权不带封装。
 - `expiresAt` 为 0 表示一直有效，直到被撤销。
 
 ### 3.4 同步
@@ -295,21 +320,35 @@ DEK  = 32 字节随机数，设置管理口令时生成
 ```json
 {
   "seq": 42,
+  "full": false,
   "self": {"id": "...", "kind": "client", "name": "...", "rotationRequired": false, "systemVars": false, "autoUpdate": false},
-  "environments": [{"id": "...", "name": "...", "keyVersion": "1", "role": "rw", "expiresAt": 0, "active": true, "position": 0}],
-  "envelopes": [{"envId": "...", "keyVersion": "1", "sealed": "...", "sig": "..."}],
-  "variables": [{"envId": "...", "name": "K", "value": "<密文>", "keyVersion": "1", "deleted": false, "seq": 40}],
+  "environments": [{
+    "id": "...", "name": "...", "role": "rw", "expiresAt": 0, "localDecrypt": false, "active": true, "position": 0,
+    "items": [{"name": "LLM_KEY", "vaultId": "...", "source": "OPENAI_API_KEY", "writable": false}],
+    "shadowed": [{"name": "DB_URL", "vaultId": "...", "source": "DB_URL"}],
+    "createVaults": ["..."]
+  }],
+  "vaultNames": [{"id": "...", "name": "..."}],
+  "vaults": [{"id": "...", "keyVersion": "1"}],
+  "envelopes": [{"vaultId": "...", "keyVersion": "1", "sealed": "...", "sig": "..."}],
+  "variables": [{"vaultId": "...", "name": "OPENAI_API_KEY", "value": "<密文>", "keyVersion": "1", "deleted": false, "seq": 40}],
+  "managers": [{"id": "...", "signPub": "...", "boxPub": "...", "cert": "..."}],
   "manager": {
     "rootSealed": "...",
     "recovery": {"generation": "1", "boxPub": "..."},
-    "devices": [{"id": "...", "name": "...", "platform": "...", "kind": "...", "signPub": "...", "boxPub": "...", "cert": "...", "createdAt": 0, "lastSeenAt": 0, "version": "0.4.5", "systemVars": false, "autoUpdate": false, "grants": [{"envId": "...", "role": "...", "expiresAt": 0, "active": true, "position": 0}]}]
+    "vaults": [{"id": "...", "name": "...", "keyVersion": "1"}],
+    "environments": [{"id": "...", "name": "...", "refs": [{"vaultId": "...", "scope": "all", "writable": true, "items": [], "missing": false}]}],
+    "devices": [{"id": "...", "name": "...", "platform": "...", "kind": "...", "signPub": "...", "boxPub": "...", "cert": "...", "createdAt": 0, "lastSeenAt": 0, "version": "0.4.5", "systemVars": false, "autoUpdate": false, "grants": [{"environmentId": "...", "role": "...", "expiresAt": 0, "localDecrypt": false, "active": true, "position": 0}]}]
   }
 }
 ```
 
-- `environments` 和 `envelopes` 每次都返回当前可访问的**完整列表**。客户端据此清除不在列表中的环境。
-- `variables` 只返回增量：所在环境可见，并且满足 `seq > N`，或者本设备对该环境的授权是在 N 之后获得的。
-- `manager` 字段只返回给管理设备。管理设备的 `role` 恒为 `rw`。
+- `environments`、`vaults`、`envelopes` 和 `managers` 每次都返回**完整列表**。客户端据此清除不在列表中的环境和变量库。
+- `environments` 是这台设备被授权的环境（管理设备为全部环境）。`items` 是服务端按 3.2 的引用规则展开的最终名字：`source` 是变量库里的原名，`writable` 表示这个变量所在的引用可以修改；只列出变量库里当前存在的变量。`shadowed` 是被前面的引用遮住的同名变量。`createVaults` 是环境里 `scope` 为 `all` 且 `writable` 的引用所指的变量库，`role` 为 `rw` 时可以在其中新增变量。
+- `vaultNames` 是这台设备的环境所引用的全部变量库的 ID 和名字，供客户端显示来源、按名字指定写入的变量库（设计文档 17.2）；不含其中的变量。
+- `vaults`、`envelopes`、`variables` 只涉及这台设备可以在本机解密的变量库：被某项未到期、`localDecrypt` 为 true 的授权引用到的变量库（管理设备为全部）。`variables` 只返回其中被这些授权的 `items` 覆盖的变量（管理设备为全部），并且只返回增量：满足 `seq > N` 的变化（包括删除墓碑）。设备能看到的变量范围在 N 之后变过（授权、`localDecrypt` 或环境的引用变化，变量库被删除）时，`full` 为 true，`variables` 改为返回范围内现存的全部变量，客户端用它整体替换缓存；`since=0` 时 `full` 恒为 true。没有开启 `localDecrypt` 的授权只在 `environments` 里出现变量名，不下发密文。
+- `managers` 是全部活跃管理设备的公钥和证书，客户端设备用它们加密 3.9 的写入内容，使用前先用钉住的 `rootPub` 验证证书。
+- `manager` 字段只返回给管理设备。管理设备的 `role` 恒为 `rw`，`localDecrypt` 恒为 true。`refs` 中的 `missing` 表示引用的变量库已被删除。
 - `version` 是这台设备最近一次同步时上报的客户端版本（见第 3 节开头的 `X-Harmonia-Version`），由设备自己上报，服务端不校验真伪；设备还没有上报过时是空字符串，响应里没有这个字段时（较旧的服务端）同样按未知处理。
 - `systemVars` 是设备上的“写入系统变量”开关，见 `PATCH /devices/{id}`；响应里没有这个字段时（较旧的服务端）按 false 处理。
 - `autoUpdate` 是设备上的“自动更新”开关，见 `PATCH /devices/{id}`；没有这个字段时按 false 处理。
@@ -323,6 +362,8 @@ DEK  = 32 字节随机数，设置管理口令时生成
 - `{"type":"changed","seq":N}`：客户端收到后调用 `/sync`
 - `{"type":"pairing"}`：只推送给管理设备，表示待批准列表有变化。匿名配对请求自身的变化不推送，见 3.5.1
 - `{"type":"revoked"}`：推送后服务端关闭连接
+- `{"type":"approval"}`：只推送给管理设备，表示待批准的解密或写入请求有变化（3.9）
+- `{"type":"authorization-ended","id":"..."}`：只推送给那台设备，表示一项正在生效的授权被结束，保管进程清除对应的变量（3.9）
 - `{"type":"update"}`：只推送给被 `POST /devices/{id}/update` 指定的设备，表示现在检查更新并升级。不带版本号，客户端按自己的更新渠道检查，只安装签名有效且比当前版本新的安装包
 
 客户端每 30 秒发送一次文本 `ping`，服务端自动回复 `pong`。
@@ -345,11 +386,11 @@ DEK  = 32 字节随机数，设置管理口令时生成
   "generation": "2",
   "signPub": "...", "boxPub": "...",
   "rootEnvelope": {"sealed": "...", "sig": "<新恢复签名钥对 root-recovery 原文的签名>"},
-  "envelopes": [{"envId": "...", "keyVersion": "1", "sealed": "...", "sig": "<root 签名>"}]
+  "envelopes": [{"vaultId": "...", "keyVersion": "1", "sealed": "...", "sig": "<root 签名>"}]
 }
 ```
 
-- `generation` 必须等于当前值加 1；`envelopes` 必须覆盖全部环境。
+- `generation` 必须等于当前值加 1；`envelopes` 必须覆盖全部变量库。
 - 整个操作在一个事务中原子完成。成功后旧恢复码失效，发起设备的 `rotationRequired` 被清除。
 - 用相同的 `idempotencyKey` 重试会返回原结果。
 
@@ -409,13 +450,75 @@ DEK  = 32 字节随机数，设置管理口令时生成
 - 整个账号同时最多 20 个匿名请求、5 个由配对码创建的请求，两者分开计数：匿名请求被占满时，用配对码仍然可以发起。
 - 拒绝并阻止见 3.2。
 
+**批准请求**（2026-11-09）
+
+- 每台设备同时最多 3 个等待中的批准请求，整个账号最多 20 个，超出时返回 `rate_limited`。
+
 **签名验证的操作**
 
 - 设备登录挑战、设备会话、恢复会话只按网络限制每分钟次数，不设账号级计数。已接入设备的操作不受配对码和邮件限制的影响。
 
+### 3.9 批准解密与写入（2026-11-09）
+
+没有开启 `localDecrypt` 的授权，变量值只能经管理设备批准取得或写入。设计和界面见设计文档第 17 节。
+
+**发起：`POST /approvals`**
+
+```json
+{"id": "<客户端生成的 ID>", "detail": "<JSON 字符串>", "payload": "<JSON 字符串，只有写入请求有>", "sig": "<设备签名钥对批准请求原文的签名>"}
+```
+
+`detail` 解析后是：
+
+```json
+{
+  "kind": "read | write",
+  "deviceId": "...",
+  "createdAt": 0,
+  "ephPub": "<临时密钥对的公钥，只有读取请求有>",
+  "command": "npm run dev",
+  "cwd": "/home/me/blog",
+  "items": [{"environmentId": "...", "name": "LLM_KEY", "vaultId": "<只在写入请求新增变量时有>"}],
+  "delete": [{"environmentId": "...", "name": "OLD_KEY"}]
+}
+```
+
+- `items` 用环境里的最终名字。读取请求列出要取的变量；写入请求列出要写入的变量，`delete` 列出要删除的变量（只有写入请求有）。两者合计 1 到 200 项。
+- `command`、`cwd` 各最长 1000 个字符，只用于在管理设备上显示，客户端负责截断。`detail` 最长 64 KiB，`payload` 最长约 2 MB。
+- 写入请求的 `payload` 解析后是 `{"sealed":[{"managerId", "sealed"}]}`：为 3.4 `managers` 中的每一台各加密一份，`sealed = crypto_box_seal(管理设备 boxPub, 写入内容)`。写入内容是 UTF-8 JSON：`{"requestId": "...", "set": [{"environmentId", "name", "vaultId", "plain": <2.6 的明文对象>}]}`，`vaultId` 与 `detail` 中的一致（新增变量时）或省略（修改已有变量时）。
+- **请求码** = `CrockfordBase32(SHA-256(detail)[0:3])` 的前 4 个字符。客户端和管理设备都由 `detail` 自己算出并显示，供用户核对。
+- 服务端检查：签名（用设备的 `signPub`）、`deviceId` 是当前会话的设备、`createdAt` 与服务器时间相差不超过 5 分钟、`id` 没有用过；`items` 和 `delete` 中的每一项所在的环境都授权给了这台设备、没有到期、`localDecrypt` 为 false，名字在 3.4 的 `items` 中；写入请求还要求 `role` 为 `rw`：修改的名字是 `writable` 的变量；新增的变量带 `vaultId`（设计文档 17.2：新增变量必须指定变量库，`environmentId` 是提供写权限的那个环境），它必须在这个环境的 `createVaults` 中，名字不能和变量库或环境里已有的名字重复；删除的名字是 `writable` 的变量。不满足时返回 `forbidden` 或 `invalid_request`。
+- 成功返回 `{expiresAt}`，请求 2 分钟内有效。服务端向管理设备推送 `{"type":"approval"}`。
+
+**等待**：发起后立即连接 `GET /approvals/{id}/events`，规则与 3.5.1 的配对等待连接相同：同时只允许一条连接；没有等待连接的请求不出现在 `GET /approvals` 中，也不能被批准；发起方每 10 秒发送一次 `ping`，25 秒没有收到或连接断开时，仍在等待的请求标记为 `cancelled`，并向管理设备推送 `approval`。处理后服务端推送 `{"type":"approved","result":{...}}`（读取请求带下面的结果，写入请求为 `{}`）、`{"type":"rejected"}` 或 `{"type":"expired"}`，然后关闭连接。连接意外断开时查询一次 `GET /approvals/{id}/status`，批准后的结果保留 2 分钟。
+
+**批准：`POST /approvals/{id}/approve`**
+
+- 管理设备先验证请求签名（设备证书由 root 签名），再按自己同步到的数据重新做一遍服务端的检查，任何一项不符就拒绝并提示服务器数据可能有误。
+- **读取请求**：请求体 `{"sealed", "sig", "scope", "expiresAt"}`。`sealed = crypto_box_seal(ephPub, 结果)`，`sig` 是 root 对批准结果原文的签名。结果是 UTF-8 JSON：
+
+  ```json
+  {
+    "requestId": "...",
+    "scope": "once | terminal | all",
+    "expiresAt": 0,
+    "values": [{"environmentId": "...", "name": "LLM_KEY", "vaultId": "...", "source": "OPENAI_API_KEY", "seq": 40, "plain": {"value": "...", "note": ""}}]
+  }
+  ```
+
+  `scope` 为 `once` 时只用于这一次；`terminal` 只对发起请求的终端有效；`all` 对这台电脑上的所有程序有效。`expiresAt` 为到期时间，`0` 表示长期（`once` 时忽略）。请求体外层的 `scope`、`expiresAt` 与结果里的相同，只供服务端记录和显示；客户端只认结果里经过 root 签名的值。`seq` 是变量当时的版本，保管进程据此发现变量被修改。
+- **写入请求**：管理设备解开加密给自己的那一份，核对 `requestId` 和名字与 `detail` 一致，用库钥加密后调用 `PATCH /vaults/{id}/variables` 写入（删除同理），全部成功后再调用批准，请求体为 `{}`。
+- 客户端收到结果后验证 root 签名、核对 `requestId`，再用临时私钥解开。
+
+**正在生效的授权**：读取请求批准时 `scope` 不是 `once`，服务端记录一项授权 `{id, deviceId, items, scope, expiresAt}`（`id` 即请求 ID），只用于显示和结束：变量已经交给了电脑，有效期由电脑上的保管进程执行，服务端无法强制。以下情况服务端删除记录并向那台设备推送 `authorization-ended`：到期、`POST /authorizations/{id}/end`、设备被撤销、对应环境的授权被删除或到期或改为 `localDecrypt`、环境的引用改变。保管进程退出时尽力结束自己持有的授权；没能通知到的（例如断网时关机），CLI 下次同步时发现保管进程没有持有，就结束它。
+
+**拒绝：`POST /approvals/{id}/reject`**，服务端向发起方推送 `rejected`。
+
 ## 4. 规则摘要
 
-- **权限**：客户端设备按环境授权，ro 只读，rw 可读写变量（2026-10-14 去掉 admin：客户端设备不能改名或删除环境）。管理设备拥有全部权限，并且是唯一能新建、改名、删除环境，批准设备、修改授权、撤销设备、轮换恢复码的角色。
+- **权限**：客户端设备按环境授权，ro 只读，rw 可以修改环境中 `writable` 引用带来的变量（2026-10-14 去掉 admin：客户端设备不能改名或删除环境）。管理设备拥有全部权限，并且是唯一能新建、改名、删除变量库和环境，批准设备、修改授权、处理批准请求、撤销设备、轮换恢复码的角色。
+- **两层**（2026-11-09）：变量存放在变量库中，环境只引用变量库，不能引用环境；设备只能被授权环境。
+- **本机解密与批准**：授权的 `localDecrypt` 为 true 时设备持有库钥，在本机解密；为 false（默认）时设备不持有库钥，每次经管理设备批准取得变量（3.9）。
 - **写入**：同一变量按服务器接受顺序，后写覆盖先写；批量写入整批生效或整批拒绝。客户端不做乐观更新，以同步结果为准。
 - **到期**：服务器拒绝已到期的授权；客户端离线时同样停用到期的环境。
 - **激活**：激活状态和顺序只决定设备把哪些环境写入本机环境变量、同名变量由哪个环境提供，不是安全边界；设备能读取什么只由授权决定。新授权默认激活并排在最后。

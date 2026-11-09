@@ -13,6 +13,8 @@ import 'ai_prompt.dart';
 import 'auth_pages.dart';
 import 'devices.dart';
 import 'device_review.dart';
+import 'env_editor.dart';
+import 'env_page.dart';
 import 'environments.dart';
 import 'feedback_debug.dart';
 import 'glass.dart';
@@ -29,6 +31,8 @@ import 'scanner.dart';
 import 'settings.dart';
 import 'widgets.dart';
 import 'theme.dart';
+import 'variable_edit.dart';
+import 'vaults.dart';
 
 class DebugPageEntry {
   const DebugPageEntry(this.name, this.page, {this.stage = Stage.home, this.prepare, this.followStage = true});
@@ -44,22 +48,27 @@ Map<String, List<DebugPageEntry>> debugPages() => {
     DebugPageEntry('首页、底栏交互动效与系统间距', (s) => s.vault.paired ? HomePage(c: s.c) : SignInPage(c: s.c)),
     DebugPageEntry('玻璃透明度与折射对照', (s) => GlassDebugPage(c: s.c)),
     DebugPageEntry('通知默认动效与下载进度', (_) => const FeedbackDebugPage()),
-    DebugPageEntry('环境列表与行尾间距', (s) => EnvironmentsTab(c: s.c)),
+    DebugPageEntry('环境与变量库列表、新建菜单与行尾间距', (s) => EnvironmentsTab(c: s.c)),
     DebugPageEntry('设备列表、添加设备菜单与行尾间距', (s) => s.vault.paired ? DevicesTab(c: s.c) : SignInPage(c: s.c)),
     DebugPageEntry('设置、白色滑块与输入弹窗', (s) => s.vault.paired ? SettingsTab(c: s.c) : SignInPage(c: s.c)),
     DebugPageEntry('关于、连点版本号与开源许可', (s) => AboutPage(c: s.c)),
-    DebugPageEntry('环境详情、环境 ID、复制间距与菜单', (s) => _environment(s, edit: false)),
-    DebugPageEntry('添加变量', (s) => _environment(s, edit: true)),
-    DebugPageEntry('编辑变量', (s) {
-      if (s.vault.environments.isEmpty) return _environment(s, edit: true);
-      final id = s.vault.environments.first.id;
-      return VariableEditPage(c: s.c, envId: id, name: s.vault.entries(id).keys.firstOrNull);
+    DebugPageEntry('环境详情：来自哪个变量库、可访问的电脑、环境 ID 与菜单', (s) => _environment(s)),
+    DebugPageEntry('环境详情：同名变量被遮住、引用的变量库已删除', (s) => _environment(s, problems: true)),
+    DebugPageEntry('新建环境：添加变量库、勾选与改名、实时预览', (s) => EnvEditorPage(c: s.c)),
+    DebugPageEntry('编辑引用：顺序、可以修改、重名时不能保存', (s) {
+      final id = _problemEnv(s);
+      return id == null ? _none('环境') : EnvEditorPage(c: s.c, envId: id);
     }),
-    DebugPageEntry('无法解密的变量（删除或重新填写）', (s) {
-      if (s.vault.environments.isEmpty) return _environment(s, edit: true);
-      final id = s.vault.environments.first.id;
-      return VariableEditPage(c: s.c, envId: id, name: s.vault.brokenVariables(id).firstOrNull);
-    }),
+    DebugPageEntry('变量库详情、用到它的环境、变量库 ID 与菜单', (s) => _vault(s, (id) => VaultPage(c: s.c, vaultId: id))),
+    DebugPageEntry('添加变量', (s) => _vault(s, (id) => VariableEditPage(c: s.c, vaultId: id))),
+    DebugPageEntry(
+      '编辑变量',
+      (s) => _vault(s, (id) => VariableEditPage(c: s.c, vaultId: id, name: s.vault.entries(id).keys.firstOrNull)),
+    ),
+    DebugPageEntry(
+      '无法解密的变量（删除或重新填写）',
+      (s) => _vault(s, (id) => VariableEditPage(c: s.c, vaultId: id, name: s.vault.brokenVariables(id).firstOrNull)),
+    ),
     DebugPageEntry('设备详情与权限', (s) => _devicePage(s, 'debug-computer')),
     DebugPageEntry('电脑版本与更新：有新版本、让电脑更新、自动更新', (s) => _devicePage(s, 'debug-computer')),
     DebugPageEntry('电脑版本与更新：已是最新、后台服务不在线', (s) => _devicePage(s, 'debug-linux')),
@@ -162,35 +171,25 @@ Map<String, List<DebugPageEntry>> debugPages() => {
   ],
   '弹窗与弹层': [
     DebugPageEntry(
-      '首页新建环境、遮罩与键盘弹出避让',
+      '首页新建变量库、遮罩与键盘弹出避让',
       (s) => DebugOverlay(
         background: HomePage(c: s.c),
-        show: (c) => askName(c, title: '新建环境', label: '环境名称'),
+        show: (c) => askNewVault(c),
       ),
     ),
-    DebugPageEntry(
-      '新建环境弹窗',
-      (s) => DebugOverlay(
-        show: (c) async {
-          final name = await askName(c, title: '新建环境', label: '环境名称');
-          if (name != null && c.mounted) {
-            await runBusy(c, () => s.c.guard(() => s.vault.createEnvironment(name)), done: '已创建示例环境');
-          }
-        },
-      ),
-    ),
+    DebugPageEntry('新建变量库弹窗（同时创建同名环境）', (s) => DebugOverlay(show: (c) => createVaultFlow(c, s.c))),
     DebugPageEntry(
       '重命名弹窗',
       (s) => DebugOverlay(
         show: (c) async {
-          if (s.vault.environments.isEmpty) {
-            toast(c, '请先创建示例环境');
+          if (s.vault.vaults.isEmpty) {
+            toast(c, '请先创建示例变量库');
             return;
           }
-          final env = s.vault.environments.first;
-          final name = await askName(c, title: '重命名环境', initial: env.name);
+          final v = s.vault.vaults.first;
+          final name = await askName(c, title: '重命名变量库', initial: v.name);
           if (name != null && c.mounted) {
-            await runBusy(c, () => s.c.guard(() => s.vault.renameEnvironment(env.id, name)), done: '已重命名');
+            await runBusy(c, () => s.c.guard(() => s.vault.renameVault(v.id, name)), done: '已重命名');
           }
         },
       ),
@@ -233,10 +232,20 @@ Widget _devicePage(DebugSession s, String id) => s.vault.devices.any((d) => d.id
     ? DevicePage(c: s.c, deviceId: id)
     : const Center(child: Text('当前没有示例设备，请切换到正常数据。'));
 
-Widget _environment(DebugSession s, {required bool edit}) {
-  if (s.vault.environments.isEmpty) return const Center(child: Text('当前没有示例环境，请先在首页创建环境。'));
-  final id = s.vault.environments.first.id;
-  return edit ? VariableEditPage(c: s.c, envId: id) : EnvironmentPage(c: s.c, envId: id);
+Widget _none(String what) => Center(child: Text('当前没有示例$what，请重置示例或先在首页创建。'));
+
+/// 有同名被遮住或引用失效的示例环境。
+String? _problemEnv(DebugSession s) =>
+    s.vault.environments.where((e) => envProblems(s.c, e.id).isNotEmpty).firstOrNull?.id;
+
+Widget _environment(DebugSession s, {bool problems = false}) {
+  final id = problems ? _problemEnv(s) : s.vault.environments.firstOrNull?.id;
+  return id == null ? _none('环境') : EnvironmentPage(c: s.c, envId: id);
+}
+
+Widget _vault(DebugSession s, Widget Function(String id) page) {
+  final id = s.vault.vaults.firstOrNull?.id;
+  return id == null ? _none('变量库') : page(id);
 }
 
 class DebugCatalog extends StatelessWidget {

@@ -58,12 +58,12 @@ export function loginView(st, apply) {
     h('p', { class: 'hint', text: `${RULE}每次打开管理页面都要输入它；忘记后只能退出管理登录，再重新登录。` }),
     field('配对码（可选）', code, '在手机“设备 → 添加设备 → 生成配对码”中获取；填写后手机会直接弹出批准页。'),
     h('p', { class: 'warn', text: '请只在自己日常使用的电脑上开启，不要在多人共用的机器或运行 AI 助手的服务器上开启。' }),
-    h('label', { class: 'check' }, agree, h('span', { text: '我了解：这台电脑将能读取和修改账号里的全部环境。' })),
+    h('label', { class: 'check' }, agree, h('span', { text: '我了解：这台电脑将能读取和修改账号里的全部变量库和环境。' })),
     error,
     submit,
     h('p', { class: 'mute small', text: EXT }));
   return {
-    el: gate('让这台电脑成为管理设备', '管理登录之后，可以在这里批量管理全部环境和变量。它与日常登录（harmonia login）各自独立，互不影响。', form),
+    el: gate('让这台电脑成为管理设备', '管理登录之后，可以在这里批量管理全部变量库、环境和变量。它与日常登录（harmonia login）各自独立，互不影响。', form),
     focus: () => (a.fixed ? name : server).focus(),
   };
 }

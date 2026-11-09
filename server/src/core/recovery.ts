@@ -11,7 +11,7 @@ import {
   session,
   type Deps,
 } from "./context";
-import { insertEnvelopes, parseEnvelopes, requireAllEnvironments, verifyCert } from "./keys";
+import { insertEnvelopes, parseEnvelopes, requireAllVaults, verifyCert } from "./keys";
 import {
   bad,
   bin,
@@ -64,18 +64,18 @@ export function recoveryRoutes(app: Hono, deps: Deps) {
   app.get("/api/v1/recovery/material", async (c) => {
     await requireRecoverySession(c);
     const a = requireInitialized(sql);
-    const envs = sql.all<{ id: string; name: string; key_version: number }>(
-      `SELECT id, name, key_version FROM environments ORDER BY created_at`,
+    const vaults = sql.all<{ id: string; name: string; key_version: number }>(
+      `SELECT id, name, key_version FROM vaults ORDER BY created_at`,
     );
-    const envelopes = sql.all<{ env_id: string; key_version: number; sealed: string; sig: string }>(
-      `SELECT env_id, key_version, sealed, sig FROM envelopes WHERE recipient = 'recovery'`,
+    const envelopes = sql.all<{ vault_id: string; key_version: number; sealed: string; sig: string }>(
+      `SELECT vault_id, key_version, sealed, sig FROM envelopes WHERE recipient = 'recovery'`,
     );
     return c.json({
       rootPub: a.root_pub,
       generation: String(a.recovery_generation),
       rootEnvelope: { sealed: a.root_recovery_sealed, sig: a.root_recovery_sig },
-      environments: envs.map((e) => ({ id: e.id, name: e.name, keyVersion: String(e.key_version) })),
-      envelopes: envelopes.map((e) => ({ envId: e.env_id, keyVersion: String(e.key_version), sealed: e.sealed, sig: e.sig })),
+      vaults: vaults.map((v) => ({ id: v.id, name: v.name, keyVersion: String(v.key_version) })),
+      envelopes: envelopes.map((e) => ({ vaultId: e.vault_id, keyVersion: String(e.key_version), sealed: e.sealed, sig: e.sig })),
     });
   });
 
@@ -96,7 +96,7 @@ export function recoveryRoutes(app: Hono, deps: Deps) {
     const now = deps.now();
     sql.transaction(() => {
       if (deviceById(sql, deviceId)) throw conflict("设备已存在。");
-      requireAllEnvironments(sql, envelopes);
+      requireAllVaults(sql, envelopes);
       sql.run(
         `INSERT INTO devices (id, name, platform, kind, sign_pub, box_pub, cert, root_sealed, status, rotation_required, created_at, last_seen_at)
          VALUES (?, ?, ?, 'manager', ?, ?, ?, ?, 'active', 1, ?, ?)`,
@@ -140,7 +140,7 @@ export function recoveryRoutes(app: Hono, deps: Deps) {
     sql.transaction(() => {
       const cur = requireInitialized(sql);
       if (generation !== cur.recovery_generation + 1) throw conflict("恢复码已被更换过，请同步后重试。");
-      requireAllEnvironments(sql, envelopes);
+      requireAllVaults(sql, envelopes);
       sql.run(
         `UPDATE account SET recovery_generation = ?, recovery_sign_pub = ?, recovery_box_pub = ?,
           root_recovery_sealed = ?, root_recovery_sig = ? WHERE id = 1`,

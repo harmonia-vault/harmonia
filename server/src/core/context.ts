@@ -4,7 +4,7 @@ import { one, type Sql } from "./db";
 import type { Mailer } from "./email";
 import { sweepGuard } from "./guard";
 import { networkId } from "./net";
-import { ApiError, b64, forbidden, obj, randomB64, rateLimited, sha256, unauthorized, type Role } from "./util";
+import { ApiError, b64, forbidden, obj, randomB64, rateLimited, sha256, unauthorized } from "./util";
 
 export type PushMessage = { type: "changed"; seq: number } | { type: "pairing" } | { type: "revoked" } | { type: "update" };
 export type PushTarget = "all" | "managers" | { device: string };
@@ -56,6 +56,8 @@ export type Device = {
   rotation_required: number;
   system_vars: number;
   auto_update: number;
+  /** 设备能看到的变量范围最近一次变化时的 seq（docs/protocol.md 3.4 的 full）。 */
+  visibility_seq: number;
   /** 设备最近一次同步时上报的客户端版本，没有上报过时为空。 */
   version: string;
   created_at: number;
@@ -168,19 +170,6 @@ export async function requireDevice(
     throw new ApiError(403, "rotation_required", "请先完成恢复码更换。");
   }
   return d;
-}
-
-/** 设备在某环境的当前有效权限；管理设备恒为 rw。 */
-export function envRole(deps: Deps, d: Device, envId: string): Role | null {
-  if (d.kind === "manager") return "rw";
-  const g = one<{ role: Role }>(
-    deps.sql,
-    `SELECT role FROM grants WHERE device_id = ? AND env_id = ? AND (expires_at = 0 OR expires_at > ?)`,
-    d.id,
-    envId,
-    deps.now(),
-  );
-  return g?.role ?? null;
 }
 
 export function activeManagers(sql: Sql): Device[] {

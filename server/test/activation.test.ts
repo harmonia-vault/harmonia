@@ -12,7 +12,7 @@ describe("激活状态与顺序", () => {
     const a = await TestAccount.create(s);
     const e1 = await a.createEnv(s, [a.phone.id], "A");
     const e2 = await a.createEnv(s, [a.phone.id], "B");
-    const cli = await pairClient(s, a, [{ envId: e1, role: "ro" }, { envId: e2, role: "ro" }]);
+    const cli = await pairClient(s, a, [{ environmentId: e1, role: "ro", localDecrypt: true }, { environmentId: e2, role: "ro", localDecrypt: true }]);
     expect(await syncEnvs(s, cli.token)).toEqual([
       [e1, true, 0],
       [e2, true, 1],
@@ -20,11 +20,11 @@ describe("激活状态与顺序", () => {
 
     await s.ok("PUT", "/api/v1/devices/self/activation", {
       token: cli.token,
-      body: { envs: [{ envId: e2, active: true }, { envId: e1, active: false }] },
+      body: { envs: [{ environmentId: e2, active: true }, { environmentId: e1, active: false }] },
     });
     await s.ok("PUT", `/api/v1/devices/${cli.id}/grants`, {
       token: a.phone.token,
-      body: { grants: [{ envId: e1, role: "rw", expiresAt: 0 }, { envId: e2, role: "ro", expiresAt: 0 }], envelopes: [] },
+      body: { grants: [{ environmentId: e1, role: "rw", expiresAt: 0, localDecrypt: true }, { environmentId: e2, role: "ro", expiresAt: 0, localDecrypt: true }], envelopes: [] },
     });
     expect(await syncEnvs(s, cli.token)).toEqual([
       [e2, true, 0],
@@ -34,7 +34,7 @@ describe("激活状态与顺序", () => {
     // 管理设备看到同样的状态。
     const m = await s.ok("GET", "/api/v1/sync?since=0", { token: a.phone.token });
     const grants = m.manager.devices.find((d: { id: string }) => d.id === cli.id).grants;
-    expect(grants.map((g: { envId: string; active: boolean }) => [g.envId, g.active])).toEqual([
+    expect(grants.map((g: { environmentId: string; active: boolean }) => [g.environmentId, g.active])).toEqual([
       [e2, true],
       [e1, false],
     ]);
@@ -45,13 +45,13 @@ describe("激活状态与顺序", () => {
     const a = await TestAccount.create(s);
     const e1 = await a.createEnv(s, [a.phone.id], "A");
     const e2 = await a.createEnv(s, [a.phone.id], "B");
-    const cli = await pairClient(s, a, [{ envId: e1, role: "ro" }, { envId: e2, role: "ro" }]);
-    const other = await pairClient(s, a, [{ envId: e1, role: "ro" }]);
+    const cli = await pairClient(s, a, [{ environmentId: e1, role: "ro", localDecrypt: true }, { environmentId: e2, role: "ro", localDecrypt: true }]);
+    const other = await pairClient(s, a, [{ environmentId: e1, role: "ro", localDecrypt: true }]);
 
     const pushes = s.pushes.length;
     await s.ok("PUT", `/api/v1/devices/${cli.id}/activation`, {
       token: a.phone.token,
-      body: { envs: [{ envId: e1, active: false }, { envId: e2, active: true }] },
+      body: { envs: [{ environmentId: e1, active: false }, { environmentId: e2, active: true }] },
     });
     expect(s.pushes.slice(pushes).some((p) => p.msg.type === "changed")).toBe(true);
     expect(await syncEnvs(s, cli.token)).toEqual([
@@ -61,12 +61,12 @@ describe("激活状态与顺序", () => {
 
     const byOther = await s.call("PUT", `/api/v1/devices/${cli.id}/activation`, {
       token: other.token,
-      body: { envs: [{ envId: e1, active: true }, { envId: e2, active: true }] },
+      body: { envs: [{ environmentId: e1, active: true }, { environmentId: e2, active: true }] },
     });
     expect(byOther.status).toBe(403);
     const missing = await s.call("PUT", "/api/v1/devices/self/activation", {
       token: cli.token,
-      body: { envs: [{ envId: e1, active: true }] },
+      body: { envs: [{ environmentId: e1, active: true }] },
     });
     expect([missing.status, missing.json.error]).toEqual([409, "conflict"]);
     const manager = await s.call("PUT", "/api/v1/devices/self/activation", { token: a.phone.token, body: { envs: [] } });
@@ -80,25 +80,25 @@ describe("激活状态与顺序", () => {
     const e2 = await a.createEnv(s, [a.phone.id], "B");
     const e3 = await a.createEnv(s, [a.phone.id], "C");
     const cli = await pairClient(s, a, [
-      { envId: e1, role: "ro", expiresAt: s.clock + 1000 },
-      { envId: e2, role: "ro" },
-      { envId: e3, role: "ro" },
+      { environmentId: e1, role: "ro", expiresAt: s.clock + 1000, localDecrypt: true },
+      { environmentId: e2, role: "ro", localDecrypt: true },
+      { environmentId: e3, role: "ro", localDecrypt: true },
     ]);
     s.clock += 2000;
     await s.ok("PUT", "/api/v1/devices/self/activation", {
       token: cli.token,
-      body: { envs: [{ envId: e3, active: true }, { envId: e2, active: false }] },
+      body: { envs: [{ environmentId: e3, active: true }, { environmentId: e2, active: false }] },
     });
     const m = await s.ok("GET", "/api/v1/sync?since=0", { token: a.phone.token });
     const grants = m.manager.devices.find((d: { id: string }) => d.id === cli.id).grants;
-    expect(grants.map((g: { envId: string; position: number }) => [g.envId, g.position])).toEqual([
+    expect(grants.map((g: { environmentId: string; position: number }) => [g.environmentId, g.position])).toEqual([
       [e3, 0],
       [e2, 1],
       [e1, 2],
     ]);
     const partial = await s.call("PUT", "/api/v1/devices/self/activation", {
       token: cli.token,
-      body: { envs: [{ envId: e3, active: true }] },
+      body: { envs: [{ environmentId: e3, active: true }] },
     });
     expect(partial.status).toBe(409);
   });
@@ -110,13 +110,13 @@ describe("激活状态与顺序", () => {
     const e2 = await a.createEnv(s, [a.phone.id], "B");
     const e3 = await a.createEnv(s, [a.phone.id], "C");
     const cli = await pairClient(s, a, [
-      { envId: e1, role: "ro" },
-      { envId: e2, role: "ro" },
-      { envId: e3, role: "ro" },
+      { environmentId: e1, role: "ro", localDecrypt: true },
+      { environmentId: e2, role: "ro", localDecrypt: true },
+      { environmentId: e3, role: "ro", localDecrypt: true },
     ]);
     await s.ok("PUT", `/api/v1/devices/${cli.id}/grants`, {
       token: a.phone.token,
-      body: { grants: [{ envId: e1, role: "ro", expiresAt: 0 }, { envId: e3, role: "ro", expiresAt: 0 }], envelopes: [] },
+      body: { grants: [{ environmentId: e1, role: "ro", expiresAt: 0, localDecrypt: true }, { environmentId: e3, role: "ro", expiresAt: 0, localDecrypt: true }], envelopes: [] },
     });
     expect(await syncEnvs(s, cli.token)).toEqual([
       [e1, true, 0],
@@ -130,8 +130,8 @@ describe("写入系统变量开关", () => {
     const s = new TestServer();
     const a = await TestAccount.create(s);
     const e1 = await a.createEnv(s, [a.phone.id], "A");
-    const cli = await pairClient(s, a, [{ envId: e1, role: "ro" }]);
-    const other = await pairClient(s, a, [{ envId: e1, role: "ro" }]);
+    const cli = await pairClient(s, a, [{ environmentId: e1, role: "ro", localDecrypt: true }]);
+    const other = await pairClient(s, a, [{ environmentId: e1, role: "ro", localDecrypt: true }]);
     const self = async () => (await s.ok("GET", "/api/v1/sync?since=0", { token: cli.token })).self;
     const seen = async () =>
       (await s.ok("GET", "/api/v1/sync?since=0", { token: a.phone.token })).manager.devices.find((d: { id: string }) => d.id === cli.id);
@@ -165,7 +165,7 @@ describe("设备版本", () => {
     const s = new TestServer();
     const a = await TestAccount.create(s);
     const e1 = await a.createEnv(s, [a.phone.id], "A");
-    const cli = await pairClient(s, a, [{ envId: e1, role: "ro" }]);
+    const cli = await pairClient(s, a, [{ environmentId: e1, role: "ro", localDecrypt: true }]);
     const sync = (token: string, version?: string) =>
       s.ok("GET", "/api/v1/sync?since=0", { token, headers: version === undefined ? {} : { "x-harmonia-version": version } });
     const seen = async () =>

@@ -15,7 +15,7 @@ export function one<T = Row>(sql: Sql, query: string, ...params: Param[]): T | u
 }
 
 /** 按顺序执行的表结构迁移；只追加，不修改已发布的条目。 */
-const MIGRATIONS: string[][] = [
+export const MIGRATIONS: string[][] = [
   [
     `CREATE TABLE meta (key TEXT PRIMARY KEY, value INTEGER NOT NULL)`,
     `INSERT INTO meta (key, value) VALUES ('head_seq', 0)`,
@@ -175,12 +175,27 @@ const MIGRATIONS: string[][] = [
   ],
   // CLI 的自动更新开关（docs/protocol.md 3.2）。
   [`ALTER TABLE devices ADD COLUMN auto_update INTEGER NOT NULL DEFAULT 0`],
+  // 两层结构：原来的环境改为同 ID、同名的变量库（变量的 AAD 用的就是这个 ID），再建一个同 ID、同名、
+  // 引用全部变量并可以修改的环境；原有授权转到环境上并开启本机解密（docs/rewrite-plan.md 17.3）。
+  // visibility_seq 记录设备能看到的变量范围最近一次变化，用于决定同步是否下发完整列表（docs/protocol.md 3.4）。
+  [
+    `ALTER TABLE environments RENAME TO vaults`,
+    `ALTER TABLE envelopes RENAME COLUMN env_id TO vault_id`,
+    `ALTER TABLE variables RENAME COLUMN env_id TO vault_id`,
+    `CREATE TABLE environments (id TEXT PRIMARY KEY, name TEXT NOT NULL, refs TEXT NOT NULL, created_at INTEGER NOT NULL)`,
+    `INSERT INTO environments (id, name, refs, created_at)
+     SELECT id, name, '[{"vaultId":"' || id || '","scope":"all","writable":true,"items":[]}]', created_at FROM vaults`,
+    `ALTER TABLE grants RENAME COLUMN env_id TO environment_id`,
+    `ALTER TABLE grants ADD COLUMN local_decrypt INTEGER NOT NULL DEFAULT 1`,
+    `ALTER TABLE devices ADD COLUMN visibility_seq INTEGER NOT NULL DEFAULT 0`,
+  ],
 ];
 
-export function migrate(sql: Sql): void {
+/** 执行迁移；upTo 只给测试用，迁移到指定版本为止。 */
+export function migrate(sql: Sql, upTo = MIGRATIONS.length): void {
   sql.run(`CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)`);
   const current = one<{ version: number }>(sql, `SELECT version FROM schema_version`)?.version ?? 0;
-  for (let v = current; v < MIGRATIONS.length; v++) {
+  for (let v = current; v < upTo; v++) {
     sql.transaction(() => {
       for (const stmt of MIGRATIONS[v]!) sql.run(stmt);
       sql.run(`DELETE FROM schema_version`);

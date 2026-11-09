@@ -4,25 +4,25 @@ import { Ed, FakeDevice, newId, pairClient, rand, requestPairing, TestAccount, T
 
 const value = () => b64(rand(60));
 const put = (s: TestServer, token: string, env: string, name: string, key = newId()) =>
-  s.call("PUT", `/api/v1/environments/${env}/variables/${name}`, {
+  s.call("PUT", `/api/v1/vaults/${env}/variables/${name}`, {
     token,
     body: { value: value(), keyVersion: "1" },
     headers: { "idempotency-key": key },
   });
 
 describe("环境、变量与同步", () => {
-  it("环境封装必须覆盖全部管理设备和恢复码", async () => {
+  it("变量库封装必须覆盖全部管理设备和恢复码", async () => {
     const s = new TestServer();
     const a = await TestAccount.create(s);
     const id = newId();
-    const bad = await s.call("POST", "/api/v1/environments", {
+    const bad = await s.call("POST", "/api/v1/vaults", {
       token: a.phone.token,
       body: { id, name: "x", envelopes: [await a.envelope(id, a.phone.id)] },
     });
     expect(bad.status).toBe(400);
     const forged = await a.envelope(id, "recovery");
     forged.sig = b64(rand(64));
-    const bad2 = await s.call("POST", "/api/v1/environments", {
+    const bad2 = await s.call("POST", "/api/v1/vaults", {
       token: a.phone.token,
       body: { id, name: "x", envelopes: [await a.envelope(id, a.phone.id), forged] },
     });
@@ -36,18 +36,18 @@ describe("环境、变量与同步", () => {
     const env = await a.createEnv(s, [a.phone.id]);
     const key = newId();
     const body = { value: value(), keyVersion: "1" };
-    const first = await s.ok("PUT", `/api/v1/environments/${env}/variables/OPENAI_API_KEY`, {
+    const first = await s.ok("PUT", `/api/v1/vaults/${env}/variables/OPENAI_API_KEY`, {
       token: a.phone.token,
       body,
       headers: { "idempotency-key": key },
     });
-    const replay = await s.ok("PUT", `/api/v1/environments/${env}/variables/OPENAI_API_KEY`, {
+    const replay = await s.ok("PUT", `/api/v1/vaults/${env}/variables/OPENAI_API_KEY`, {
       token: a.phone.token,
       body,
       headers: { "idempotency-key": key },
     });
     expect(replay.seq).toBe(first.seq);
-    const clash = await s.call("PUT", `/api/v1/environments/${env}/variables/OPENAI_API_KEY`, {
+    const clash = await s.call("PUT", `/api/v1/vaults/${env}/variables/OPENAI_API_KEY`, {
       token: a.phone.token,
       body: { value: value(), keyVersion: "1" },
       headers: { "idempotency-key": key },
@@ -61,7 +61,7 @@ describe("环境、变量与同步", () => {
     expect(full.manager.devices).toHaveLength(1);
     expect(full.manager.recovery.generation).toBe("1");
 
-    await s.ok("DELETE", `/api/v1/environments/${env}/variables/OPENAI_API_KEY`, {
+    await s.ok("DELETE", `/api/v1/vaults/${env}/variables/OPENAI_API_KEY`, {
       token: a.phone.token,
       headers: { "idempotency-key": newId() },
     });
@@ -76,7 +76,7 @@ describe("环境、变量与同步", () => {
 
 describe("批量写入变量", () => {
   const batch = (s: TestServer, token: string, env: string, body: object, key = newId()) =>
-    s.call("PATCH", `/api/v1/environments/${env}/variables`, { token, body, headers: { "idempotency-key": key } });
+    s.call("PATCH", `/api/v1/vaults/${env}/variables`, { token, body, headers: { "idempotency-key": key } });
 
   it("整批写入与删除共用一个 seq，幂等重放返回原结果", async () => {
     const s = new TestServer();
@@ -131,7 +131,7 @@ describe("批量写入变量", () => {
     const s = new TestServer();
     const a = await TestAccount.create(s);
     const env = await a.createEnv(s, [a.phone.id]);
-    const cli = await pairClient(s, a, [{ envId: env, role: "ro" }]);
+    const cli = await pairClient(s, a, [{ environmentId: env, role: "ro", localDecrypt: true }]);
     const res = await batch(s, cli.token, env, { keyVersion: "1", set: [{ name: "A", value: value() }] });
     expect(res.status).toBe(403);
   });
@@ -145,7 +145,7 @@ describe("配对与权限", () => {
     const other = await a.createEnv(s, [a.phone.id], "其他");
     expect((await put(s, a.phone.token, env, "EXISTING")).status).toBe(200);
 
-    const cli = await pairClient(s, a, [{ envId: env, role: "rw" }]);
+    const cli = await pairClient(s, a, [{ environmentId: env, role: "rw", localDecrypt: true }]);
     const sync = await s.ok("GET", "/api/v1/sync?since=0", { token: cli.token });
     expect(sync.environments.map((e: { id: string }) => e.id)).toEqual([env]);
     expect(sync.variables.map((v: { name: string }) => v.name)).toEqual(["EXISTING"]);
@@ -154,32 +154,32 @@ describe("配对与权限", () => {
     expect((await put(s, cli.token, other, "NOPE")).status).toBe(403);
     expect((await s.call("POST", "/api/v1/pairings/x/approve", { token: cli.token, body: {} })).status).toBe(403);
     // 客户端设备不能改名或删除环境，也不能被授予 admin。
-    expect((await s.call("PATCH", `/api/v1/environments/${env}`, { token: cli.token, body: { name: "x" } })).status).toBe(403);
+    expect((await s.call("PATCH", `/api/v1/vaults/${env}`, { token: cli.token, body: { name: "x" } })).status).toBe(403);
     expect((await s.call("DELETE", `/api/v1/environments/${env}`, { token: cli.token })).status).toBe(403);
     const admin = await s.call("PUT", `/api/v1/devices/${cli.id}/grants`, {
       token: a.phone.token,
-      body: { grants: [{ envId: env, role: "admin", expiresAt: 0 }], envelopes: [] },
+      body: { grants: [{ environmentId: env, role: "admin", expiresAt: 0, localDecrypt: true }], envelopes: [] },
     });
     expect(admin.status).toBe(400);
 
     // 降为只读：写入立即被拒绝。
     await s.ok("PUT", `/api/v1/devices/${cli.id}/grants`, {
       token: a.phone.token,
-      body: { grants: [{ envId: env, role: "ro", expiresAt: 0 }], envelopes: [] },
+      body: { grants: [{ environmentId: env, role: "ro", expiresAt: 0, localDecrypt: true }], envelopes: [] },
     });
     expect((await put(s, cli.token, env, "X")).status).toBe(403);
 
     // 新增授权必须带封装。
     const missing = await s.call("PUT", `/api/v1/devices/${cli.id}/grants`, {
       token: a.phone.token,
-      body: { grants: [{ envId: env, role: "ro" }, { envId: other, role: "rw" }], envelopes: [] },
+      body: { grants: [{ environmentId: env, role: "ro", localDecrypt: true }, { environmentId: other, role: "rw", localDecrypt: true }], envelopes: [] },
     });
     expect(missing.status).toBe(400);
     const before = await s.ok("GET", "/api/v1/sync?since=0", { token: cli.token });
     await s.ok("PUT", `/api/v1/devices/${cli.id}/grants`, {
       token: a.phone.token,
       body: {
-        grants: [{ envId: env, role: "ro" }, { envId: other, role: "rw", expiresAt: s.clock + 60_000 }],
+        grants: [{ environmentId: env, role: "ro", localDecrypt: true }, { environmentId: other, role: "rw", expiresAt: s.clock + 60_000, localDecrypt: true }],
         envelopes: [await a.envelope(other, cli.id)],
       },
     });
@@ -217,7 +217,7 @@ describe("配对与权限", () => {
     expect(again.status).toBe(409);
   });
 
-  it("第二台管理设备需要全部环境的封装；不能撤销最后一台管理设备", async () => {
+  it("第二台管理设备需要全部变量库的封装；不能撤销最后一台管理设备", async () => {
     const s = new TestServer();
     const a = await TestAccount.create(s);
     const env = await a.createEnv(s, [a.phone.id]);
@@ -246,10 +246,10 @@ describe("配对与权限", () => {
     await phone2.login(s, a.accountId);
     const sync = await s.ok("GET", "/api/v1/sync?since=0", { token: phone2.token });
     expect(sync.manager.devices).toHaveLength(2);
-    // 现在有两台管理设备，新环境必须同时封装给两台。
+    // 现在有两台管理设备，新变量库必须同时封装给两台。
     expect(
       (
-        await s.call("POST", "/api/v1/environments", {
+        await s.call("POST", "/api/v1/vaults", {
           token: a.phone.token,
           body: { id: newId(), name: "y", envelopes: [] },
         })

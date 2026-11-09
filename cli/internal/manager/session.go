@@ -3,9 +3,9 @@ package manager
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/harmonia-vault/harmonia/cli/internal/api"
 	hc "github.com/harmonia-vault/harmonia/cli/internal/crypto"
@@ -121,130 +121,34 @@ func (s *Session) Logout(ctx context.Context, confirmLast bool) error {
 	return err
 }
 
-// ---- 环境 ----
-
-type EnvInfo struct {
-	ID    string `json:"id"`
-	Name  string `json:"name"`
-	Count int    `json:"count"`
-	// Devices 是能读到这个环境的设备数：全部管理设备，加上授权没有到期的其他设备。
-	Devices int `json:"devices"`
-}
-
-// Envs 按创建先后列出全部环境。
-func (s *Session) Envs() []EnvInfo {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	now := time.Now().UnixMilli()
-	managers, granted := 0, map[string]int{}
-	for _, d := range s.info.Devices {
-		if d.Kind == "manager" {
-			managers++
-			continue
-		}
-		for _, g := range d.Grants {
-			if g.ExpiresAt == 0 || g.ExpiresAt > now {
-				granted[g.EnvID]++
-			}
-		}
-	}
-	out := []EnvInfo{}
-	for _, e := range vault.Ordered(s.cache) {
-		out = append(out, EnvInfo{ID: e.ID, Name: e.Name, Count: len(s.cache.Variables[e.ID]), Devices: managers + granted[e.ID]})
-	}
-	return out
-}
-
-func (s *Session) envLocked(id string) (*api.Environment, error) {
-	for i := range s.cache.Environments {
-		if s.cache.Environments[i].ID == id {
-			return &s.cache.Environments[i], nil
-		}
-	}
-	return nil, errors.New("这个环境不存在，可能已在其他设备上删除")
-}
-
-func envName(name string) (string, error) {
-	name = strings.TrimSpace(name)
-	if n := len([]rune(name)); n < 1 || n > 64 {
-		return "", errors.New("环境名需要 1 到 64 个字符")
-	}
-	return name, nil
-}
-
-// envelope 把环境钥封装给一个接收者，并用账号根密钥签名。
-func (s *Session) envelope(envID, recipient string, boxPub, key []byte) (api.NewEnvelope, error) {
+// envelope 把库钥封装给一个接收者，并用账号根密钥签名。
+func (s *Session) envelope(vaultID string, kv int, recipient string, boxPub, key []byte) (api.NewEnvelope, error) {
 	sealed, err := hc.Seal(key, boxPub)
 	if err != nil {
 		return api.NewEnvelope{}, err
 	}
 	return api.NewEnvelope{
-		Recipient: recipient, KeyVersion: "1", Sealed: hc.B64(sealed),
-		Sig: hc.B64(s.root.Sign(hc.EnvelopeMsg(envID, 1, recipient, sealed))),
+		Recipient: recipient, KeyVersion: strconv.Itoa(kv), Sealed: hc.B64(sealed),
+		Sig: hc.B64(s.root.Sign(hc.EnvelopeMsg(vaultID, kv, recipient, sealed))),
 	}, nil
 }
 
-// CreateEnv 新建环境：生成环境钥，封装给全部管理设备（先校验设备证书）和恢复码。
-func (s *Session) CreateEnv(ctx context.Context, name string) (string, error) {
-	name, err := envName(name)
-	if err != nil {
-		return "", err
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if err := s.syncLocked(ctx); err != nil {
-		return "", err
-	}
+// verifiedBoxPub 验证设备证书由账号根密钥签发，返回它的加密公钥。
+func (s *Session) verifiedBoxPub(d api.Device) ([]byte, error) {
 	rootPub, _ := hc.UnB64(s.File.RootPub)
-	id, key := hc.NewID(), hc.Random(32)
-	var envelopes []api.NewEnvelope
-	for _, d := range s.info.Devices {
-		if d.Kind != "manager" {
-			continue
-		}
-		cert, err1 := hc.UnB64(d.Cert)
-		boxPub, err2 := hc.UnB64(d.BoxPub)
-		if err1 != nil || err2 != nil || !hc.Verify(rootPub, hc.DeviceCertMsg(d.ID, d.Kind, d.SignPub, d.BoxPub), cert) {
-			return "", errors.New("管理设备“" + d.Name + "”的证书无效，已停止新建环境。请确认服务器地址是否正确")
-		}
-		e, err := s.envelope(id, d.ID, boxPub, key)
-		if err != nil {
-			return "", err
-		}
-		envelopes = append(envelopes, e)
+	cert, err1 := hc.UnB64(d.Cert)
+	boxPub, err2 := hc.UnB64(d.BoxPub)
+	if err1 != nil || err2 != nil || !hc.Verify(rootPub, hc.DeviceCertMsg(d.ID, d.Kind, d.SignPub, d.BoxPub), cert) {
+		return nil, errors.New("设备“" + d.Name + "”的证书无效，已停止。请确认服务器地址是否正确")
 	}
-	recPub, err := hc.UnB64(s.info.Recovery.BoxPub)
-	if err != nil {
-		return "", errors.New("服务器下发的恢复公钥格式不对，已停止新建环境")
-	}
-	e, err := s.envelope(id, "recovery", recPub, key)
-	if err != nil {
-		return "", err
-	}
-	if err := s.client.CreateEnvironment(ctx, id, name, append(envelopes, e)); err != nil {
-		return "", err
-	}
-	return id, s.syncLocked(ctx)
+	return boxPub, nil
 }
 
-func (s *Session) RenameEnv(ctx context.Context, id, name string) error {
-	name, err := envName(name)
-	if err != nil {
-		return err
+// label 检查变量库名和环境名：1 到 64 个字符。
+func label(name, what string) (string, error) {
+	name = strings.TrimSpace(name)
+	if n := len([]rune(name)); n < 1 || n > 64 {
+		return "", errors.New(what + "需要 1 到 64 个字符")
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if err := s.client.RenameEnvironment(ctx, id, name); err != nil {
-		return err
-	}
-	return s.syncLocked(ctx)
-}
-
-func (s *Session) DeleteEnv(ctx context.Context, id string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if err := s.client.DeleteEnvironment(ctx, id); err != nil {
-		return err
-	}
-	return s.syncLocked(ctx)
+	return name, nil
 }

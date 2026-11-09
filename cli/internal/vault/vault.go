@@ -25,15 +25,16 @@ func Apply(c *state.Cache, s *api.Sync, since int64, rootPub string, deviceID st
 		sealed, err1 := hc.UnB64(e.Sealed)
 		sig, err2 := hc.UnB64(e.Sig)
 		kv, err3 := strconv.Atoi(e.KeyVersion)
-		if err1 != nil || err2 != nil || err3 != nil || !hc.Verify(root, hc.EnvelopeMsg(e.EnvID, kv, deviceID, sealed), sig) {
+		if err1 != nil || err2 != nil || err3 != nil || !hc.Verify(root, hc.EnvelopeMsg(e.VaultID, kv, deviceID, sealed), sig) {
 			return errors.New("服务器下发的环境密钥签名无效，已停止同步。请确认服务器地址是否正确")
 		}
 	}
+	// Variables 按变量库保存（键是变量库里的原名）；只保存能在本机解密的变量库。
 	visible := map[string]bool{}
-	for _, e := range s.Environments {
-		visible[e.ID] = true
+	for _, v := range s.Vaults {
+		visible[v.ID] = true
 	}
-	if since == 0 {
+	if since == 0 || s.Full {
 		c.Variables = map[string]map[string]state.CachedVar{}
 	}
 	for id := range c.Variables {
@@ -42,13 +43,13 @@ func Apply(c *state.Cache, s *api.Sync, since int64, rootPub string, deviceID st
 		}
 	}
 	for _, v := range s.Variables {
-		if !visible[v.EnvID] {
+		if !visible[v.VaultID] {
 			continue
 		}
-		m := c.Variables[v.EnvID]
+		m := c.Variables[v.VaultID]
 		if m == nil {
 			m = map[string]state.CachedVar{}
-			c.Variables[v.EnvID] = m
+			c.Variables[v.VaultID] = m
 		}
 		if v.Deleted {
 			delete(m, v.Name)
@@ -58,6 +59,7 @@ func Apply(c *state.Cache, s *api.Sync, since int64, rootPub string, deviceID st
 		m[v.Name] = state.CachedVar{Value: v.Value, KeyVersion: kv}
 	}
 	c.Environments = s.Environments
+	c.VaultNames = s.VaultNames
 	c.Envelopes = s.Envelopes
 	c.Seq = s.Seq
 	return nil
@@ -99,10 +101,10 @@ func notFound(c *state.Cache, nameOrID string) error {
 // Expired 判断授权是否已到期（离线时同样生效）。
 func Expired(e api.Environment, nowMs int64) bool { return e.ExpiresAt != 0 && e.ExpiresAt <= nowMs }
 
-// EnvKey 解开某个环境的环境钥。
-func EnvKey(c *state.Cache, k *state.DeviceKeys, envID string) ([]byte, int, error) {
+// VaultKey 解开某个变量库的库钥。
+func VaultKey(c *state.Cache, k *state.DeviceKeys, vaultID string) ([]byte, int, error) {
 	for _, e := range c.Envelopes {
-		if e.EnvID != envID {
+		if e.VaultID != vaultID {
 			continue
 		}
 		sealed, err := hc.UnB64(e.Sealed)
@@ -111,30 +113,68 @@ func EnvKey(c *state.Cache, k *state.DeviceKeys, envID string) ([]byte, int, err
 		}
 		key, err := k.Box.Open(sealed)
 		if err != nil || len(key) != 32 {
-			return nil, 0, errors.New("无法解开环境密钥，请在管理设备上重新授权这台设备")
+			return nil, 0, errors.New("无法解开变量库的密钥，请在管理设备上重新授权这台设备")
 		}
 		kv, _ := strconv.Atoi(e.KeyVersion)
 		return key, kv, nil
 	}
-	return nil, 0, errors.New("这台设备没有这个环境的密钥，请在管理设备上重新授权这台设备")
+	return nil, 0, errors.New("这台设备没有这个变量库的密钥，请在管理设备上重新授权这台设备")
 }
 
-// Entries 解密一个环境的全部变量（值和备注）。解不开的变量不放进结果，名称按顺序列在 broken 里，
-// 它们仍然可以删除或重新写入。
-func Entries(c *state.Cache, k *state.DeviceKeys, envID string) (map[string]hc.Entry, []string, error) {
-	key, _, err := EnvKey(c, k, envID)
+// VaultEntries 解密本机缓存里某个变量库的变量（键是变量库里的原名）。只包含这台设备能在本机解密的变量。
+func VaultEntries(c *state.Cache, k *state.DeviceKeys, vaultID string) (map[string]hc.Entry, []string, error) {
+	key, _, err := VaultKey(c, k, vaultID)
 	if err != nil {
 		return nil, nil, err
 	}
 	out := map[string]hc.Entry{}
 	var broken []string
-	for name, v := range c.Variables[envID] {
-		e, err := hc.DecryptVar(key, envID, v.KeyVersion, name, v.Value)
+	for name, v := range c.Variables[vaultID] {
+		e, err := hc.DecryptVar(key, vaultID, v.KeyVersion, name, v.Value)
 		if err != nil {
 			broken = append(broken, name)
 			continue
 		}
 		out[name] = e
+	}
+	sort.Strings(broken)
+	return out, broken, nil
+}
+
+// ErrNeedApproval 说明这个环境没有开启本机解密，变量值要经手机批准才能拿到。
+type ErrNeedApproval struct{ Env string }
+
+func (e *ErrNeedApproval) Error() string {
+	return fmt.Sprintf("环境“%s”没有开启本机解密，这台设备拿不到它的变量。请在手机上为这台设备的这个环境开启“允许本机解密”", e.Env)
+}
+
+// Entries 解密一个环境的全部变量（值和备注），键是环境里的名字。解不开的变量不放进结果，
+// 名称按顺序列在 broken 里，它们仍然可以删除或重新写入。
+func Entries(c *state.Cache, k *state.DeviceKeys, envID string) (map[string]hc.Entry, []string, error) {
+	env := byID(c, envID)
+	if env == nil {
+		return nil, nil, fmt.Errorf("环境 %s 已不可访问（授权可能已被撤销）", envID)
+	}
+	if !env.LocalDecrypt {
+		return nil, nil, &ErrNeedApproval{Env: env.Name}
+	}
+	decrypted := map[string]map[string]hc.Entry{}
+	out := map[string]hc.Entry{}
+	var broken []string
+	for _, it := range env.Items {
+		vals, ok := decrypted[it.VaultID]
+		if !ok {
+			var err error
+			if vals, _, err = VaultEntries(c, k, it.VaultID); err != nil {
+				return nil, nil, err
+			}
+			decrypted[it.VaultID] = vals
+		}
+		if e, ok := vals[it.Source]; ok {
+			out[it.Name] = e
+		} else if _, cached := c.Variables[it.VaultID][it.Source]; cached {
+			broken = append(broken, it.Name)
+		}
 	}
 	sort.Strings(broken)
 	return out, broken, nil
@@ -151,6 +191,25 @@ func Values(c *state.Cache, k *state.DeviceKeys, envID string) (map[string]strin
 		out[name] = e.Value
 	}
 	return out, broken, nil
+}
+
+func byID(c *state.Cache, envID string) *api.Environment {
+	for i := range c.Environments {
+		if c.Environments[i].ID == envID {
+			return &c.Environments[i]
+		}
+	}
+	return nil
+}
+
+// HasItem 判断环境里有没有这个名字的变量。
+func HasItem(env *api.Environment, name string) bool {
+	for _, it := range env.Items {
+		if it.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 // Ordered 返回按顺序排列的环境副本（靠前的提供同名变量）。
@@ -283,14 +342,14 @@ func brokenNote(env *api.Environment, name string) string {
 func missingVar(c *state.Cache, env *api.Environment, name string) error {
 	var others []string
 	for _, e := range Ordered(c) {
-		if _, ok := c.Variables[e.ID][name]; ok && e.ID != env.ID {
+		if e.ID != env.ID && HasItem(&e, name) {
 			others = append(others, e.Name)
 		}
 	}
 	if len(others) > 0 {
 		return fmt.Errorf("环境“%s”里没有变量 %s，“%s”里有，可以写成 --env %s:%s", env.Name, name, strings.Join(others, "”“"), others[0], name)
 	}
-	return fmt.Errorf("环境“%s”里没有变量 %s。运行 harmonia var list --env %s 查看这个环境的变量，或用 harmonia var set %s %s 写入", env.Name, name, env.Name, env.Name, name)
+	return fmt.Errorf("环境“%s”里没有变量 %s。运行 harmonia var list --env %s 查看这个环境的变量", env.Name, name, env.Name)
 }
 
 // Conflict 表示一个变量同时出现在多个环境中；Envs 按顺序排列，第一个生效。
@@ -329,8 +388,13 @@ func Unavailable(c *state.Cache, k *state.DeviceKeys, env api.Environment, nowMs
 	if Expired(env, nowMs) {
 		return fmt.Sprintf("这台设备对环境“%s”的授权已于 %s 到期，请在管理设备上重新授权", env.Name, time.UnixMilli(env.ExpiresAt).Format("2006-01-02 15:04"))
 	}
-	if _, _, err := EnvKey(c, k, env.ID); err != nil {
-		return fmt.Sprintf("环境“%s”：%v", env.Name, err)
+	if !env.LocalDecrypt {
+		return (&ErrNeedApproval{Env: env.Name}).Error()
+	}
+	for _, it := range env.Items {
+		if _, _, err := VaultKey(c, k, it.VaultID); err != nil {
+			return fmt.Sprintf("环境“%s”：%v", env.Name, err)
+		}
 	}
 	return ""
 }
@@ -340,12 +404,7 @@ func sources(c *state.Cache, k *state.DeviceKeys, ids []string, ov state.Overrid
 	problems := map[string]string{}
 	var out []source
 	for _, id := range ids {
-		var env *api.Environment
-		for i := range c.Environments {
-			if c.Environments[i].ID == id {
-				env = &c.Environments[i]
-			}
-		}
+		env := byID(c, id)
 		if env == nil {
 			problems[id] = fmt.Sprintf("环境 %s 已不可访问（授权可能已被撤销）", id)
 			continue

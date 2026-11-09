@@ -1,484 +1,152 @@
-// 环境列表、环境详情（变量）与变量编辑。
+// “环境”标签页：上面是环境（电脑使用的变量集合），下面是变量库（变量实际保存的地方）。
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../app/controller.dart';
-import '../core/crypto.dart' show VarEntry, maxNoteLen;
 import '../core/models.dart';
-import 'theme.dart';
-import 'app_scope.dart';
-import 'glass_overlays.dart';
+import 'env_editor.dart';
+import 'env_page.dart';
 import 'glass.dart';
-import 'widgets.dart';
+import 'glass_overlays.dart';
 import 'list_row.dart';
+import 'theme.dart';
+import 'vaults.dart';
+import 'widgets.dart';
 
-final _varName = RegExp(r'^[A-Za-z_][A-Za-z0-9_]{0,127}$');
-
-String? validateVarName(String? v) {
-  final s = (v ?? '').trim();
-  if (!_varName.hasMatch(s)) return '只能包含字母、数字和下划线，且不能以数字开头';
-  if (s.toUpperCase().startsWith('__HARMONIA_')) return '以 __HARMONIA_ 开头的名称为保留名称';
-  return null;
-}
-
-Future<String?> askName(BuildContext context, {required String title, String initial = '', String label = '名称'}) {
-  final ctl = TextEditingController(text: initial);
-  return showAppDialog<String>(
-    context: context,
-    useRootNavigator: false,
-    builder: (c) => AppAlertDialog(
-      title: Text(title),
-      content: TextField(
-        controller: ctl,
-        autofillHints: null,
-        autofocus: true,
-        maxLength: 64,
-        decoration: InputDecoration(labelText: label),
-        onSubmitted: (v) => Navigator.pop(c, v.trim().isEmpty ? null : v.trim()),
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(c), child: const Text('取消')),
-        FilledButton(
-          onPressed: () => Navigator.pop(c, ctl.text.trim().isEmpty ? null : ctl.text.trim()),
-          child: Text(initial.isEmpty ? '创建' : '保存'),
-        ),
-      ],
-    ),
-  );
-}
+export 'vaults.dart' show askName;
 
 class EnvironmentsTab extends StatelessWidget {
   const EnvironmentsTab({super.key, required this.c});
   final AppController c;
 
-  Future<void> _create(BuildContext context) async {
-    final name = await askName(context, title: '新建环境', label: '环境名称');
-    if (name == null || !context.mounted) return;
-    await runBusy(context, () => c.guard(() => c.vault.createEnvironment(name)), done: '已创建环境“$name”');
+  void _create(BuildContext context, String what) {
+    if (what == 'vault') {
+      createVaultFlow(context, c);
+    } else if (c.vault.vaults.isEmpty) {
+      toast(context, '先新建一个变量库，环境里的变量来自变量库');
+    } else {
+      Navigator.push(context, MaterialPageRoute(builder: (_) => EnvEditorPage(c: c)));
+    }
   }
+
+  static const _createItems = [
+    (value: 'env', label: '新建环境', icon: Icons.layers_outlined, danger: false),
+    (value: 'vault', label: '新建变量库', icon: Icons.inventory_2_outlined, danger: false),
+  ];
 
   @override
   Widget build(BuildContext context) {
     final envs = c.vault.environments;
+    final vaults = c.vault.vaults;
+    final empty = envs.isEmpty && vaults.isEmpty;
+    final p = context.palette;
+    int computers(String envId) =>
+        c.vault.devices.where((d) => !d.isManager && d.grants.any((g) => g.envId == envId)).length;
+    Widget envSubtitle(Environment e) {
+      if (envProblems(c, e.id).isNotEmpty) {
+        return Text('${e.items.length} 个变量 · 有问题需要处理', style: TextStyle(color: p.accent));
+      }
+      return Text('${e.items.length} 个变量 · ${computers(e.id)} 台电脑可访问');
+    }
+
     return AppTabPage(
       title: '环境',
-      actions: [IconButton(tooltip: '新建环境', onPressed: () => _create(context), icon: const Icon(Icons.add))],
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _create(context),
-        icon: const Icon(Icons.add),
-        label: const Text('新建环境'),
-      ),
+      actions: [
+        AppMenuButton(
+          semanticLabel: '新建',
+          items: _createItems,
+          onSelected: (v) => _create(context, v),
+          trigger: (context, open) => IconButton(tooltip: '新建', onPressed: open, icon: const Icon(Icons.add)),
+        ),
+      ],
+      floatingActionButton: empty
+          ? null
+          : AppMenuButton(
+              semanticLabel: '新建',
+              items: _createItems,
+              onSelected: (v) => _create(context, v),
+              trigger: (context, open) =>
+                  FloatingActionButton.extended(onPressed: open, icon: const Icon(Icons.add), label: const Text('新建')),
+            ),
       onRefresh: c.syncNow,
-      padding: envs.isEmpty ? EdgeInsets.zero : const EdgeInsets.fromLTRB(Space.lg, Space.sm, Space.lg, 96),
-      children: envs.isEmpty
-          ? const [
+      padding: empty ? EdgeInsets.zero : const EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, 96),
+      children: empty
+          ? [
               EmptyState(
                 icon: Icons.inventory_2_outlined,
-                title: '还没有环境',
-                body: '环境是一组变量，例如“OpenAI”或“生产环境”。\n创建环境后添加变量，再授权给电脑使用。',
+                title: '还没有变量',
+                body: '变量保存在变量库里，例如“OpenAI”。\n电脑通过环境使用变量：一个环境可以引用一个或多个变量库，再授权给电脑。',
+                action: FilledButton(onPressed: () => createVaultFlow(context, c), child: const Text('新建变量库')),
               ),
             ]
           : [
-              for (final (i, e) in envs.indexed)
-                Padding(
-                  padding: EdgeInsets.only(top: i == 0 ? 0 : Space.md),
-                  child: Card(
-                    child: ListTile(
-                      contentPadding: listRowPadding.copyWith(top: Space.sm, bottom: Space.sm),
-                      leading: CircleAvatar(
-                        backgroundColor: i.isEven ? context.palette.yellow : context.palette.sage,
-                        foregroundColor: Palette.light.ink,
-                        child: Text(e.name.characters.first.toUpperCase()),
-                      ),
-                      title: Text(e.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                      subtitle: Text(
-                        '${c.vault.cache.variables[e.id]?.length ?? 0} 个变量 · '
-                        '${c.vault.devices.where((d) => !d.isManager && d.grants.any((g) => g.envId == e.id)).length} 台电脑可访问',
-                      ),
-                      trailing: const ListRowChevron(),
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => EnvironmentPage(c: c, envId: e.id),
+              SectionTitle('环境（${envs.length}）'),
+              if (envs.isEmpty)
+                Text(tidy('还没有环境。新建一个环境，选择要用的变量库，再在“设备”里授权给电脑。'), style: TextStyle(color: p.mute))
+              else
+                Card(
+                  child: Column(
+                    children: [
+                      for (final (i, e) in envs.indexed) ...[
+                        if (i > 0) const Divider(),
+                        ListTile(
+                          contentPadding: listRowPadding.copyWith(top: Space.xs, bottom: Space.xs),
+                          leading: CircleAvatar(
+                            backgroundColor: i.isEven ? p.yellow : p.sage,
+                            foregroundColor: Palette.light.ink,
+                            child: Text(e.name.characters.first.toUpperCase()),
+                          ),
+                          title: Text(e.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+                          subtitle: envSubtitle(e),
+                          trailing: const ListRowChevron(),
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => EnvironmentPage(c: c, envId: e.id),
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
+                      ],
+                    ],
+                  ),
+                ),
+              SectionTitle('变量库（${vaults.length}）'),
+              if (vaults.isEmpty)
+                Text('还没有变量库。', style: TextStyle(color: p.mute))
+              else
+                Card(
+                  child: Column(
+                    children: [
+                      for (final (i, v) in vaults.indexed) ...[
+                        if (i > 0) const Divider(),
+                        ListTile(
+                          contentPadding: listRowPadding.copyWith(top: Space.xs, bottom: Space.xs),
+                          leading: const Icon(Icons.inventory_2_outlined),
+                          title: Text(v.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+                          subtitle: Text(
+                            () {
+                              final used = [
+                                for (final e in c.vault.envDefs)
+                                  if (e.refs.any((r) => r.vaultId == v.id)) e.name,
+                              ];
+                              final n = '${c.vault.variableNames(v.id).length} 个变量';
+                              return used.isEmpty ? '$n · 没有环境用到' : '$n · 用在 ${used.join('、')}';
+                            }(),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          trailing: const ListRowChevron(),
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => VaultPage(c: c, vaultId: v.id),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
             ],
     );
   }
-}
-
-class EnvironmentPage extends StatefulWidget {
-  const EnvironmentPage({super.key, required this.c, required this.envId});
-  final AppController c;
-  final String envId;
-  @override
-  State<EnvironmentPage> createState() => _EnvironmentPageState();
-}
-
-class _EnvironmentPageState extends State<EnvironmentPage> {
-  final _revealed = <String>{};
-  // 本页自己在删除时，等进度弹窗关闭后再离开，免得推送先到时把弹窗当成本页关掉。
-  bool _deleting = false;
-  bool _left = false;
-
-  AppController get c => widget.c;
-
-  bool get _exists => c.vault.environments.any((e) => e.id == widget.envId);
-
-  @override
-  void initState() {
-    super.initState();
-    c.addListener(_changed);
-  }
-
-  @override
-  void dispose() {
-    c.removeListener(_changed);
-    super.dispose();
-  }
-
-  void _changed() {
-    if (!mounted) return;
-    if (!_exists) {
-      if (!_deleting) _leave();
-      return;
-    }
-    setState(() {});
-  }
-
-  /// 环境已不存在：关掉本页及其上层页面，只执行一次。
-  void _leave() {
-    if (_left || !mounted) return;
-    final route = ModalRoute.of(context);
-    if (route == null || !route.isActive) return;
-    _left = true;
-    Navigator.of(context)
-      ..popUntil((r) => r == route)
-      ..pop();
-  }
-
-  Future<void> _menu(String action, Environment env) async {
-    if (action == 'rename') {
-      final name = await askName(context, title: '重命名环境', initial: env.name);
-      if (name == null || !mounted) return;
-      await runBusy(context, () => c.guard(() => c.vault.renameEnvironment(env.id, name)));
-    } else if (action == 'delete') {
-      final ok = await confirmDialog(
-        context,
-        title: '删除环境“${env.name}”？',
-        body: '其中的全部变量会被删除，所有已授权的电脑在下次同步时都会移除这些变量。\n此操作无法撤销。',
-        ok: '删除',
-        danger: true,
-      );
-      if (!ok || !mounted) return;
-      _deleting = true;
-      try {
-        await runBusy(context, () => c.guard(() => c.vault.deleteEnvironment(env.id)), done: '已删除环境');
-      } finally {
-        _deleting = false;
-      }
-      if (!_exists) _leave();
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final env = c.vault.environments.where((e) => e.id == widget.envId).firstOrNull;
-    if (env == null) return const Scaffold();
-    Map<String, VarEntry> values;
-    List<String> broken;
-    String? error;
-    try {
-      values = c.vault.entries(env.id);
-      broken = c.vault.brokenVariables(env.id);
-    } catch (e) {
-      values = {};
-      broken = [];
-      error = errorText(e);
-    }
-    final names = [...values.keys, ...broken]..sort();
-    final devices = c.vault.devices.where((d) => !d.isManager && d.grants.any((g) => g.envId == env.id)).toList();
-    return AppPage(
-      appBar: AppBarSurface(
-        title: Text(env.name),
-        actions: [
-          if (usesGlass(context))
-            IconButton(
-              tooltip: '添加变量',
-              icon: const Icon(Icons.add),
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => VariableEditPage(c: c, envId: env.id),
-                ),
-              ),
-            ),
-          AppMenuButton(
-            onSelected: (a) => _menu(a, env),
-            items: const [
-              (value: 'rename', label: '重命名', icon: Icons.edit_outlined, danger: false),
-              (value: 'delete', label: '删除环境', icon: Icons.delete_outline, danger: true),
-            ],
-          ),
-        ],
-      ),
-      floatingActionButton: usesGlass(context)
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => VariableEditPage(c: c, envId: env.id),
-                ),
-              ),
-              icon: const Icon(Icons.add),
-              label: const Text('添加变量'),
-            ),
-      body: (context) => ListView(
-        padding: pagePadding(context, const EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, 96)),
-        children: [
-          if (error != null) Banner2(error, warn: true),
-          SectionTitle('变量（${names.length}）'),
-          if (names.isEmpty)
-            const EmptyState(icon: Icons.key_off_outlined, title: '还没有变量', body: '添加 API Key 等变量后，获授权的电脑会自动同步。')
-          else
-            Card(
-              child: Column(
-                children: [
-                  for (final (i, n) in names.indexed) ...[
-                    // 这一组没有行首图标，分隔线与文字左缘对齐。
-                    if (i > 0) Divider(indent: usesGlass(context) ? listRowPadding.start : null),
-                    ListTile(
-                      contentPadding: listRowPadding,
-                      title: Text(
-                        n,
-                        style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.w600),
-                      ),
-                      subtitle: values[n] == null
-                          ? Text('无法解密，点按后可以删除或重新填写', style: TextStyle(color: context.palette.accent))
-                          : Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  _revealed.contains(n) ? values[n]!.value : '••••••••',
-                                  maxLines: _revealed.contains(n) ? 6 : 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(fontFamily: 'monospace'),
-                                ),
-                                if (values[n]!.note.isNotEmpty)
-                                  Text(
-                                    values[n]!.note,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(color: context.palette.mute, fontSize: 13),
-                                  ),
-                              ],
-                            ),
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => VariableEditPage(c: c, envId: env.id, name: n),
-                        ),
-                      ),
-                      trailing: values[n] == null
-                          ? const ListRowChevron()
-                          : ListRowActions(
-                              children: [
-                                IconButton(
-                                  tooltip: _revealed.contains(n) ? '隐藏' : '显示',
-                                  icon: Icon(
-                                    _revealed.contains(n) ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                                  ),
-                                  onPressed: () =>
-                                      setState(() => _revealed.contains(n) ? _revealed.remove(n) : _revealed.add(n)),
-                                ),
-                                IconButton(
-                                  tooltip: '复制',
-                                  icon: const Icon(Icons.copy_rounded),
-                                  onPressed: () {
-                                    if (!AppScope.isSimulated(context)) {
-                                      Clipboard.setData(ClipboardData(text: values[n]!.value));
-                                    }
-                                    toast(context, '已复制 $n');
-                                  },
-                                ),
-                              ],
-                            ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          SectionTitle('可访问的电脑（${devices.length}）'),
-          if (devices.isEmpty)
-            Text('还没有电脑可以访问这个环境。在“设备”中添加电脑或调整权限。', style: TextStyle(color: context.palette.mute))
-          else
-            Card(
-              child: Column(
-                children: [
-                  for (final (i, d) in devices.indexed) ...[
-                    if (i > 0) const Divider(),
-                    ListTile(
-                      leading: const Icon(Icons.laptop_mac_outlined),
-                      title: Text(d.name),
-                      subtitle: Text(() {
-                        final g = d.grants.firstWhere((g) => g.envId == env.id);
-                        return '${roleNames[g.role]} · ${formatExpiry(g.expiresAt)}';
-                      }()),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          SectionTitle('在命令行中使用'),
-          Card(
-            child: ListTile(
-              contentPadding: listRowPadding,
-              title: const Text('环境 ID'),
-              subtitle: Text(env.id, style: const TextStyle(fontFamily: 'monospace')),
-              onTap: () => _copyId(env),
-              trailing: ListRowActions(
-                children: [
-                  IconButton(tooltip: '复制 ID', icon: const Icon(Icons.copy_rounded), onPressed: () => _copyId(env)),
-                ],
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(Space.xs, Space.sm, Space.xs, 0),
-            child: Text(
-              '命令行里可以用 ID 代替环境名，例如 harmonia exec --env ${env.id} -- 命令。改名后 ID 不变，适合写进脚本。',
-              style: TextStyle(color: context.palette.mute, fontSize: 13),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _copyId(Environment env) {
-    if (!AppScope.isSimulated(context)) Clipboard.setData(ClipboardData(text: env.id));
-    toast(context, '已复制环境 ID');
-  }
-}
-
-class VariableEditPage extends StatefulWidget {
-  const VariableEditPage({super.key, required this.c, required this.envId, this.name});
-  final AppController c;
-  final String envId;
-  final String? name;
-  @override
-  State<VariableEditPage> createState() => _VariableEditPageState();
-}
-
-class _VariableEditPageState extends State<VariableEditPage> {
-  final _form = GlobalKey<FormState>();
-  late final _name = TextEditingController(text: widget.name ?? '');
-  late final _old = widget.name == null ? null : widget.c.vault.entries(widget.envId)[widget.name];
-  late final _broken = widget.name != null && _old == null;
-  late final _value = TextEditingController(text: _old?.value ?? '');
-  late final _note = TextEditingController(text: _old?.note ?? '');
-  bool _show = false;
-
-  bool get _editing => widget.name != null;
-
-  Future<void> _save() async {
-    if (!_form.currentState!.validate()) return;
-    final c = widget.c;
-    final name = _name.text.trim();
-    if (!_editing && c.vault.entries(widget.envId).containsKey(name)) {
-      final ok = await confirmDialog(context, title: '覆盖 $name？', body: '这个环境中已经有同名变量，保存会覆盖原来的值。', ok: '覆盖');
-      if (!ok || !mounted) return;
-    }
-    final nav = Navigator.of(context);
-    final ok = await runBusy(
-      context,
-      () => c.guard(() => c.vault.setVariable(widget.envId, name, _value.text, _note.text)),
-      done: '已保存 $name',
-    );
-    if (ok) nav.pop();
-  }
-
-  Future<void> _delete() async {
-    final ok = await confirmDialog(
-      context,
-      title: '删除 ${widget.name}？',
-      body: '所有已授权的电脑会在下次同步时移除这个变量。',
-      ok: '删除',
-      danger: true,
-    );
-    if (!ok || !mounted) return;
-    final nav = Navigator.of(context);
-    final done = await runBusy(
-      context,
-      () => widget.c.guard(() => widget.c.vault.deleteVariable(widget.envId, widget.name!)),
-      done: '已删除',
-    );
-    if (done) nav.pop();
-  }
-
-  @override
-  Widget build(BuildContext context) => AppPage(
-    appBar: AppBarSurface(
-      title: Text(_editing ? '编辑变量' : '添加变量'),
-      actions: [if (_editing) IconButton(tooltip: '删除', icon: const Icon(Icons.delete_outline), onPressed: _delete)],
-    ),
-    body: (context) => Form(
-      key: _form,
-      child: ListView(
-        padding: pagePadding(context, const EdgeInsets.all(Space.lg)),
-        children: [
-          TextFormField(
-            autofillHints: null,
-            controller: _name,
-            enabled: !_editing,
-            autocorrect: false,
-            textCapitalization: TextCapitalization.characters,
-            style: const TextStyle(fontFamily: 'monospace'),
-            decoration: const InputDecoration(labelText: '变量名', hintText: 'OPENAI_API_KEY'),
-            validator: validateVarName,
-          ),
-          const SizedBox(height: Space.md),
-          TextFormField(
-            autofillHints: null,
-            controller: _value,
-            obscureText: !_show,
-            autocorrect: false,
-            enableSuggestions: false,
-            minLines: 1,
-            maxLines: _show ? 6 : 1,
-            style: const TextStyle(fontFamily: 'monospace'),
-            decoration: InputDecoration(
-              labelText: '值',
-              suffixIcon: IconButton(
-                icon: Icon(_show ? Icons.visibility_off_outlined : Icons.visibility_outlined),
-                onPressed: () => setState(() => _show = !_show),
-              ),
-            ),
-            validator: (v) => (v ?? '').length > 65536 ? '值不能超过 64 KB' : null,
-          ),
-          const SizedBox(height: Space.md),
-          TextFormField(
-            controller: _note,
-            minLines: 1,
-            maxLines: 4,
-            maxLength: maxNoteLen,
-            decoration: const InputDecoration(labelText: '备注（可选）', hintText: '例如：用途、从哪里申请、什么时候到期'),
-            validator: (v) => (v ?? '').trim().runes.length > maxNoteLen ? '备注最长 $maxNoteLen 个字' : null,
-          ),
-          const SizedBox(height: Space.md),
-          if (_broken) ...[
-            const Banner2('原来的内容无法解密。可以点右上角删除这个变量，或者重新填写值和备注，保存后覆盖。', warn: true),
-            const SizedBox(height: Space.md),
-          ],
-          const Banner2('值和备注在本机加密后才会上传。\n保存需要联网，成功后会同步到所有获授权的电脑。'),
-          const SizedBox(height: Space.xl),
-          FilledButton(onPressed: _save, child: const Text('保存')),
-        ],
-      ),
-    ),
-  );
 }

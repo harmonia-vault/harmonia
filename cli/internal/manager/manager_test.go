@@ -3,11 +3,13 @@ package manager
 import (
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/harmonia-vault/harmonia/cli/internal/api"
 	"github.com/harmonia-vault/harmonia/cli/internal/app"
 	hc "github.com/harmonia-vault/harmonia/cli/internal/crypto"
+	"github.com/harmonia-vault/harmonia/cli/internal/refs"
 	"github.com/harmonia-vault/harmonia/cli/internal/state"
 )
 
@@ -73,38 +75,60 @@ func mustDEK(t *testing.T, f *state.ManagerFile, pass string) []byte {
 	return dek
 }
 
-// newSession 造一个已经同步过的会话：两个环境，各有几个变量，另有一台手机和一台授权了 a 的电脑。
+// newSession 造一个已经同步过的会话：两个变量库 a、b，各有几个变量；环境 ea 引用 a 的全部变量，
+// 环境 mix 勾选 a 的 ONLY_A（改名为 RENAMED）并引用 b 的全部变量。另有一台手机和一台授权了 ea 的电脑。
 func newSession(t *testing.T) *Session {
 	keys := state.NewDeviceKeys()
 	keys.ID = hc.NewID()
 	root := hc.SignKeyFromSeed(hc.Random(32))
 	s := Open(nil, &state.ManagerFile{Server: "http://localhost:1", RootPub: hc.B64(root.Pub), DeviceID: keys.ID}, keys)
 	s.root = root
-	for i, env := range []struct {
+	s.info = &api.ManagerInfo{}
+	for _, v := range []struct {
 		id   string
 		vars map[string]string
 	}{{"a", map[string]string{"SAME": "1", "DIFF": "old", "ONLY_A": "值"}}, {"b", map[string]string{"SAME": "1", "DIFF": "new", "NOTE": "n"}}} {
 		key := hc.Random(32)
 		sealed, _ := hc.Seal(key, keys.Box.Pub[:])
-		s.cache.Environments = append(s.cache.Environments, api.Environment{ID: env.id, Name: env.id, KeyVersion: "1", Role: "rw", Position: i})
-		s.cache.Envelopes = append(s.cache.Envelopes, api.Envelope{EnvID: env.id, KeyVersion: "1", Sealed: hc.B64(sealed)})
-		s.cache.Variables[env.id] = map[string]state.CachedVar{}
-		for n, v := range env.vars {
-			ct, _ := hc.EncryptVar(key, env.id, 1, n, hc.Entry{Value: v})
-			s.cache.Variables[env.id][n] = state.CachedVar{Value: ct, KeyVersion: 1}
+		s.info.Vaults = append(s.info.Vaults, api.ManagerVault{ID: v.id, Name: "库" + v.id, KeyVersion: "1"})
+		s.cache.Envelopes = append(s.cache.Envelopes, api.Envelope{VaultID: v.id, KeyVersion: "1", Sealed: hc.B64(sealed)})
+		s.cache.Variables[v.id] = map[string]state.CachedVar{}
+		for n, val := range v.vars {
+			ct, _ := hc.EncryptVar(key, v.id, 1, n, hc.Entry{Value: val})
+			s.cache.Variables[v.id][n] = state.CachedVar{Value: ct, KeyVersion: 1}
 		}
 	}
-	// 这台电脑对 a 的授权一直有效，对 b 的授权已经到期。
-	laptop := api.Device{ID: "laptop", Kind: "client", Grants: []api.DeviceGrant{{EnvID: "a"}, {EnvID: "b", ExpiresAt: 1}}}
-	s.info = &api.ManagerInfo{Devices: []api.Device{{ID: "phone", Kind: "manager"}, {ID: keys.ID, Kind: "manager"}, laptop}}
+	s.info.Environments = []api.ManagerEnv{
+		{ID: "ea", Name: "只有 a", Refs: []api.Ref{{VaultID: "a", Scope: "all", Writable: true}}},
+		{ID: "mix", Name: "混合", Refs: []api.Ref{
+			{VaultID: "a", Scope: "pick", Items: []api.RefItem{{Name: "ONLY_A", As: "RENAMED"}}},
+			{VaultID: "b", Scope: "all"},
+			{VaultID: "gone", Scope: "all", Missing: true},
+		}},
+	}
+	for i, e := range s.info.Environments {
+		items, shadowed := refs.Expand(e.Refs, s.namesLocked)
+		s.cache.Environments = append(s.cache.Environments, api.Environment{ID: e.ID, Name: e.Name, Role: "rw", LocalDecrypt: true, Position: i, Items: items, Shadowed: shadowed})
+	}
+	// 这台电脑对 ea 的授权一直有效，对 mix 的授权已经到期。
+	laptop := api.Device{ID: "laptop", Kind: "client", Grants: []api.DeviceGrant{{EnvironmentID: "ea"}, {EnvironmentID: "mix", ExpiresAt: 1}}}
+	s.info.Devices = []api.Device{{ID: "phone", Kind: "manager"}, {ID: keys.ID, Kind: "manager"}, laptop}
 	return s
 }
 
 func TestSessionViews(t *testing.T) {
 	s := newSession(t)
 	envs := s.Envs()
-	if len(envs) != 2 || envs[0].Count != 3 || envs[0].Devices != 3 || envs[1].Devices != 2 {
+	if len(envs) != 2 || envs[0].Count != 3 || envs[0].Devices != 3 || envs[1].Devices != 2 || envs[1].Count != 4 || envs[1].Problems != 1 {
 		t.Fatalf("环境概况不对：%+v", envs)
+	}
+	vaults := s.Vaults()
+	if len(vaults) != 2 || vaults[0].Count != 3 || !reflect.DeepEqual(vaults[0].Envs, []string{"只有 a", "混合"}) || !reflect.DeepEqual(vaults[1].Envs, []string{"混合"}) {
+		t.Fatalf("变量库概况不对：%+v", vaults)
+	}
+	d, err := s.Env("mix")
+	if err != nil || len(d.Refs) != 3 || d.Refs[0].VaultName != "库a" || d.Refs[2].VaultName != "" || !d.Refs[2].Missing || d.Items[0].Name != "RENAMED" {
+		t.Fatalf("环境详情不对：%+v %v", d, err)
 	}
 	vars, err := s.Vars("a")
 	if err != nil || len(vars) != 3 || vars[0].Name != "DIFF" || vars[1].Name != "ONLY_A" || vars[1].Length != 1 {
@@ -117,7 +141,7 @@ func TestSessionViews(t *testing.T) {
 		t.Fatal("不存在的变量应当报错")
 	}
 	if _, err := s.Vars("gone"); err == nil {
-		t.Fatal("不存在的环境应当报错")
+		t.Fatal("不存在的变量库应当报错")
 	}
 	str := func(v string) *string { return &v }
 	diff, err := s.Diff("b", map[string]app.VarChange{
@@ -133,7 +157,7 @@ func TestSessionViews(t *testing.T) {
 		t.Fatalf("复制对比不对：%+v %v", cp, err)
 	}
 	if _, err := s.CopyDiff("a", "a", []string{"SAME"}); err == nil {
-		t.Fatal("复制到同一个环境应当报错")
+		t.Fatal("复制到同一个变量库应当报错")
 	}
 
 	// 解不开的变量单独标出，其他变量照常可用；它只能删除或重新写入。
@@ -148,5 +172,22 @@ func TestSessionViews(t *testing.T) {
 	diff, err = s.Diff("b", map[string]app.VarChange{"BROKEN": {Value: str("x")}}, []string{"BROKEN"})
 	if err != nil || diff[0].Status != "changed" {
 		t.Fatalf("重新写入解不开的变量：%+v %v", diff, err)
+	}
+}
+
+// 编辑环境时的预览：重名在本机就指出，保存前拒绝。
+func TestPreviewAndDuplicateCheck(t *testing.T) {
+	s := newSession(t)
+	both := []api.Ref{{VaultID: "a", Scope: "all"}, {VaultID: "b", Scope: "all"}}
+	items, shadowed, dup := s.Preview(both)
+	if len(items) != 4 || len(shadowed) != 2 || !reflect.DeepEqual(dup, []string{"DIFF", "SAME"}) {
+		t.Fatalf("预览不对：%v %v %v", items, shadowed, dup)
+	}
+	if _, err := s.checkRefsLocked(both); err == nil || !strings.Contains(err.Error(), "DIFF、SAME") {
+		t.Fatalf("重名应在提交前拒绝：%v", err)
+	}
+	renamed := []api.Ref{{VaultID: "a", Scope: "all", Items: []api.RefItem{{Name: "DIFF", As: "OLD_DIFF"}, {Name: "SAME", As: "SAME_A"}}}, {VaultID: "b", Scope: "all"}}
+	if got, err := s.checkRefsLocked(renamed); err != nil || got[1].Items == nil {
+		t.Fatalf("改名后应能保存：%v", err)
 	}
 }

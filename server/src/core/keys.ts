@@ -1,8 +1,8 @@
-// 设备证书与环境钥封装的校验（docs/protocol.md 2.2）。
+// 设备证书与库钥封装的校验（docs/protocol.md 2.2）。
 import type { Sql } from "./db";
 import { arr, bad, bin, decimal, deviceCertMsg, envelopeMsg, id, obj, verifyEd25519 } from "./util";
 
-export type Envelope = { envId: string; keyVersion: number; recipient: string; sealed: string; sig: string };
+export type Envelope = { vaultId: string; keyVersion: number; recipient: string; sealed: string; sig: string };
 
 export async function verifyCert(
   rootPub: string,
@@ -23,42 +23,42 @@ export async function parseEnvelopes(rootPub: string, recipient: string, raw: un
   for (const item of arr(raw ?? [], "封装列表")) {
     const e = obj(item, "封装");
     const env: Envelope = {
-      envId: id(e.envId, "环境 ID"),
+      vaultId: id(e.vaultId, "变量库 ID"),
       keyVersion: decimal(e.keyVersion, "密钥版本"),
       recipient,
       sealed: bin(e.sealed, "封装内容", 80),
       sig: bin(e.sig, "封装签名", 64),
     };
-    if (!(await verifyEd25519(rootPub, await envelopeMsg(env.envId, env.keyVersion, recipient, env.sealed), env.sig))) {
+    if (!(await verifyEd25519(rootPub, await envelopeMsg(env.vaultId, env.keyVersion, recipient, env.sealed), env.sig))) {
       throw bad("封装签名无效。");
     }
     out.push(env);
   }
-  if (new Set(out.map((e) => e.envId)).size !== out.length) throw bad("封装列表中有重复的环境。");
+  if (new Set(out.map((e) => e.vaultId)).size !== out.length) throw bad("封装列表中有重复的变量库。");
   return out;
 }
 
-/** 校验封装与当前环境的密钥版本一致。 */
+/** 校验封装与当前变量库的密钥版本一致。 */
 export function checkKeyVersions(sql: Sql, envelopes: Envelope[]) {
   for (const e of envelopes) {
-    const env = sql.all<{ key_version: number }>(`SELECT key_version FROM environments WHERE id = ?`, e.envId)[0];
-    if (!env) throw bad("封装对应的环境不存在。");
-    if (env.key_version !== e.keyVersion) throw bad("封装的密钥版本已过期，请同步后重试。");
+    const v = sql.all<{ key_version: number }>(`SELECT key_version FROM vaults WHERE id = ?`, e.vaultId)[0];
+    if (!v) throw bad("封装对应的变量库不存在，请同步后重试。");
+    if (v.key_version !== e.keyVersion) throw bad("封装的密钥版本已过期，请同步后重试。");
   }
 }
 
-/** 封装必须恰好覆盖全部现存环境。 */
-export function requireAllEnvironments(sql: Sql, envelopes: Envelope[]) {
+/** 封装必须恰好覆盖全部现存变量库。 */
+export function requireAllVaults(sql: Sql, envelopes: Envelope[]) {
   checkKeyVersions(sql, envelopes);
-  const total = sql.all<{ n: number }>(`SELECT COUNT(*) AS n FROM environments`)[0]!.n;
-  if (envelopes.length !== total) throw bad("需要为全部环境提供封装，请同步后重试。");
+  const total = sql.all<{ n: number }>(`SELECT COUNT(*) AS n FROM vaults`)[0]!.n;
+  if (envelopes.length !== total) throw bad("需要为全部变量库提供封装，请同步后重试。");
 }
 
 export function insertEnvelopes(sql: Sql, envelopes: Envelope[]) {
   for (const e of envelopes) {
     sql.run(
-      `INSERT OR REPLACE INTO envelopes (env_id, key_version, recipient, sealed, sig) VALUES (?, ?, ?, ?, ?)`,
-      e.envId,
+      `INSERT OR REPLACE INTO envelopes (vault_id, key_version, recipient, sealed, sig) VALUES (?, ?, ?, ?, ?)`,
+      e.vaultId,
       e.keyVersion,
       e.recipient,
       e.sealed,

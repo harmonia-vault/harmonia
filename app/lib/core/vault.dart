@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'api.dart';
 import 'crypto.dart';
 import 'models.dart';
+import 'refs.dart';
 import 'store.dart';
 
 part 'vault_devices.dart';
@@ -76,8 +77,7 @@ class Vault with VaultDevices {
   BoxKey? boxKey;
   SignKey? root;
   SyncCache cache = SyncCache();
-  @override
-  final Map<String, Uint8List> _envKeys = {};
+  final Map<String, Uint8List> _vaultKeys = {};
 
   /// 本机数据密钥：由 App PIN 或指纹解开后设置，锁定时清除。
   Uint8List? localKey;
@@ -91,6 +91,10 @@ class Vault with VaultDevices {
   bool get isManager => cache.self['kind'] == 'manager';
   @override
   List<Environment> get environments => cache.environments;
+  @override
+  List<VaultInfo> get vaults => cache.vaults;
+  @override
+  List<EnvDef> get envDefs => cache.envDefs;
   List<DeviceInfo> get devices => cache.devices;
 
   // ---- 本机状态 ----
@@ -135,7 +139,7 @@ class Vault with VaultDevices {
     await secure.write(_configKey, b64(crypto.aeadSeal(localKey!, json, _configAad)));
     _attach(c);
     cache = SyncCache();
-    _envKeys.clear();
+    _vaultKeys.clear();
     root = null;
     await sync();
   }
@@ -157,7 +161,7 @@ class Vault with VaultDevices {
     boxKey = null;
     root = null;
     cache = SyncCache();
-    _envKeys.clear();
+    _vaultKeys.clear();
   }
 
   // ---- 同步 ----
@@ -192,7 +196,8 @@ class Vault with VaultDevices {
     if (generation != _lockGeneration) return;
     if ((res['seq'] as int) < since) return _sync(full: true);
     final next = since == 0 ? SyncCache() : cache;
-    if (since == 0) next.variables = {};
+    // 能看到的变量范围变了时服务端下发完整列表，整体替换（docs/protocol.md 3.4）。
+    if (since == 0 || res['full'] == true) next.variables = {};
     next
       ..seq = res['seq'] as int
       ..self = (res['self'] as Map).cast<String, dynamic>()
@@ -203,12 +208,12 @@ class Vault with VaultDevices {
           .map((e) => Envelope.fromJson((e as Map).cast<String, dynamic>()))
           .toList()
       ..manager = (res['manager'] as Map?)?.cast<String, dynamic>();
-    final visible = next.environments.map((e) => e.id).toSet();
-    next.variables.removeWhere((env, _) => !visible.contains(env));
+    final visible = ((res['vaults'] as List?) ?? []).map((v) => (v as Map)['id'] as String).toSet();
+    next.variables.removeWhere((vault, _) => !visible.contains(vault));
     for (final v in (res['variables'] as List).cast<Map>()) {
-      final envId = v['envId'] as String;
-      if (!visible.contains(envId)) continue;
-      final m = next.variables.putIfAbsent(envId, () => {});
+      final vaultId = v['vaultId'] as String;
+      if (!visible.contains(vaultId)) continue;
+      final m = next.variables.putIfAbsent(vaultId, () => {});
       if (v['deleted'] == true) {
         m.remove(v['name']);
       } else {
@@ -220,16 +225,16 @@ class Vault with VaultDevices {
     await files.write(_cacheKey, jsonEncode(cache.toJson()));
   }
 
-  /// 校验并解开环境钥与（管理设备的）账号根密钥。
+  /// 校验并解开库钥与（管理设备的）账号根密钥。
   void _unlockKeys() {
     final rootPub = unb64(config!.rootPub);
-    _envKeys.clear();
+    _vaultKeys.clear();
     for (final e in cache.envelopes) {
       final sealed = unb64(e.sealed);
-      if (!crypto.verify(rootPub, envelopeMsg(e.envId, e.keyVersion, config!.deviceId, sealed), unb64(e.sig))) {
-        throw VaultException('服务器下发的环境密钥签名无效，已停止。请确认服务器地址是否正确。');
+      if (!crypto.verify(rootPub, envelopeMsg(e.vaultId, e.keyVersion, config!.deviceId, sealed), unb64(e.sig))) {
+        throw VaultException('服务器下发的变量库密钥签名无效，已停止。请确认服务器地址是否正确。');
       }
-      _envKeys[e.envId] = crypto.open(boxKey!, sealed);
+      _vaultKeys[e.vaultId] = crypto.open(boxKey!, sealed);
     }
     final sealedRoot = cache.manager?['rootSealed'] as String?;
     if (sealedRoot != null) {
@@ -248,19 +253,39 @@ class Vault with VaultDevices {
   Environment environment(String id) =>
       cache.environments.firstWhere((e) => e.id == id, orElse: () => throw VaultException('环境不存在，可能已被删除。'));
 
-  /// 解密一个环境的全部变量（值和备注）。解不开的变量不在其中，见 [brokenVariables]。
-  Map<String, VarEntry> entries(String envId) => _decryptAll(envId).entries;
+  /// 变量库的名字；已被删除时返回 null。
+  String? vaultName(String id) => vaults.where((v) => v.id == id).firstOrNull?.name;
+
+  EnvDef? envDef(String id) => envDefs.where((e) => e.id == id).firstOrNull;
+
+  /// 变量库里现存的变量名，按名称排序。
+  List<String> variableNames(String vaultId) => (cache.variables[vaultId]?.keys.toList() ?? [])..sort();
+
+  /// 解密一个变量库的全部变量（值和备注），键是变量库里的原名。解不开的变量不在其中，见 [brokenVariables]。
+  Map<String, VarEntry> entries(String vaultId) => _decryptAll(vaultId).entries;
 
   /// 解不开的变量名，按名称排序。它们仍然可以删除或重新写入。
-  List<String> brokenVariables(String envId) => _decryptAll(envId).broken;
+  List<String> brokenVariables(String vaultId) => _decryptAll(vaultId).broken;
 
-  ({Map<String, VarEntry> entries, List<String> broken}) _decryptAll(String envId) {
-    final key = _envKey(envId);
+  /// 解密一个环境里的变量，键是环境里的名字（改名后的）。解不开的变量不在其中。
+  Map<String, VarEntry> envEntries(String envId) {
+    final decrypted = <String, Map<String, VarEntry>>{};
+    final out = <String, VarEntry>{};
+    for (final it in environment(envId).items) {
+      final vals = decrypted.putIfAbsent(it.vaultId, () => _vaultKeys.containsKey(it.vaultId) ? entries(it.vaultId) : {});
+      final e = vals[it.source];
+      if (e != null) out[it.name] = e;
+    }
+    return out;
+  }
+
+  ({Map<String, VarEntry> entries, List<String> broken}) _decryptAll(String vaultId) {
+    final key = _vaultKey(vaultId);
     final entries = <String, VarEntry>{};
     final broken = <String>[];
-    for (final v in (cache.variables[envId] ?? {}).entries) {
+    for (final v in (cache.variables[vaultId] ?? {}).entries) {
       try {
-        entries[v.key] = crypto.decryptVar(key, envId, v.value.keyVersion, v.key, v.value.value);
+        entries[v.key] = crypto.decryptVar(key, vaultId, v.value.keyVersion, v.key, v.value.value);
       } on DecryptException {
         broken.add(v.key);
       }
@@ -268,11 +293,15 @@ class Vault with VaultDevices {
     return (entries: entries, broken: broken..sort());
   }
 
-  Uint8List _envKey(String envId) {
-    final key = _envKeys[envId];
-    if (key == null) throw VaultException('这台设备没有这个环境的密钥。');
+  Uint8List _vaultKey(String vaultId) {
+    final key = _vaultKeys[vaultId];
+    if (key == null) throw VaultException('这台设备没有这个变量库的密钥。');
     return key;
   }
+
+  int _keyVersion(String vaultId) =>
+      vaults.where((v) => v.id == vaultId).firstOrNull?.keyVersion ??
+      cache.envelopes.firstWhere((e) => e.vaultId == vaultId, orElse: () => throw VaultException('变量库不存在，可能已被删除。')).keyVersion;
 
   // ---- 环境与变量 ----
 
@@ -292,19 +321,35 @@ class Vault with VaultDevices {
     return unb64(boxPub);
   }
 
-  @override
-  Map<String, dynamic> _envelope(String envId, int keyVersion, String recipient, Uint8List boxPub, Uint8List envKey) {
-    final sealed = crypto.seal(envKey, boxPub);
+  Map<String, dynamic> _envelope(String vaultId, int keyVersion, String recipient, Uint8List boxPub, Uint8List key) {
+    final sealed = crypto.seal(key, boxPub);
     return {
-      'envId': envId,
+      'vaultId': vaultId,
       'recipient': recipient,
       'keyVersion': '$keyVersion',
       'sealed': b64(sealed),
-      'sig': b64(crypto.sign(_root(), envelopeMsg(envId, keyVersion, recipient, sealed))),
+      'sig': b64(crypto.sign(_root(), envelopeMsg(vaultId, keyVersion, recipient, sealed))),
     };
   }
 
-  Future<void> createEnvironment(String name) async {
+  /// 为一台设备封装这些变量库的库钥（已删除的跳过）。
+  @override
+  List<Map<String, dynamic>> _sealVaults(Iterable<String> vaultIds, String recipient, Uint8List boxPub) => [
+    for (final id in vaultIds.toSet())
+      if (vaults.any((v) => v.id == id)) _envelope(id, _keyVersion(id), recipient, boxPub, _vaultKey(id)),
+  ];
+
+  /// 这些授权里开启了本机解密的环境引用到的变量库（设计文档 17.2）。
+  @override
+  Set<String> _localVaults(Iterable<Grant> grants) => {
+    for (final g in grants.where((g) => g.localDecrypt))
+      for (final r in envDef(g.envId)?.refs ?? const <EnvRef>[])
+        if (!r.missing) r.vaultId,
+  };
+
+  /// 新建变量库：生成库钥，封装给全部管理设备（先校验设备证书）和恢复码。[withEnv] 时同时新建一个同名环境，
+  /// 引用它的全部变量并允许修改（设计文档 17.1）。返回变量库 ID 和环境 ID。
+  Future<({String vaultId, String? envId})> createVault(String name, {bool withEnv = true}) async {
     _root();
     final id = crypto.newId();
     final key = crypto.random(32);
@@ -314,50 +359,114 @@ class Vault with VaultDevices {
     }
     final rec = cache.manager!['recovery'] as Map;
     envelopes.add(_envelope(id, 1, 'recovery', unb64(rec['boxPub'] as String), key));
-    await api!.device('POST', '/api/v1/environments', body: {'id': id, 'name': name.trim(), 'envelopes': envelopes});
+    await api!.device('POST', '/api/v1/vaults', body: {'id': id, 'name': name.trim(), 'envelopes': envelopes});
+    String? envId;
+    if (withEnv) {
+      envId = crypto.newId();
+      await api!.device(
+        'POST',
+        '/api/v1/environments',
+        body: {
+          'id': envId,
+          'name': name.trim(),
+          'refs': [EnvRef(id, 'all', writable: true).toJson()],
+        },
+      );
+    }
+    await sync();
+    return (vaultId: id, envId: envId);
+  }
+
+  Future<void> renameVault(String id, String name) async {
+    await api!.device('PATCH', '/api/v1/vaults/$id', body: {'name': name.trim()});
     await sync();
   }
 
-  Future<void> renameEnvironment(String id, String name) async {
-    await api!.device('PATCH', '/api/v1/environments/$id', body: {'name': name.trim()});
+  /// 删除变量库和其中的变量；引用它的环境里，这条引用变成“已失效”。
+  Future<void> deleteVault(String id) async {
+    await api!.device('DELETE', '/api/v1/vaults/$id');
     await sync();
   }
 
+  /// 编辑环境时的预览：最终名字、被遮住的同名变量，以及保存时会被拒绝的重名。
+  ({List<EnvItem> items, List<EnvItem> shadowed, List<String> duplicates}) previewEnvironment(List<EnvRef> refs) {
+    final r = expandRefs(refs, variableNames);
+    return (items: r.items, shadowed: r.shadowed, duplicates: duplicateNames(refs, variableNames));
+  }
+
+  void _checkRefs(List<EnvRef> refs) {
+    final dup = duplicateNames(refs, variableNames);
+    if (dup.isNotEmpty) throw VaultException('环境里有重名的变量：${dup.join('、')}。请给其中一个改名，或取消勾选。');
+  }
+
+  /// 新建环境。新环境还没有授权给任何设备，不需要封装。返回环境 ID。
+  Future<String> createEnvironment(String name, List<EnvRef> refs) async {
+    _root();
+    _checkRefs(refs);
+    final id = crypto.newId();
+    await api!.device(
+      'POST',
+      '/api/v1/environments',
+      body: {'id': id, 'name': name.trim(), 'refs': refs.map((r) => r.toJson()).toList()},
+    );
+    await sync();
+    return id;
+  }
+
+  /// 整体替换环境的名字和引用。被授权这个环境、开启了本机解密的设备，在同一个请求里附上引用到的变量库的封装
+  /// （先校验设备证书），服务端据此补上新引用的、删掉不再用到的（设计文档 17.2）。
+  Future<void> saveEnvironment(String id, String name, List<EnvRef> refs) async {
+    _root();
+    _checkRefs(refs);
+    final vaultIds = refs.where((r) => !r.missing).map((r) => r.vaultId);
+    final envelopes = <Map<String, dynamic>>[];
+    for (final d in devices) {
+      if (!d.grants.any((g) => g.envId == id && g.localDecrypt)) continue;
+      envelopes.addAll(_sealVaults(vaultIds, d.id, _verifiedBoxPub(d.id, d.kind, d.signPub, d.boxPub, d.cert)));
+    }
+    await api!.device(
+      'PUT',
+      '/api/v1/environments/$id',
+      body: {'name': name.trim(), 'refs': refs.map((r) => r.toJson()).toList(), 'envelopes': envelopes},
+    );
+    await sync();
+  }
+
+  /// 删除环境和设备对它的授权，变量库不受影响。
   Future<void> deleteEnvironment(String id) async {
     await api!.device('DELETE', '/api/v1/environments/$id');
     await sync();
   }
 
-  /// 写入变量的值和备注；已有变量里本版本不认识的内容原样保留。
-  Future<void> setVariable(String envId, String name, String value, String note) async {
-    final env = environment(envId);
-    final key = _envKeys[envId];
-    if (key == null) throw VaultException('这台设备没有这个环境的密钥。');
-    final old = cache.variables[envId]?[name];
+  /// 写入变量库里的一个变量（值和备注）；已有变量里本版本不认识的内容原样保留。
+  Future<void> setVariable(String vaultId, String name, String value, String note) async {
+    final key = _vaultKey(vaultId);
+    final kv = _keyVersion(vaultId);
+    final old = cache.variables[vaultId]?[name];
     var entry = VarEntry(value, note: note.trim());
     if (old != null) {
       try {
         entry = crypto
-            .decryptVar(key, envId, old.keyVersion, name, old.value)
+            .decryptVar(key, vaultId, old.keyVersion, name, old.value)
             .copyWith(value: value, note: note.trim());
       } on DecryptException {
         // 原来的内容解不开时直接覆盖。
       }
     }
-    final ct = crypto.encryptVar(key, envId, env.keyVersion, name, entry);
+    final ct = crypto.encryptVar(key, vaultId, kv, name, entry);
     await api!.device(
       'PUT',
-      '/api/v1/environments/$envId/variables/$name',
-      body: {'value': ct, 'keyVersion': '${env.keyVersion}'},
+      '/api/v1/vaults/$vaultId/variables/$name',
+      body: {'value': ct, 'keyVersion': '$kv'},
       headers: {'idempotency-key': crypto.newId()},
     );
     await sync();
   }
 
-  Future<void> deleteVariable(String envId, String name) async {
+  Future<void> deleteVariable(String vaultId, String name) async {
     await api!.device(
       'DELETE',
-      '/api/v1/environments/$envId/variables/$name',
+      '/api/v1/vaults/$vaultId/variables/$name',
       headers: {'idempotency-key': crypto.newId()},
     );
     await sync();
@@ -382,7 +491,7 @@ class Vault with VaultDevices {
 
   // ---- 恢复码轮换 ----
 
-  /// 用新恢复码轮换。全部环境钥与账号根密钥重新封装给新恢复钥，提交成功后旧恢复码失效。
+  /// 用新恢复码轮换。全部库钥与账号根密钥重新封装给新恢复钥，提交成功后旧恢复码失效。
   Future<RotationAttempt> rotateRecovery(Uint8List newCode, {String? key}) async {
     final r = _root();
     final rec = crypto.deriveRecovery(newCode);
@@ -399,8 +508,7 @@ class Vault with VaultDevices {
         'sig': b64(crypto.sign(rec.sign, rootRecoveryMsg(generation, rootSealed))),
       },
       'envelopes': [
-        for (final e in environments)
-          _envelope(e.id, e.keyVersion, 'recovery', rec.box.pub, _envKeys[e.id]!)..remove('recipient'),
+        for (final v in vaults) _envelope(v.id, v.keyVersion, 'recovery', rec.box.pub, _vaultKey(v.id))..remove('recipient'),
       ],
     };
     await api!.device('POST', '/api/v1/recovery/rotate', body: body);

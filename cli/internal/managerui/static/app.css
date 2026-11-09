@@ -129,6 +129,9 @@ details p { margin-top: var(--s2); }
 .env-name { flex: 1; overflow: hidden; text-overflow: ellipsis; }
 .count { min-width: 22px; padding: 0 6px; border-radius: 999px; background: var(--line); font-size: 12px; font-weight: 600; text-align: center; font-variant-numeric: tabular-nums; }
 .env.on .count { background: var(--yellow); color: #1E1B16; }
+.rail-head + .env-list + .rail-head { margin-top: var(--s3); }
+.rail-empty { padding: 0 var(--s3); }
+.flag { flex: none; width: 18px; height: 18px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 12px; font-weight: 700; line-height: 18px; text-align: center; }
 .me { margin-top: auto; padding: var(--s4) var(--s3) var(--s1); border-top: 1.5px solid var(--line); display: grid; gap: var(--s3); }
 .me dl { display: grid; gap: 1px; font-size: 13px; }
 .me dt { color: var(--mute); }
@@ -138,6 +141,24 @@ details p { margin-top: var(--s2); }
 .env-head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--s4); flex-wrap: wrap; padding-bottom: var(--s4); border-bottom: 1.5px solid var(--line); }
 .env-title { display: flex; align-items: center; gap: 2px; min-width: 0; }
 .env-title h1 { margin-right: var(--s2); font-size: 30px; overflow-wrap: anywhere; }
+.kind { display: inline-flex; align-items: center; gap: 4px; margin-right: var(--s3); padding: 2px 8px; border: 1.5px solid var(--line); border-radius: 999px; font-size: 12px; font-weight: 600; color: var(--mute); white-space: nowrap; }
+.refs { display: grid; gap: var(--s2); }
+.refs-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); }
+.refs-head h2 { font-size: 15px; }
+.ref-list { display: grid; gap: var(--s2); }
+.ref-list li { display: flex; gap: var(--s3); align-items: flex-start; padding: 10px var(--s3); border: 1.5px solid var(--line); border-radius: 12px; }
+.ref-list li > .ic { margin-top: 3px; color: var(--mute); }
+.ref-list li > span { display: grid; gap: 2px; min-width: 0; }
+.ref-list li.missing, .ref-card.missing { border-style: dashed; color: var(--mute); }
+.ref-edit { display: grid; gap: var(--s3); }
+.ref-card { display: grid; gap: var(--s3); padding: var(--s3) var(--s4) var(--s4); border: 1.5px solid var(--ink); border-radius: 12px; }
+.ref-head { display: flex; align-items: center; gap: 2px; }
+.pick { max-height: 240px; overflow: auto; border: 1.5px solid var(--line); border-radius: 10px; }
+.pick li { display: flex; align-items: center; gap: var(--s3); padding: 4px var(--s3); }
+.pick li + li { border-top: 1px solid var(--line); }
+.pick label { flex: 1; display: flex; align-items: center; gap: 10px; min-width: 0; overflow-wrap: anywhere; }
+.pick input[type=text] { width: 16em; max-width: 45%; min-height: 32px; }
+.preview { display: grid; gap: var(--s2); overflow-wrap: anywhere; }
 .facts { display: flex; gap: var(--s5); flex-wrap: wrap; color: var(--mute); font-size: 14px; }
 .facts li { display: flex; align-items: center; gap: 6px; }
 .facts b { color: var(--ink); font-variant-numeric: tabular-nums; }

@@ -252,21 +252,40 @@ export class TestAccount {
     return (await s.ok("POST", "/api/v1/pairing-codes", { token: this.phone.token, body: minutes ? { minutes } : {} })).code;
   }
 
-  async envelope(envId: string, recipient: string, keyVersion = 1) {
+  async envelope(vaultId: string, recipient: string, keyVersion = 1) {
     const sealed = b64(rand(80));
-    return { envId, recipient, keyVersion: String(keyVersion), sealed, sig: await this.root.sign(await envelopeMsg(envId, keyVersion, recipient, sealed)) };
+    return {
+      vaultId,
+      recipient,
+      keyVersion: String(keyVersion),
+      sealed,
+      sig: await this.root.sign(await envelopeMsg(vaultId, keyVersion, recipient, sealed)),
+    };
   }
 
   async cert(d: FakeDevice, kind: string) {
     return this.root.sign(deviceCertMsg(d.id, kind, d.sign.pub, d.boxPub));
   }
 
-  /** 由管理设备创建环境，封装给全部管理设备和恢复钥。 */
-  async createEnv(s: TestServer, managers: string[], name = "OpenAI") {
+  /** 由管理设备创建变量库，封装给全部管理设备和恢复钥。 */
+  async createVault(s: TestServer, managers: string[], name = "OpenAI") {
     const id = newId();
     const envelopes = [];
     for (const r of [...managers, "recovery"]) envelopes.push(await this.envelope(id, r));
-    await s.ok("POST", "/api/v1/environments", { token: this.phone.token, body: { id, name, envelopes } });
+    await s.ok("POST", "/api/v1/vaults", { token: this.phone.token, body: { id, name, envelopes } });
+    return id;
+  }
+
+  /** 创建环境，refs 省略时不引用任何变量库。 */
+  async createEnvironment(s: TestServer, refs: unknown[], name = "环境", id = newId()) {
+    await s.ok("POST", "/api/v1/environments", { token: this.phone.token, body: { id, name, refs } });
+    return id;
+  }
+
+  /** 和升级转换后一样：同 ID、同名的变量库和环境，环境引用全部变量并可以修改。返回这个 ID。 */
+  async createEnv(s: TestServer, managers: string[], name = "OpenAI") {
+    const id = await this.createVault(s, managers, name);
+    await this.createEnvironment(s, [{ vaultId: id, scope: "all", writable: true, items: [] }], name, id);
     return id;
   }
 
@@ -313,7 +332,12 @@ export async function waitApproval(s: TestServer, a: TestAccount, req: Record<st
 }
 
 /** 电脑发起配对并由手机以指定授权批准。 */
-export async function pairClient(s: TestServer, a: TestAccount, grants: { envId: string; role: string; expiresAt?: number }[]) {
+export async function pairClient(
+  s: TestServer,
+  a: TestAccount,
+  grants: { environmentId: string; role: string; expiresAt?: number; localDecrypt?: boolean }[],
+  vaults: string[] = grants.filter((g) => g.localDecrypt !== false).map((g) => g.environmentId),
+) {
   const cli = await FakeDevice.create();
   const r = await requestPairing(s, a, { device: cli });
   if (r.status !== 200) throw new Error(`发起配对失败：${JSON.stringify(r.json)}`);
@@ -323,10 +347,15 @@ export async function pairClient(s: TestServer, a: TestAccount, grants: { envId:
   const list = await s.ok("GET", "/api/v1/pairings", { token: a.phone.token });
   expect(list.pairings.map((p: { id: string }) => p.id)).toContain(req.id);
   const envelopes = [];
-  for (const g of grants) envelopes.push(await a.envelope(g.envId, cli.id));
+  for (const v of vaults) envelopes.push(await a.envelope(v, cli.id));
   await s.ok("POST", `/api/v1/pairings/${req.id}/approve`, {
     token: a.phone.token,
-    body: { kind: "client", cert: await a.cert(cli, "client"), grants: grants.map((g) => ({ expiresAt: 0, ...g })), envelopes },
+    body: {
+      kind: "client",
+      cert: await a.cert(cli, "client"),
+      grants: grants.map((g) => ({ expiresAt: 0, localDecrypt: true, ...g })),
+      envelopes,
+    },
   });
   const st = await s.ok("GET", `/api/v1/pairings/${req.id}/status`, {
     headers: { "x-harmonia-account": a.accountId, "x-pairing-secret": req.secret },

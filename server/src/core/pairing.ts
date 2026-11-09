@@ -17,7 +17,8 @@ import {
 } from "./context";
 import { clearFailures } from "./guard";
 import { checkPairingCode, consumePairingCode, createPairingCode } from "./pairing-codes";
-import { insertEnvelopes, parseEnvelopes, requireAllEnvironments, checkKeyVersions, verifyCert } from "./keys";
+import { insertEnvelopes, parseEnvelopes, requireAllVaults, verifyCert } from "./keys";
+import { reconcileEnvelopes, touchVisibility } from "./access";
 import { network } from "./net";
 import { parseGrants, writeGrants } from "./grants";
 import { ApiError, bad, bin, conflict, id, label, notFound, randomB64, rateLimited } from "./util";
@@ -259,15 +260,7 @@ export function pairingRoutes(app: Hono, deps: Deps) {
     const now = deps.now();
     sql.transaction(() => {
       waitingPairing(p.id);
-      if (kind === "manager") {
-        requireAllEnvironments(sql, envelopes);
-      } else {
-        checkKeyVersions(sql, envelopes);
-        const covered = new Set(envelopes.map((e) => e.envId));
-        if (grants.some((g) => !covered.has(g.envId)) || envelopes.length !== grants.length) {
-          throw bad("每个授权的环境都需要对应的封装。");
-        }
-      }
+      if (kind === "manager") requireAllVaults(sql, envelopes);
       sql.run(
         `INSERT INTO devices (id, name, platform, kind, sign_pub, box_pub, cert, root_sealed, status, created_at, last_seen_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`,
@@ -282,9 +275,13 @@ export function pairingRoutes(app: Hono, deps: Deps) {
         now,
         now,
       );
-      insertEnvelopes(sql, envelopes);
       const seq = bump(sql);
-      writeGrants(sql, p.id, grants, seq);
+      if (kind === "manager") insertEnvelopes(sql, envelopes);
+      else {
+        writeGrants(sql, p.id, grants, seq);
+        reconcileEnvelopes(sql, p.id, envelopes);
+        touchVisibility(sql, [p.id], seq);
+      }
       sql.run(`UPDATE pairings SET status = 'approved' WHERE id = ?`, p.id);
     });
     deps.waiters.close(p.id, "approved");

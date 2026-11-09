@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -94,8 +95,11 @@ func cmdStatus(ctx context.Context, args []string) error {
 // envHealth 返回环境的健康状况（显示在环境表里），有问题时附上一句原因和处理办法。
 func envHealth(a *app.App, cache *state.Cache, e api.Environment) (string, string) {
 	if p := vault.Unavailable(cache, a.Keys, e, time.Now().UnixMilli()); p != "" {
-		if vault.Expired(e, time.Now().UnixMilli()) {
+		switch {
+		case vault.Expired(e, time.Now().UnixMilli()):
 			return "授权已到期", p
+		case !e.LocalDecrypt:
+			return "未开启本机解密", p
 		}
 		return "密钥解不开", p
 	}
@@ -121,6 +125,7 @@ func statusProblems(a *app.App) []string {
 		if _, p := envHealth(a, cache, e); p != "" {
 			out = append(out, p)
 		}
+		out = append(out, shadowProblems(cache, e)...)
 	}
 	ov, _ := a.Dir.Overrides()
 	ids := make([]string, 0, len(ov))
@@ -136,7 +141,7 @@ func statusProblems(a *app.App) []string {
 		}
 		var gone []string
 		for name := range ov[id] {
-			if _, ok := cache.Variables[id][name]; !ok {
+			if !vault.HasItem(env, name) {
 				gone = append(gone, name)
 			}
 		}
@@ -161,7 +166,7 @@ func printEnvs(a *app.App) error {
 		return nil
 	}
 	fmt.Println("环境（同名变量由排在前面的环境提供）")
-	rows := [][]string{{"", "名称", "权限", "变量", "有效期", "状态", "健康", "ID"}}
+	rows := [][]string{{"", "名称", "权限", "变量", "变量库", "有效期", "状态", "健康", "ID"}}
 	for i, e := range vault.Ordered(cache) {
 		state := "未启用"
 		if e.Active {
@@ -169,7 +174,7 @@ func printEnvs(a *app.App) error {
 		}
 		health, _ := envHealth(a, cache, e)
 		rows = append(rows, []string{
-			fmt.Sprint(i + 1), e.Name, roleNames[e.Role], fmt.Sprint(len(cache.Variables[e.ID])), expiry(e.ExpiresAt), state, health, e.ID,
+			fmt.Sprint(i + 1), e.Name, roleNames[e.Role], fmt.Sprint(len(e.Items)), strings.Join(envVaults(cache, e), "、"), expiry(e.ExpiresAt), state, health, e.ID,
 		})
 	}
 	printTable(os.Stdout, "  ", rows)
@@ -182,6 +187,49 @@ func printEnvs(a *app.App) error {
 		printTable(os.Stdout, "  ", rows)
 	}
 	return nil
+}
+
+// envVaults 是环境引用到的变量库名，按引用顺序。
+func envVaults(cache *state.Cache, e api.Environment) []string {
+	var out []string
+	for _, it := range append(e.Items, e.Shadowed...) {
+		if n := vaultName(cache, it.VaultID); !slices.Contains(out, n) {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+func vaultName(cache *state.Cache, id string) string {
+	for _, v := range cache.VaultNames {
+		if v.ID == id {
+			return v.Name
+		}
+	}
+	return id
+}
+
+// origin 说明环境里的变量来自哪里：变量库名，改过名的加上原名。
+func origin(cache *state.Cache, it api.EnvItem) string {
+	if it.Source != it.Name {
+		return "来自 " + vaultName(cache, it.VaultID) + " / " + it.Source
+	}
+	return "来自 " + vaultName(cache, it.VaultID)
+}
+
+// shadowProblems 指出环境里被遮住的同名变量：“全部变量”引用的变量库后来新增了重名的变量（设计文档 17.1）。
+func shadowProblems(cache *state.Cache, e api.Environment) []string {
+	var out []string
+	for _, sh := range e.Shadowed {
+		for _, it := range e.Items {
+			if it.Name == sh.Name {
+				out = append(out, fmt.Sprintf("环境“%s”里有两个 %s：使用变量库“%s”中的，“%s”中的被遮住。可以在管理设备上给其中一个改名",
+					e.Name, sh.Name, vaultName(cache, it.VaultID), vaultName(cache, sh.VaultID)))
+				break
+			}
+		}
+	}
+	return out
 }
 
 func mask(v string) string {
@@ -239,9 +287,13 @@ func listVars(a *app.App, envName string, show bool) error {
 			fmt.Println("  （没有变量）")
 			continue
 		}
+		items := map[string]api.EnvItem{}
+		for _, it := range e.Items {
+			items[it.Name] = it
+		}
 		var rows [][]string
 		for _, n := range broken {
-			rows = append(rows, []string{n, "（无法解密）", "", ""})
+			rows = append(rows, []string{n, "（无法解密）", origin(cache, items[n]), "", ""})
 		}
 		for _, n := range names {
 			v := vals[n].Value
@@ -252,9 +304,12 @@ func listVars(a *app.App, envName string, show bool) error {
 			if _, ok := ov[e.ID][n]; ok {
 				mark = "（本机覆盖）"
 			}
-			rows = append(rows, []string{n, v, noteLine(vals[n].Note), mark})
+			rows = append(rows, []string{n, v, origin(cache, items[n]), noteLine(vals[n].Note), mark})
 		}
 		printTable(os.Stdout, "  ", rows)
+		for _, p := range shadowProblems(cache, e) {
+			fmt.Println("  注意：" + sentence(p))
+		}
 		if len(broken) > 0 {
 			fmt.Printf("  无法解密的变量可以用 harmonia var rm %s <变量名> 删除，或用 harmonia var set 重新写入。\n", e.Name)
 		}

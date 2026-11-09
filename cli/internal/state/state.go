@@ -41,8 +41,10 @@ type Cache struct {
 	SystemVars   bool                            `json:"systemVars"`
 	AutoUpdate   bool                            `json:"autoUpdate"`
 	Environments []api.Environment               `json:"environments"`
+	VaultNames   []api.VaultName                 `json:"vaultNames"`
 	Envelopes    []api.Envelope                  `json:"envelopes"`
-	Variables    map[string]map[string]CachedVar `json:"variables"`
+	// Variables：变量库 ID → 变量库里的原名 → 密文。
+	Variables map[string]map[string]CachedVar `json:"variables"`
 }
 
 // Overrides：环境 ID → 变量名 → 本机值。

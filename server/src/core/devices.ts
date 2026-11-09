@@ -2,7 +2,8 @@
 import type { Hono } from "hono";
 import { bump, headSeq, one, type Sql } from "./db";
 import { readJson, requireDevice, requireInitialized, type Deps, type Device } from "./context";
-import { checkKeyVersions, insertEnvelopes, parseEnvelopes } from "./keys";
+import { parseEnvelopes } from "./keys";
+import { reconcileEnvelopes, touchVisibility } from "./access";
 import { parseGrants, writeActivation, writeGrants } from "./grants";
 import { ApiError, bad, conflict, forbidden, id, label, notFound } from "./util";
 
@@ -42,23 +43,14 @@ export function deviceRoutes(app: Hono, deps: Deps) {
     const grants = parseGrants(body.grants);
     const envelopes = await parseEnvelopes(a.root_pub, t.id, body.envelopes);
     sql.transaction(() => {
-      checkKeyVersions(sql, envelopes);
-      const current = new Set(sql.all<{ env_id: string }>(`SELECT env_id FROM grants WHERE device_id = ?`, t.id).map((g) => g.env_id));
-      const provided = new Set(envelopes.map((e) => e.envId));
-      const wanted = new Set(grants.map((g) => g.envId));
-      for (const g of grants) {
-        if (!current.has(g.envId) && !provided.has(g.envId)) throw bad("新授权的环境需要附带封装，请同步后重试。");
+      const wanted = new Set(grants.map((g) => g.environmentId));
+      for (const g of sql.all<{ environment_id: string }>(`SELECT environment_id FROM grants WHERE device_id = ?`, t.id)) {
+        if (!wanted.has(g.environment_id)) sql.run(`DELETE FROM grants WHERE device_id = ? AND environment_id = ?`, t.id, g.environment_id);
       }
-      if ([...provided].some((e) => !wanted.has(e))) throw bad("封装对应的环境不在授权列表中。");
-      for (const envId of current) {
-        if (!wanted.has(envId)) {
-          sql.run(`DELETE FROM grants WHERE device_id = ? AND env_id = ?`, t.id, envId);
-          sql.run(`DELETE FROM envelopes WHERE recipient = ? AND env_id = ?`, t.id, envId);
-        }
-      }
-      insertEnvelopes(sql, envelopes);
       const seq = bump(sql);
       writeGrants(sql, t.id, grants, seq);
+      reconcileEnvelopes(sql, t.id, envelopes);
+      touchVisibility(sql, [t.id], seq);
     });
     deps.notifier.send("all", { type: "changed", seq: headSeq(sql) });
     return c.json({ ok: true });
