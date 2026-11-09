@@ -582,7 +582,7 @@ CI（`ci.yml`，2026-11-09 调整）：
 - 按改动的路径决定跑哪些任务：`cli/**` 跑 Linux、Windows 的 CLI 测试；`server/**` 跑服务端测试；`app/**` 跑 App 分析与测试和 iOS 无签名构建；三者任一有改动、或 `e2e/**` 有改动时跑端到端。改了 `ci.yml` 或 `mise.toml` 时全部都跑；只改文档时都不跑。
 - 端到端与各单元测试并行，不再等它们结束；无界面管理脚本先编译成可执行文件再调用。
 - 同一分支有新的推送时取消还在跑的旧运行。
-- 工具版本从 `mise.toml` 读取，不在工作流里另写一份。
+- 工具版本从 `mise.toml` 读取，不在工作流里另写一份；发布流程 `release.yml` 同样如此。Android SDK 用 runner 自带的：`mise.toml` 里的 `ANDROID_HOME` 已经设置时沿用。
 - 端到端启动服务端时传入 `DEV_RELAXED_LIMITS=true`（[protocol.md](protocol.md) 3.8），不再为等过每分钟限流而停顿；心跳超时那一步仍然真实等待。
 
 ### F. 最终验收：新用户测试
