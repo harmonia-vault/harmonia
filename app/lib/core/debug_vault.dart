@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 
 import 'api.dart';
 import 'crypto.dart';
+import 'debug_approvals.dart';
 import 'models.dart';
 import 'refs.dart';
 import 'store.dart';
@@ -21,7 +22,7 @@ enum DebugScenario { normal, empty, offline, failure }
 /// 页面调试里更新源的最新版本：带后缀的版本走测试版渠道。
 String debugCliLatest(String version) => version.contains('-') ? '0.10.1-rc.1' : '0.10.0';
 
-class DebugVault extends Vault {
+class DebugVault extends Vault with DebugApprovals {
   DebugVault(HCrypto crypto) : super(crypto, MemoryStore(), MemoryStore()) {
     api = ApiClient('https://debug.invalid', client: DebugNetworkClient());
     reset();
@@ -53,6 +54,7 @@ class DebugVault extends Vault {
     boxSeed: '',
   );
 
+  @override
   void check() {
     if (scenario == DebugScenario.offline) throw ApiException(0, 'network', '当前为模拟离线，请切换到正常场景后重试。');
     if (scenario == DebugScenario.failure) throw VaultException('模拟操作失败，请切换到正常场景后重试。');
@@ -95,7 +97,10 @@ class DebugVault extends Vault {
           Grant('debug-env-1', 'rw', 0),
         ], version: '0.10.1-beta.1'),
         // 没有版本：还没升级到会上报版本的命令行，也不支持在手机上更新。没有开启本机解密。
-        _device('debug-mac', '个人 Mac', 'darwin', 'client', [Grant('debug-env-2', 'ro', 0, localDecrypt: false)]),
+        _device('debug-mac', '个人 Mac', 'darwin', 'client', [
+          Grant('debug-env-2', 'ro', 0, localDecrypt: false),
+          Grant('debug-env-3', 'rw', 0, localDecrypt: false, position: 1),
+        ]),
         // 已是最新版本，开着自动更新；后台服务不在线。
         _device('debug-linux', '构建服务器', 'linux', 'client', [Grant('debug-env-2', 'ro', 0)], version: '0.10.0')
           ..['autoUpdate'] = true,
@@ -105,6 +110,7 @@ class DebugVault extends Vault {
       ..clear()
       ..add('debug-linux');
     requests.clear();
+    resetApprovals();
     _notes
       ..clear()
       ..['debug-vault-1/API_KEY'] = '示例备注：只用于页面调试\n第二行说明';
@@ -190,7 +196,8 @@ class DebugVault extends Vault {
   }
 
   @override
-  Future<void> listen(void Function() onChanged, void Function() onPairing) => _listening.future;
+  Future<void> listen(void Function() onChanged, void Function() onPairing, void Function() onApproval) =>
+      _listening.future;
   @override
   Future<void> sync({bool full = false}) async => check();
   @override

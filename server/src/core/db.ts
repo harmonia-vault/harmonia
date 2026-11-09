@@ -189,6 +189,31 @@ export const MIGRATIONS: string[][] = [
     `ALTER TABLE grants ADD COLUMN local_decrypt INTEGER NOT NULL DEFAULT 1`,
     `ALTER TABLE devices ADD COLUMN visibility_seq INTEGER NOT NULL DEFAULT 0`,
   ],
+  // 手机批准解密与写入（docs/protocol.md 3.9）。authorizations 是正在生效的授权，只用于显示和结束；
+  // env_refs 记下批准时各环境的引用，引用改变时结束授权。
+  [
+    `CREATE TABLE approvals (
+      id TEXT PRIMARY KEY,
+      device_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      detail TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      sig TEXT NOT NULL,
+      status TEXT NOT NULL,
+      result TEXT,
+      created_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL
+    )`,
+    `CREATE TABLE authorizations (
+      id TEXT PRIMARY KEY,
+      device_id TEXT NOT NULL,
+      items TEXT NOT NULL,
+      env_refs TEXT NOT NULL,
+      scope TEXT NOT NULL,
+      expires_at INTEGER NOT NULL,
+      created_at INTEGER NOT NULL
+    )`,
+  ],
 ];
 
 /** 执行迁移；upTo 只给测试用，迁移到指定版本为止。 */

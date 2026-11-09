@@ -109,6 +109,8 @@ type Sync struct {
 	Vaults       []Vault       `json:"vaults"`
 	Envelopes    []Envelope    `json:"envelopes"`
 	Variables    []Variable    `json:"variables"`
+	// Managers 是账号的管理设备，写入请求要为每一台各加密一份。
+	Managers []ManagerKey `json:"managers"`
 	// Manager 只返回给管理设备。
 	Manager *ManagerInfo `json:"manager"`
 }

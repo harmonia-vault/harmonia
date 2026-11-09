@@ -1,7 +1,7 @@
 // 推送连接与同步（docs/protocol.md 3.4、3.5）。
 import type { Hono } from "hono";
 import { bump, headSeq } from "./db";
-import { requireDevice, requireInitialized, type Deps, type Device } from "./context";
+import { activeManagers, requireDevice, requireInitialized, type Deps, type Device } from "./context";
 import { allowedLocally, grantedEnvs, localRefs, parseStoredRefs, vaultNames, type EnvRow } from "./access";
 import { expand } from "./refs";
 import { bad, clientVersion, VERSION_HEADER } from "./util";
@@ -109,6 +109,7 @@ function snapshot(deps: Deps, d: Device, since: number): Record<string, unknown>
           seq: v.seq,
         })),
     };
+    out.managers = activeManagers(sql).map((m) => ({ id: m.id, signPub: m.sign_pub, boxPub: m.box_pub, cert: m.cert }));
     if (d.kind === "manager") out.manager = managerPart(deps, d, allVaults, vaultById);
     return out;
   });

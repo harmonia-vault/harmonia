@@ -201,5 +201,5 @@ func shellNotes(a *app.App) []string {
 	if !app.ShellEnabled(a.Dir) {
 		return nil
 	}
-	return []string{"", shellOnNote}
+	return append([]string{"", shellOnNote}, approvalNote(a, "Shell 集成")...)
 }

@@ -3,6 +3,7 @@ package vault
 import (
 	"fmt"
 	"slices"
+	"sort"
 	"strings"
 
 	"github.com/harmonia-vault/harmonia/cli/internal/api"
@@ -27,10 +28,24 @@ func (t Target) Label() string {
 	return "变量库“" + t.VaultName + "”"
 }
 
-// Dest 是变量真正写入的地方：变量库和其中的原名。
+// Dest 是变量真正写入的地方：变量库和其中的原名。Env 是提供写权限的环境，Name 是变量在其中的名字，
+// 新增变量时为空。Env 没有开启本机解密时，经手机批准写入（设计文档 17.4）。
 type Dest struct {
 	VaultID string
 	Source  string
+	Env     *api.Environment
+	Name    string
+}
+
+// Remote 表示这次写入要经手机批准。
+func (d Dest) Remote() bool { return !d.Env.LocalDecrypt }
+
+// ApprovalItem 是这次写入在批准请求里的一项：修改用环境里的名字，新增带变量库。
+func (d Dest) ApprovalItem() api.ApprovalItem {
+	if d.Name == "" {
+		return api.ApprovalItem{EnvironmentID: d.Env.ID, Name: d.Source, VaultID: d.VaultID}
+	}
+	return api.ApprovalItem{EnvironmentID: d.Env.ID, Name: d.Name}
 }
 
 // FindVault 按 ID 或名称（不区分大小写）查找这台设备的环境引用到的变量库。
@@ -76,14 +91,15 @@ func ResolveTarget(c *state.Cache, nameOrID string, vaultOnly bool) (Target, err
 	return Target{}, err
 }
 
-// writableEnvs 是这台设备有读写权限、可以在本机解密、未到期的环境。
+// writableEnvs 是这台设备有读写权限、未到期的环境；可以在本机解密的排在前面。
 func writableEnvs(c *state.Cache, nowMs int64) []api.Environment {
 	var out []api.Environment
 	for _, e := range Ordered(c) {
-		if e.Role == "rw" && e.LocalDecrypt && !Expired(e, nowMs) {
+		if e.Role == "rw" && !Expired(e, nowMs) {
 			out = append(out, e)
 		}
 	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].LocalDecrypt && !out[j].LocalDecrypt })
 	return out
 }
 
@@ -120,9 +136,6 @@ func CheckWritable(env *api.Environment, nowMs int64) error {
 	if env.Role != "rw" {
 		return fmt.Errorf("这台设备对环境“%s”只有只读权限，不能修改。可以在管理设备上调整权限", env.Name)
 	}
-	if !env.LocalDecrypt {
-		return &ErrNeedApproval{Env: env.Name}
-	}
 	return nil
 }
 
@@ -141,7 +154,7 @@ func WriteDest(c *state.Cache, t Target, name string, nowMs int64) (Dest, error)
 			if !it.Writable {
 				return Dest{}, fmt.Errorf("环境“%s”里的 %s 来自变量库“%s”，这条引用不允许修改。可以在管理设备上开启“可以修改”", env.Name, name, vaultName(c, it.VaultID))
 			}
-			return Dest{VaultID: it.VaultID, Source: it.Source}, nil
+			return Dest{VaultID: it.VaultID, Source: it.Source, Env: env, Name: name}, nil
 		}
 		if t.SameName != nil {
 			return WriteDest(c, Target{VaultID: t.SameName.ID, VaultName: t.SameName.Name}, name, nowMs)
@@ -149,13 +162,13 @@ func WriteDest(c *state.Cache, t Target, name string, nowMs int64) (Dest, error)
 		return Dest{}, fmt.Errorf("环境“%s”里没有 %s。新增变量需要指定变量库。%s", env.Name, name, creatableHint(c, nowMs))
 	}
 	for _, e := range writableEnvs(c, nowMs) {
-		if slices.Contains(e.CreateVaults, t.VaultID) {
-			return Dest{VaultID: t.VaultID, Source: name}, nil
-		}
 		for _, it := range e.Items {
 			if it.VaultID == t.VaultID && it.Source == name && it.Writable {
-				return Dest{VaultID: t.VaultID, Source: name}, nil
+				return Dest{VaultID: t.VaultID, Source: name, Env: &e, Name: it.Name}, nil
 			}
+		}
+		if slices.Contains(e.CreateVaults, t.VaultID) {
+			return Dest{VaultID: t.VaultID, Source: name, Env: &e}, nil
 		}
 	}
 	return Dest{}, fmt.Errorf("这台设备不能修改变量库“%s”里的 %s：需要在管理设备上为它授予读写权限，并让引用这个变量库的环境允许修改。%s", t.VaultName, name, creatableHint(c, nowMs))

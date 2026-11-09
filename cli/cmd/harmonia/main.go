@@ -147,6 +147,8 @@ func main() {
 		"override":  cmdOverride,
 		"exec":      cmdExec,
 		"export":    cmdExport,
+		"lock":      cmdLock,
+		"keeper":    cmdKeeper,
 		"shell":     cmdShell,
 		"service":   cmdService,
 		"daemon":    cmdDaemon,

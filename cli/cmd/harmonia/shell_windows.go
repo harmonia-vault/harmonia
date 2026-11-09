@@ -47,7 +47,8 @@ func shellNotes(a *app.App) []string {
 	if err != nil || !st.Enabled {
 		return nil
 	}
-	return append([]string{"", shellOnNote}, skippedNotes(st.Skipped)...)
+	notes := append([]string{"", shellOnNote}, approvalNote(a, "用户环境变量")...)
+	return append(notes, skippedNotes(st.Skipped)...)
 }
 
 // skippedNotes 列出没有写入用户环境变量的变量和原因。

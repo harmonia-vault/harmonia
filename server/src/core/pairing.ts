@@ -21,6 +21,7 @@ import { insertEnvelopes, parseEnvelopes, requireAllVaults, verifyCert } from ".
 import { reconcileEnvelopes, touchVisibility } from "./access";
 import { network } from "./net";
 import { parseGrants, writeGrants } from "./grants";
+import { APPROVAL_KEY, approvalLeft, checkApprovalWaiters } from "./approvals";
 import { ApiError, bad, bin, conflict, id, label, notFound, randomB64, rateLimited } from "./util";
 
 type Pairing = {
@@ -73,6 +74,12 @@ function notifyManagers(deps: Deps, p: Pairing | undefined) {
   if (p?.authorized === 1) deps.notifier.send("managers", { type: "pairing" });
 }
 
+/** 等待连接断开：按键分给配对请求或批准请求。 */
+export function waiterLeft(deps: Deps, key: string) {
+  if (key.startsWith(APPROVAL_KEY)) approvalLeft(deps, key.slice(APPROVAL_KEY.length));
+  else pairingLeft(deps, key);
+}
+
 /** 发起方离开：仍在等待的请求作废，并通知管理设备刷新。 */
 export function pairingLeft(deps: Deps, pairingId: string) {
   const p = pairingById(deps, pairingId);
@@ -89,16 +96,18 @@ export function checkWaiters(deps: Deps): boolean {
   sweep(deps);
   const cutoff = deps.now() - WAITER_TIMEOUT;
   let changed = false;
-  for (const w of deps.waiters.list()) {
-    const p = pairingById(deps, w.pairingId);
+  const all = deps.waiters.list();
+  checkApprovalWaiters(deps, all.filter((w) => w.key.startsWith(APPROVAL_KEY)));
+  for (const w of all.filter((w) => !w.key.startsWith(APPROVAL_KEY))) {
+    const p = pairingById(deps, w.key);
     if (p?.status === "pending") {
       if (w.seenAt >= cutoff) continue;
-      deps.waiters.close(w.pairingId);
-      pairingLeft(deps, w.pairingId);
+      deps.waiters.close(w.key);
+      pairingLeft(deps, w.key);
       continue;
     }
     const result = p && ["approved", "rejected", "expired"].includes(p.status) ? (p.status as PairingResult) : undefined;
-    deps.waiters.close(w.pairingId, result);
+    deps.waiters.close(w.key, result ? { type: result } : undefined);
     changed ||= result === "expired" && p?.authorized === 1;
   }
   if (changed) deps.notifier.send("managers", { type: "pairing" });
@@ -284,7 +293,7 @@ export function pairingRoutes(app: Hono, deps: Deps) {
       }
       sql.run(`UPDATE pairings SET status = 'approved' WHERE id = ?`, p.id);
     });
-    deps.waiters.close(p.id, "approved");
+    deps.waiters.close(p.id, { type: "approved" });
     deps.notifier.send("all", { type: "changed", seq: headSeq(sql) });
     deps.notifier.send("managers", { type: "pairing" });
     return c.json({ ok: true, deviceId: p.id });
@@ -303,7 +312,7 @@ export function pairingRoutes(app: Hono, deps: Deps) {
     if (body.block === true && p.ip) {
       sql.run(`INSERT OR REPLACE INTO pairing_blocks (ip, until) VALUES (?, ?)`, network(p.ip), deps.now() + BLOCK_TTL);
     }
-    deps.waiters.close(p.id, "rejected");
+    deps.waiters.close(p.id, { type: "rejected" });
     deps.notifier.send("managers", { type: "pairing" });
     return c.json({ ok: true });
   });

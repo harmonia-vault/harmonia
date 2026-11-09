@@ -10,9 +10,13 @@ import (
 	"github.com/coder/websocket"
 )
 
+// Event 是推送连接或等待连接上的一条消息。ID 是 authorization-ended 结束的授权；
+// Result 是批准读取请求时的结果。
 type Event struct {
-	Type string `json:"type"`
-	Seq  int64  `json:"seq"`
+	Type   string          `json:"type"`
+	Seq    int64           `json:"seq"`
+	ID     string          `json:"id"`
+	Result *ApprovalResult `json:"result"`
 }
 
 // Listen 保持一条推送连接，直到 ctx 结束或连接断开；每收到一条提示调用 onEvent。
@@ -86,6 +90,12 @@ func (c *Client) WaitPairing(ctx context.Context, id, secret string, onReady fun
 	defer conn.CloseNow()
 	conn.SetReadLimit(4 << 10)
 	onReady()
+	ev, err := waitResult(ctx, conn)
+	return ev.Type, err
+}
+
+// waitResult 在等待连接上每 10 秒发一次 ping，直到收到 approved、rejected 或 expired。
+func waitResult(ctx context.Context, conn *websocket.Conn) (Event, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	go func() {
@@ -109,11 +119,11 @@ func (c *Client) WaitPairing(ctx context.Context, id, secret string, onReady fun
 	for {
 		_, data, err := conn.Read(ctx)
 		if err != nil {
-			return "", err
+			return Event{}, err
 		}
 		var ev Event
 		if json.Unmarshal(data, &ev) == nil && (ev.Type == "approved" || ev.Type == "rejected" || ev.Type == "expired") {
-			return ev.Type, nil
+			return ev, nil
 		}
 	}
 }

@@ -272,6 +272,22 @@ Uint8List authMsg(String deviceId, String nonce) =>
 Uint8List recoveryAuthMsg(String nonce) =>
     canonical(['harmonia.recovery-auth', nonce]);
 
+/// 批准请求的签名原文（docs/protocol.md 2.2、3.9）：detail、payload 按原样的 UTF-8 字节计算哈希。
+Uint8List approvalRequestMsg(String requestId, String deviceId, String detail, String payload) => canonical([
+  'harmonia.approval-request',
+  requestId,
+  deviceId,
+  b64(sha256(utf8.encode(detail))),
+  b64(sha256(utf8.encode(payload))),
+]);
+
+/// 批准结果的签名原文，由 root 签名。
+Uint8List approvalGrantMsg(String requestId, List<int> sealed) =>
+    canonical(['harmonia.approval-grant', requestId, b64(sha256(sealed))]);
+
+/// 请求码：detail 的 SHA-256 前 3 字节的 Crockford Base32 的前 4 个字符。
+String approvalCode(String detail) => base32Encode(sha256(utf8.encode(detail)).sublist(0, 3)).substring(0, 4);
+
 // ---- 恢复码 ----
 
 String formatRecoveryCode(List<int> code) => group4(base32Encode(code));

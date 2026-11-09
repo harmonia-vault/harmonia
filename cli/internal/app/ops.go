@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/harmonia-vault/harmonia/cli/internal/api"
+	"github.com/harmonia-vault/harmonia/cli/internal/approval"
 	hc "github.com/harmonia-vault/harmonia/cli/internal/crypto"
 	"github.com/harmonia-vault/harmonia/cli/internal/vault"
 )
@@ -60,6 +61,7 @@ type VarChange struct {
 // 写入一个变量的结果。
 const (
 	Written   = "written"   // 已写入，并且回读校验一致
+	Approved  = "approved"  // 已在手机上批准，由手机写入（没有开启本机解密的环境，电脑上无法回读）
 	Unchanged = "unchanged" // 和现有的值、备注相同，跳过
 	Failed    = "failed"    // 失败，原因见 Err
 )
@@ -123,6 +125,8 @@ func (a *App) SetVariables(ctx context.Context, target string, vaultOnly bool, c
 	}
 	groups := map[string]*group{}
 	dests := make([]vault.Dest, len(names))
+	var remoteSet []approval.SetItem
+	var remoteIdx []int
 	for i, n := range names {
 		results[i].Name = n
 		fail := func(err error) { results[i].Status, results[i].Err = Failed, err }
@@ -136,6 +140,16 @@ func (a *App) SetVariables(ctx context.Context, target string, vaultOnly bool, c
 			continue
 		}
 		dests[i] = d
+		if d.Remote() {
+			item, err := remoteChange(d, n, changes[n])
+			if err != nil {
+				fail(err)
+				continue
+			}
+			remoteSet = append(remoteSet, item)
+			remoteIdx = append(remoteIdx, i)
+			continue
+		}
 		g := groups[d.VaultID]
 		if g == nil {
 			g = &group{}
@@ -197,7 +211,20 @@ func (a *App) SetVariables(ctx context.Context, target string, vaultOnly bool, c
 			want[i] = g.items[j].Entry
 		}
 	}
-	if len(want) == 0 {
+	if len(remoteSet) > 0 {
+		err := a.writeRemote(ctx, cache, remoteSet, nil)
+		if errors.Is(err, ErrRevokedLocal) {
+			return nil, err
+		}
+		for _, i := range remoteIdx {
+			if err != nil {
+				results[i].Status, results[i].Err = Failed, err
+			} else {
+				results[i].Status = Approved
+			}
+		}
+	}
+	if len(want) == 0 && len(remoteSet) == 0 {
 		return results, nil
 	}
 	if err := a.Sync(ctx); err != nil {
@@ -245,7 +272,14 @@ func (a *App) DeleteVariable(ctx context.Context, target, name string) error {
 	if err != nil {
 		return err
 	}
-	if err := a.Client.DeleteVariable(ctx, d.VaultID, d.Source, hc.NewID()); err != nil {
+	if d.Remote() {
+		if d.Name == "" {
+			return fmt.Errorf("这台设备的环境里看不到变量库“%s”的 %s，无法删除", t.VaultName, name)
+		}
+		if err := a.writeRemote(ctx, cache, nil, []api.ApprovalItem{d.ApprovalItem()}); err != nil {
+			return err
+		}
+	} else if err := a.Client.DeleteVariable(ctx, d.VaultID, d.Source, hc.NewID()); err != nil {
 		return a.HandleRevoked(err)
 	}
 	return a.Sync(ctx)

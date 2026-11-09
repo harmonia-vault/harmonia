@@ -64,7 +64,11 @@ func cmdVar(ctx context.Context, args []string) error {
 		if err != nil {
 			return err
 		}
-		fmt.Printf("已写入 %s，回读校验一致。\n", name)
+		if res[0].Status == app.Approved {
+			fmt.Printf("已在手机上批准并写入 %s。\n", name)
+		} else {
+			fmt.Printf("已写入 %s，回读校验一致。\n", name)
+		}
 		notes, err := a.Shadowing(target, name)
 		if err != nil {
 			return err
@@ -250,7 +254,7 @@ func pickFromTerminal() map[string]string {
 	}
 }
 
-var statusText = map[string]string{app.Written: "已写入", app.Unchanged: "未变化", app.Failed: "失败"}
+var statusText = map[string]string{app.Written: "已写入", app.Approved: "已经手机批准写入", app.Unchanged: "未变化", app.Failed: "失败"}
 
 // printImportResults 逐条输出导入结果，返回失败的个数。
 func printImportResults(res []app.VarResult, asJSON bool, unverified *app.UnverifiedError) int {
@@ -292,6 +296,9 @@ func printImportResults(res []app.VarResult, asJSON bool, unverified *app.Unveri
 	check := "，已回读校验"
 	if unverified != nil {
 		check = ""
+	}
+	if count[app.Approved] > 0 {
+		fmt.Printf("已在手机上批准并写入 %d 个；", count[app.Approved])
 	}
 	fmt.Printf("已写入 %d 个%s；未变化 %d 个；失败 %d 个。\n", count[app.Written], check, count[app.Unchanged], count[app.Failed])
 	return count[app.Failed]

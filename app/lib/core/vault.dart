@@ -8,7 +8,10 @@ import 'models.dart';
 import 'refs.dart';
 import 'store.dart';
 
+part 'vault_approvals.dart';
 part 'vault_devices.dart';
+part 'vault_envs.dart';
+part 'vault_recovery.dart';
 
 class VaultException implements Exception {
   VaultException(this.message);
@@ -54,14 +57,7 @@ class LocalConfig {
   );
 }
 
-/// 一次恢复码轮换的结果；网络中断时可凭 [key] 查询。
-class RotationAttempt {
-  RotationAttempt(this.key, this.generation);
-  final String key;
-  final int generation;
-}
-
-class Vault with VaultDevices {
+class Vault with VaultDevices, VaultApprovals, VaultEnvironments, VaultRecovery {
   Vault(this.crypto, this.secure, this.files);
 
   @override
@@ -74,8 +70,10 @@ class Vault with VaultDevices {
   @override
   ApiClient? api;
   SignKey? signKey;
+  @override
   BoxKey? boxKey;
   SignKey? root;
+  @override
   SyncCache cache = SyncCache();
   final Map<String, Uint8List> _vaultKeys = {};
 
@@ -95,6 +93,7 @@ class Vault with VaultDevices {
   List<VaultInfo> get vaults => cache.vaults;
   @override
   List<EnvDef> get envDefs => cache.envDefs;
+  @override
   List<DeviceInfo> get devices => cache.devices;
 
   // ---- 本机状态 ----
@@ -250,18 +249,22 @@ class Vault with VaultDevices {
   }
 
   @override
+  @override
   Environment environment(String id) =>
       cache.environments.firstWhere((e) => e.id == id, orElse: () => throw VaultException('环境不存在，可能已被删除。'));
 
   /// 变量库的名字；已被删除时返回 null。
   String? vaultName(String id) => vaults.where((v) => v.id == id).firstOrNull?.name;
 
+  @override
   EnvDef? envDef(String id) => envDefs.where((e) => e.id == id).firstOrNull;
 
   /// 变量库里现存的变量名，按名称排序。
+  @override
   List<String> variableNames(String vaultId) => (cache.variables[vaultId]?.keys.toList() ?? [])..sort();
 
   /// 解密一个变量库的全部变量（值和备注），键是变量库里的原名。解不开的变量不在其中，见 [brokenVariables]。
+  @override
   Map<String, VarEntry> entries(String vaultId) => _decryptAll(vaultId).entries;
 
   /// 解不开的变量名，按名称排序。它们仍然可以删除或重新写入。
@@ -272,7 +275,10 @@ class Vault with VaultDevices {
     final decrypted = <String, Map<String, VarEntry>>{};
     final out = <String, VarEntry>{};
     for (final it in environment(envId).items) {
-      final vals = decrypted.putIfAbsent(it.vaultId, () => _vaultKeys.containsKey(it.vaultId) ? entries(it.vaultId) : {});
+      final vals = decrypted.putIfAbsent(
+        it.vaultId,
+        () => _vaultKeys.containsKey(it.vaultId) ? entries(it.vaultId) : {},
+      );
       final e = vals[it.source];
       if (e != null) out[it.name] = e;
     }
@@ -293,15 +299,19 @@ class Vault with VaultDevices {
     return (entries: entries, broken: broken..sort());
   }
 
+  @override
   Uint8List _vaultKey(String vaultId) {
     final key = _vaultKeys[vaultId];
     if (key == null) throw VaultException('这台设备没有这个变量库的密钥。');
     return key;
   }
 
+  @override
   int _keyVersion(String vaultId) =>
       vaults.where((v) => v.id == vaultId).firstOrNull?.keyVersion ??
-      cache.envelopes.firstWhere((e) => e.vaultId == vaultId, orElse: () => throw VaultException('变量库不存在，可能已被删除。')).keyVersion;
+      cache.envelopes
+          .firstWhere((e) => e.vaultId == vaultId, orElse: () => throw VaultException('变量库不存在，可能已被删除。'))
+          .keyVersion;
 
   // ---- 环境与变量 ----
 
@@ -321,6 +331,7 @@ class Vault with VaultDevices {
     return unb64(boxPub);
   }
 
+  @override
   Map<String, dynamic> _envelope(String vaultId, int keyVersion, String recipient, Uint8List boxPub, Uint8List key) {
     final sealed = crypto.seal(key, boxPub);
     return {
@@ -388,56 +399,6 @@ class Vault with VaultDevices {
     await sync();
   }
 
-  /// 编辑环境时的预览：最终名字、被遮住的同名变量，以及保存时会被拒绝的重名。
-  ({List<EnvItem> items, List<EnvItem> shadowed, List<String> duplicates}) previewEnvironment(List<EnvRef> refs) {
-    final r = expandRefs(refs, variableNames);
-    return (items: r.items, shadowed: r.shadowed, duplicates: duplicateNames(refs, variableNames));
-  }
-
-  void _checkRefs(List<EnvRef> refs) {
-    final dup = duplicateNames(refs, variableNames);
-    if (dup.isNotEmpty) throw VaultException('环境里有重名的变量：${dup.join('、')}。请给其中一个改名，或取消勾选。');
-  }
-
-  /// 新建环境。新环境还没有授权给任何设备，不需要封装。返回环境 ID。
-  Future<String> createEnvironment(String name, List<EnvRef> refs) async {
-    _root();
-    _checkRefs(refs);
-    final id = crypto.newId();
-    await api!.device(
-      'POST',
-      '/api/v1/environments',
-      body: {'id': id, 'name': name.trim(), 'refs': refs.map((r) => r.toJson()).toList()},
-    );
-    await sync();
-    return id;
-  }
-
-  /// 整体替换环境的名字和引用。被授权这个环境、开启了本机解密的设备，在同一个请求里附上引用到的变量库的封装
-  /// （先校验设备证书），服务端据此补上新引用的、删掉不再用到的（设计文档 17.2）。
-  Future<void> saveEnvironment(String id, String name, List<EnvRef> refs) async {
-    _root();
-    _checkRefs(refs);
-    final vaultIds = refs.where((r) => !r.missing).map((r) => r.vaultId);
-    final envelopes = <Map<String, dynamic>>[];
-    for (final d in devices) {
-      if (!d.grants.any((g) => g.envId == id && g.localDecrypt)) continue;
-      envelopes.addAll(_sealVaults(vaultIds, d.id, _verifiedBoxPub(d.id, d.kind, d.signPub, d.boxPub, d.cert)));
-    }
-    await api!.device(
-      'PUT',
-      '/api/v1/environments/$id',
-      body: {'name': name.trim(), 'refs': refs.map((r) => r.toJson()).toList(), 'envelopes': envelopes},
-    );
-    await sync();
-  }
-
-  /// 删除环境和设备对它的授权，变量库不受影响。
-  Future<void> deleteEnvironment(String id) async {
-    await api!.device('DELETE', '/api/v1/environments/$id');
-    await sync();
-  }
-
   /// 写入变量库里的一个变量（值和备注）；已有变量里本版本不认识的内容原样保留。
   Future<void> setVariable(String vaultId, String name, String value, String note) async {
     final key = _vaultKey(vaultId);
@@ -489,47 +450,13 @@ class Vault with VaultDevices {
 
   bool get isLastManager => devices.where((d) => d.isManager).length <= 1;
 
-  // ---- 恢复码轮换 ----
-
-  /// 用新恢复码轮换。全部库钥与账号根密钥重新封装给新恢复钥，提交成功后旧恢复码失效。
-  Future<RotationAttempt> rotateRecovery(Uint8List newCode, {String? key}) async {
-    final r = _root();
-    final rec = crypto.deriveRecovery(newCode);
-    final generation = int.parse((cache.manager!['recovery'] as Map)['generation'] as String) + 1;
-    final rootSealed = crypto.seal(r.seed, rec.box.pub);
-    final attempt = RotationAttempt(key ?? crypto.newId(), generation);
-    final body = <String, dynamic>{
-      'idempotencyKey': attempt.key,
-      'generation': '$generation',
-      'signPub': b64(rec.sign.pub),
-      'boxPub': b64(rec.box.pub),
-      'rootEnvelope': {
-        'sealed': b64(rootSealed),
-        'sig': b64(crypto.sign(rec.sign, rootRecoveryMsg(generation, rootSealed))),
-      },
-      'envelopes': [
-        for (final v in vaults) _envelope(v.id, v.keyVersion, 'recovery', rec.box.pub, _vaultKey(v.id))..remove('recipient'),
-      ],
-    };
-    await api!.device('POST', '/api/v1/recovery/rotate', body: body);
-    await sync();
-    return attempt;
-  }
-
-  /// 查询一次轮换是否已在服务器生效（网络中断后使用）。
-  Future<bool> rotationCompleted(String key) async {
-    final res = await api!.device('GET', '/api/v1/recovery/rotate/$key');
-    final done = res['state'] == 'complete';
-    if (done) await sync();
-    return done;
-  }
-
   // ---- 推送 ----
 
-  /// 保持推送连接；收到变化时同步并回调。连接断开时返回或抛出。
-  Future<void> listen(void Function() onChanged, void Function() onPairing) async {
+  /// 保持推送连接；收到变化时同步并回调，收到配对请求、批准请求时分别回调。连接断开时返回或抛出。
+  Future<void> listen(void Function() onChanged, void Function() onPairing, void Function() onApproval) async {
     await api!.listen((ev) async {
       if (ev['type'] == 'pairing') onPairing();
+      if (ev['type'] == 'approval') onApproval();
       if (ev['type'] == 'changed') {
         await sync();
         onChanged();

@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"slices"
@@ -83,6 +84,7 @@ func cmdStatus(ctx context.Context, args []string) error {
 	if err := printEnvs(a); err != nil {
 		return err
 	}
+	printAuthorizations(ctx, a)
 	if problems := statusProblems(a); len(problems) > 0 {
 		fmt.Println("\n需要处理")
 		for _, p := range problems {
@@ -99,7 +101,8 @@ func envHealth(a *app.App, cache *state.Cache, e api.Environment) (string, strin
 		case vault.Expired(e, time.Now().UnixMilli()):
 			return "授权已到期", p
 		case !e.LocalDecrypt:
-			return "未开启本机解密", p
+			// 没有开启本机解密是正常的使用方式，不算需要处理的问题。
+			return "需要手机批准", ""
 		}
 		return "密钥解不开", p
 	}
@@ -178,7 +181,7 @@ func printEnvs(a *app.App) error {
 		})
 	}
 	printTable(os.Stdout, "  ", rows)
-	if cs := vault.Conflicts(cache, a.Keys, vault.ActiveIDs(cache), time.Now().UnixMilli()); len(cs) > 0 {
+	if cs := vault.Conflicts(cache, vault.ActiveIDs(cache), time.Now().UnixMilli()); len(cs) > 0 {
 		fmt.Println("\n同名变量")
 		rows = rows[:0]
 		for _, c := range cs {
@@ -274,6 +277,10 @@ func listVars(a *app.App, envName string, show bool) error {
 		}
 		fmt.Printf("%s（%s）\n", e.Name, roleNames[e.Role])
 		vals, broken, err := vault.Entries(cache, a.Keys, e.ID)
+		if errors.As(err, new(*vault.ErrNeedApproval)) {
+			listApprovalVars(cache, e, ov)
+			continue
+		}
 		if err != nil {
 			fmt.Println("  " + sentence(err.Error()))
 			continue
@@ -361,4 +368,79 @@ func printOverrides(a *app.App, ov state.Overrides) error {
 		printTable(os.Stdout, "  ", rows)
 	}
 	return nil
+}
+
+// listApprovalVars 列出没有开启本机解密的环境里的变量名：值要经手机批准才能拿到，这里不发请求。
+func listApprovalVars(cache *state.Cache, e api.Environment, ov state.Overrides) {
+	if len(e.Items) == 0 {
+		fmt.Println("  （没有变量）")
+		return
+	}
+	items := append([]api.EnvItem(nil), e.Items...)
+	sort.Slice(items, func(i, j int) bool { return items[i].Name < items[j].Name })
+	rows := make([][]string, 0, len(items))
+	for _, it := range items {
+		v := "（需要手机批准）"
+		if _, ok := ov[e.ID][it.Name]; ok {
+			v = "（本机覆盖）"
+		}
+		rows = append(rows, []string{it.Name, v, origin(cache, it)})
+	}
+	printTable(os.Stdout, "  ", rows)
+	for _, p := range shadowProblems(cache, e) {
+		fmt.Println("  注意：" + sentence(p))
+	}
+	fmt.Printf("  这个环境没有开启本机解密，运行 harmonia exec --env %s -- <命令> 时会请求手机批准。\n", e.Name)
+}
+
+// approvalNote 说明 where（Shell 集成或用户环境变量）不包含没有开启本机解密的环境，没有这样的环境时返回空。
+func approvalNote(a *app.App, where string) []string {
+	cache, err := a.Dir.Cache()
+	if err != nil {
+		return nil
+	}
+	var names []string
+	for _, e := range vault.Ordered(cache) {
+		if e.Active && !e.LocalDecrypt {
+			names = append(names, "“"+e.Name+"”")
+		}
+	}
+	if len(names) == 0 {
+		return nil
+	}
+	return []string{fmt.Sprintf("环境%s没有开启本机解密，%s不包含它们的变量；用 harmonia exec 运行命令时会请求手机批准。", strings.Join(names, ""), where)}
+}
+
+// printAuthorizations 列出正在生效的、经手机批准的授权。
+func printAuthorizations(ctx context.Context, a *app.App) {
+	auths, err := a.Authorizations(ctx)
+	if err != nil || len(auths) == 0 {
+		return
+	}
+	cache, err := a.Dir.Cache()
+	if err != nil {
+		cache = &state.Cache{}
+	}
+	fmt.Println("\n正在生效的授权（harmonia lock 全部结束）")
+	rows := [][]string{{"变量", "范围", "有效期"}}
+	for _, x := range auths {
+		var names []string
+		for _, it := range x.Items {
+			label := it.Name
+			if env, err := vault.Find(cache, it.EnvironmentID); err == nil {
+				label = env.Name + ":" + it.Name
+			}
+			names = append(names, label)
+		}
+		scope := "这台电脑上的所有程序"
+		if x.Scope == "terminal" {
+			scope = "仅发起请求的终端"
+		}
+		until := "长期（电脑重启或退出登录后结束）"
+		if x.ExpiresAt != 0 {
+			until = "到 " + time.UnixMilli(x.ExpiresAt).Format("01-02 15:04")
+		}
+		rows = append(rows, []string{strings.Join(names, "、"), scope, until})
+	}
+	printTable(os.Stdout, "  ", rows)
 }

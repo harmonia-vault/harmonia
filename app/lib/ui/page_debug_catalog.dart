@@ -8,8 +8,11 @@ import '../app/debug_session.dart';
 import '../app/updater.dart';
 import '../core/crypto.dart';
 import '../core/debug_account.dart';
+import '../core/debug_approvals.dart';
+import '../core/vault.dart' show ApprovalRequest;
 import 'about.dart';
 import 'ai_prompt.dart';
+import 'approval.dart';
 import 'auth_pages.dart';
 import 'devices.dart';
 import 'device_review.dart';
@@ -82,6 +85,19 @@ Map<String, List<DebugPageEntry>> debugPages() => {
           ? const Center(child: Text('当前没有待批准请求，请重置示例。'))
           : ReviewPairingPage(c: s.c, request: s.vault.requests.first, scanned: false),
     ),
+    DebugPageEntry(
+      '设备列表：电脑的批准请求、本机解密提示',
+      (s) => DevicesTab(c: s.c),
+      prepare: (s) async {
+        s.c.approvals = await s.vault.pendingApprovals();
+        s.c.prefs.localDecryptHintSeen = false;
+      },
+    ),
+    DebugPageEntry('批准使用变量：请求码、命令、按环境列出、有效时长与范围', (s) => _approval(s, debugApproval())),
+    DebugPageEntry('批准使用变量：Windows 电脑只能授权给所有程序', (s) => _approval(s, debugApproval(deviceId: 'debug-computer'))),
+    DebugPageEntry('批准写入变量：新增和删除、值默认遮住', (s) => _approval(s, debugApproval(write: true))),
+    DebugPageEntry('批准请求已失效（电脑已取消或超时）', (s) => _approval(s, debugApproval(), expire: true)),
+    DebugPageEntry('设备详情：正在生效的授权与结束', (s) => _devicePage(s, 'debug-mac')),
   ],
   '账号接入': [
     DebugPageEntry('连接服务器', (s) => ConnectPage(c: s.c), stage: Stage.connect),
@@ -231,6 +247,20 @@ Future<void> _waiting(DebugSession s, {String? code}) async {
 Widget _devicePage(DebugSession s, String id) => s.vault.devices.any((d) => d.id == id)
     ? DevicePage(c: s.c, deviceId: id)
     : const Center(child: Text('当前没有示例设备，请切换到正常数据。'));
+
+/// 批准页。[expire] 时请求随即从待处理列表消失，显示“已失效”。
+Widget _approval(DebugSession s, ApprovalRequest a, {bool expire = false}) {
+  if (!s.vault.approvals.any((x) => x.id == a.id)) s.vault.approvals.add(a);
+  s.c.approvals = List.of(s.vault.approvals);
+  if (expire) {
+    Future.delayed(const Duration(milliseconds: 600), () {
+      s.vault.expireApproval(a.id);
+      s.c.approvals = List.of(s.vault.approvals);
+      s.c.refresh();
+    });
+  }
+  return ApprovalPage(c: s.c, request: a);
+}
 
 Widget _none(String what) => Center(child: Text('当前没有示例$what，请重置示例或先在首页创建。'));
 

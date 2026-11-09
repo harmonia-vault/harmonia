@@ -16,6 +16,7 @@ import 'app/updater.dart';
 import 'core/crypto.dart';
 import 'core/account.dart';
 import 'core/vault.dart';
+import 'ui/approval.dart';
 import 'ui/app_scope.dart';
 import 'core/keyring.dart';
 import 'core/phrases.dart';
@@ -78,6 +79,7 @@ class _HarmoniaAppState extends State<HarmoniaApp> with WidgetsBindingObserver {
   final _navigator = GlobalKey<NavigatorState>();
   Stage? _shownStage;
   final _seenPairings = <String>{};
+  final _seenApprovals = <String>{};
   bool _reviewing = false;
 
   @override
@@ -105,7 +107,25 @@ class _HarmoniaAppState extends State<HarmoniaApp> with WidgetsBindingObserver {
       _navigator.currentState?.popUntil((r) => r.isFirst);
     }
     _popupPairing();
+    _popupApproval();
     setState(() {});
+  }
+
+  /// 在首页收到电脑的批准请求时直接打开批准页（设计文档 17.4）。App 在后台时不提醒，回到前台同步后仍在等待的
+  /// 请求随即弹出。每个请求只弹一次，已有弹出的页面时不叠加，其余的留在“设备”页的待批准列表里。
+  Future<void> _popupApproval() async {
+    final c = widget.c;
+    final nav = _navigator.currentState;
+    if (c.pageDebugActive || c.stage != Stage.home || nav == null || !c.foreground) return;
+    final fresh = c.approvals.where((a) => _seenApprovals.add(a.id)).toList();
+    if (fresh.isEmpty || _reviewing) return;
+    _reviewing = true;
+    await nav.push(
+      MaterialPageRoute(
+        builder: (_) => ApprovalPage(c: c, request: fresh.last),
+      ),
+    );
+    _reviewing = false;
   }
 
   /// 在首页收到用配对码发起的新请求时直接打开批准页（匿名请求不弹出）。每个请求只弹一次；

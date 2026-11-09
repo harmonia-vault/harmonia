@@ -118,5 +118,11 @@ void main() {
         m['rootRecovery']);
     expect(hex.encode(authMsg('AAAAAAAAAAAAAAAAAAAAAA', 'nonce-1')), m['auth']);
     expect(hex.encode(recoveryAuthMsg('nonce-2')), m['recoveryAuth']);
+    final ap = v['approval'];
+    const id = 'CCCCCCCCCCCCCCCCCCCCCC', dev = 'AAAAAAAAAAAAAAAAAAAAAA';
+    expect(hex.encode(approvalRequestMsg(id, dev, ap['detail'], '')), m['approvalRequest']);
+    expect(hex.encode(approvalRequestMsg(id, dev, ap['detail'], ap['payload'])), m['approvalWrite']);
+    expect(hex.encode(approvalGrantMsg(id, utf8.encode('sealed'))), m['approvalGrant']);
+    expect(approvalCode(ap['detail']), ap['code']);
   });
 }

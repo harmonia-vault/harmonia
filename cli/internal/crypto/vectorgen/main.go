@@ -48,6 +48,7 @@ func main() {
 	entry := hc.Entry{Value: "sk-测试 value with 'quote'", Note: "测试用的 Key\n第二行"}
 	varCT := must(hc.EncryptVar(envKey, "BBBBBBBBBBBBBBBBBBBBBB", 1, "OPENAI_API_KEY", entry))
 	noNoteCT := must(hc.EncryptVar(envKey, "BBBBBBBBBBBBBBBBBBBBBB", 1, "EMPTY_NOTE", hc.Entry{Value: "v"}))
+	approvalDetail := `{"kind":"read","command":"npm run dev","cwd":"/home/我/blog"}`
 	fp := hc.PairingFingerprint("CCCCCCCCCCCCCCCCCCCCCC", hc.B64(sign.Pub), hc.B64(boxKey.Pub[:]), hc.B64(rec.Sign.Pub))
 
 	v := map[string]any{
@@ -75,11 +76,15 @@ func main() {
 			"fingerprint": hc.B64(fp), "code": hc.PairingCode(fp), "qr": hc.PairingQR("CCCCCCCCCCCCCCCCCCCCCC", fp),
 		},
 		"messages": map[string]any{
-			"envelope":     hex.EncodeToString(hc.EnvelopeMsg("BBBBBBBBBBBBBBBBBBBBBB", 1, "recovery", []byte("sealed"))),
-			"rootRecovery": hex.EncodeToString(hc.RootRecoveryMsg(2, []byte("sealed"))),
-			"auth":         hex.EncodeToString(hc.AuthMsg("AAAAAAAAAAAAAAAAAAAAAA", "nonce-1")),
-			"recoveryAuth": hex.EncodeToString(hc.RecoveryAuthMsg("nonce-2")),
+			"envelope":        hex.EncodeToString(hc.EnvelopeMsg("BBBBBBBBBBBBBBBBBBBBBB", 1, "recovery", []byte("sealed"))),
+			"rootRecovery":    hex.EncodeToString(hc.RootRecoveryMsg(2, []byte("sealed"))),
+			"auth":            hex.EncodeToString(hc.AuthMsg("AAAAAAAAAAAAAAAAAAAAAA", "nonce-1")),
+			"recoveryAuth":    hex.EncodeToString(hc.RecoveryAuthMsg("nonce-2")),
+			"approvalRequest": hex.EncodeToString(hc.ApprovalRequestMsg("CCCCCCCCCCCCCCCCCCCCCC", "AAAAAAAAAAAAAAAAAAAAAA", approvalDetail, "")),
+			"approvalWrite":   hex.EncodeToString(hc.ApprovalRequestMsg("CCCCCCCCCCCCCCCCCCCCCC", "AAAAAAAAAAAAAAAAAAAAAA", approvalDetail, `{"sealed":[]}`)),
+			"approvalGrant":   hex.EncodeToString(hc.ApprovalGrantMsg("CCCCCCCCCCCCCCCCCCCCCC", []byte("sealed"))),
 		},
+		"approval": map[string]any{"detail": approvalDetail, "code": hc.ApprovalCode(approvalDetail), "payload": `{"sealed":[]}`},
 	}
 	// minisign：使用临时测试密钥，验证 App 端的发布签名校验实现。
 	mpub, mpriv, _ := minisign.GenerateKey(nil)

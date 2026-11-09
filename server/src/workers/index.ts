@@ -1,11 +1,11 @@
 // Cloudflare Workers 入口：目录 Durable Object、账号 Durable Object 与请求路由。
 import { DurableObject } from "cloudflare:workers";
 import { createAccountApp } from "../core/app";
-import type { Deps, Device, Notifier, PairingWaiters, PushMessage, PushTarget } from "../core/context";
+import type { Deps, Device, Notifier, PushMessage, PushTarget, Waiters } from "../core/context";
 import { migrate, wipe, type Param, type Sql } from "../core/db";
 import { Directory as DirectoryCore } from "../core/directory";
 import type { Mailer } from "../core/email";
-import { checkWaiters, pairingLeft } from "../core/pairing";
+import { checkWaiters, waiterLeft } from "../core/pairing";
 import { VERSION } from "../core/protocol";
 import { route, type Backend } from "../core/router";
 import { ApiError } from "../core/util";
@@ -102,26 +102,26 @@ export class Account extends DurableObject<Env> {
       },
       connected: (deviceId: string) => ctx.getWebSockets(deviceId).length > 0,
     };
-    const waiters: PairingWaiters = {
-      accept: (pairingId) => {
+    const waiters: Waiters = {
+      accept: (key) => {
         const pair = new WebSocketPair();
-        ctx.acceptWebSocket(pair[1], [PAIRING_TAG, `${PAIRING_TAG}:${pairingId}`]);
-        pair[1].serializeAttachment({ pairingId, since: Date.now() });
+        ctx.acceptWebSocket(pair[1], [PAIRING_TAG, `${PAIRING_TAG}:${key}`]);
+        pair[1].serializeAttachment({ key, since: Date.now() });
         void ctx.storage.setAlarm(Date.now() + WAITER_CHECK);
         return new Response(null, { status: 101, webSocket: pair[0] });
       },
-      waiting: (pairingId) => ctx.getWebSockets(`${PAIRING_TAG}:${pairingId}`).length > 0,
+      waiting: (key) => ctx.getWebSockets(`${PAIRING_TAG}:${key}`).length > 0,
       list: () =>
         ctx.getWebSockets(PAIRING_TAG).map((ws) => {
-          const a = ws.deserializeAttachment() as { pairingId: string; since: number };
+          const a = ws.deserializeAttachment() as { key: string; since: number };
           const ping = ctx.getWebSocketAutoResponseTimestamp(ws)?.getTime() ?? 0;
-          return { pairingId: a.pairingId, seenAt: Math.max(a.since, ping) };
+          return { key: a.key, seenAt: Math.max(a.since, ping) };
         }),
-      close: (pairingId, result) => {
-        for (const ws of ctx.getWebSockets(`${PAIRING_TAG}:${pairingId}`)) {
+      close: (key, msg) => {
+        for (const ws of ctx.getWebSockets(`${PAIRING_TAG}:${key}`)) {
           try {
-            if (result) ws.send(JSON.stringify({ type: result }));
-            ws.close(1000, result ?? "left");
+            if (msg) ws.send(JSON.stringify(msg));
+            ws.close(1000, msg?.type ?? "left");
           } catch {
             // 连接已断开时忽略。
           }
@@ -172,10 +172,15 @@ export class Account extends DurableObject<Env> {
   }
 
   async webSocketClose(ws: WebSocket, code: number) {
-    ws.close(code === 1005 ? 1000 : code, "closed");
+    // 1005、1006 等保留代码不能回送（对方异常断开时就是 1006）；回送失败也要继续登记等待方离开。
+    try {
+      ws.close(code === 1000 || (code >= 3000 && code <= 4999) ? code : 1000, "closed");
+    } catch {
+      // 连接已经关闭。
+    }
     if (!this.ctx.getTags(ws).includes(PAIRING_TAG) || !this.exists()) return;
-    const { pairingId } = ws.deserializeAttachment() as { pairingId: string };
-    pairingLeft(this.deps, pairingId);
+    const { key } = ws.deserializeAttachment() as { key: string };
+    waiterLeft(this.deps, key);
   }
 
   /** 有等待连接时每 10 秒检查一次心跳和请求状态。 */

@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 
 import '../core/account.dart';
 import '../core/appearance.dart';
+import '../core/approval_choice.dart';
 import '../core/api.dart';
 import '../core/crypto.dart';
 import '../core/models.dart';
@@ -31,10 +32,23 @@ enum Stage {
 }
 
 class Prefs {
-  Prefs({this.server, this.email, this.updateChannel, this.developerOptions = false});
+  Prefs({
+    this.server,
+    this.email,
+    this.updateChannel,
+    this.developerOptions = false,
+    Map<String, String>? approvalChoices,
+    this.localDecryptHintSeen = false,
+  }) : approvalChoices = approvalChoices ?? {};
   String? server;
   String? email;
   String? updateChannel;
+
+  /// 每台电脑上次批准时的选择（设备 ID → ApprovalChoice.encode()）。
+  final Map<String, String> approvalChoices;
+
+  /// 升级后“哪些电脑开启了本机解密”的提示已经看过（设计文档 17.3）。
+  bool localDecryptHintSeen;
 
   /// 在“关于”页连点版本号 5 次打开，设置页底部才出现开发者选项。
   bool developerOptions;
@@ -44,12 +58,16 @@ class Prefs {
     'email': email,
     'updateChannel': updateChannel,
     'developerOptions': developerOptions,
+    'approvalChoices': approvalChoices,
+    'localDecryptHintSeen': localDecryptHintSeen,
   };
   factory Prefs.fromJson(Map<String, dynamic> j) => Prefs(
     server: j['server'] as String?,
     email: j['email'] as String?,
     updateChannel: j['updateChannel'] as String?,
     developerOptions: j['developerOptions'] == true,
+    approvalChoices: ((j['approvalChoices'] as Map?) ?? {}).cast<String, String>(),
+    localDecryptHintSeen: j['localDecryptHintSeen'] == true,
   );
 }
 
@@ -135,6 +153,32 @@ class AppController extends ChangeNotifier {
   /// 用配对码发起的请求：只有它们出现在待批准列表、角标和自动弹出的批准页中。
   /// 匿名请求只能扫码或手输核对码取到（协议 3.2）。
   List<PairingRequest> get authorizedPairings => pairings.where((p) => p.authorized).toList();
+
+  /// 电脑发来的、等待批准的请求（设计文档 17.4）。
+  List<ApprovalRequest> approvals = [];
+
+  ApprovalChoice approvalChoice(DeviceInfo d) =>
+      ApprovalChoice.decode(prefs.approvalChoices[d.id]).forPlatform(d.platform);
+
+  Future<void> rememberApprovalChoice(String deviceId, ApprovalChoice choice) async {
+    prefs.approvalChoices[deviceId] = choice.encode();
+    await _savePrefs();
+  }
+
+  Future<void> markLocalDecryptHintSeen() async {
+    prefs.localDecryptHintSeen = true;
+    await _savePrefs();
+    notifyListeners();
+  }
+
+  Future<void> refreshApprovals() async {
+    if (!vault.isManager) return;
+    try {
+      approvals = await vault.pendingApprovals();
+    } catch (_) {}
+    notifyListeners();
+  }
+
   int get pendingPairingCount => authorizedPairings.length;
   DateTime? _backgroundAt;
   Timer? _lockTimer;
@@ -341,8 +385,10 @@ class AppController extends ChangeNotifier {
       online = true;
       if (vault.isManager) {
         final pending = await vault.pendingPairings();
+        final waiting = await vault.pendingApprovals();
         if (_disposed || generation != lockGeneration) return;
         pairings = pending;
+        approvals = waiting;
       }
       if (vault.cache.rotationRequired && stage == Stage.home) stage = Stage.rotation;
     } on RevokedException {
@@ -409,6 +455,9 @@ class AppController extends ChangeNotifier {
             if (gen != _pushGeneration) return;
             pairings = await vault.pendingPairings();
             notifyListeners();
+          },
+          () async {
+            if (gen == _pushGeneration) await refreshApprovals();
           },
         );
       } on RevokedException {
