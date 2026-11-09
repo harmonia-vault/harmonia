@@ -1,0 +1,259 @@
+{
+  "cases": [
+    {
+      "duplicates": [],
+      "items": [
+        {
+          "name": "LLM_KEY",
+          "vaultId": "AAAAAAAAAAAAAAAAAAAAAA",
+          "source": "OPENAI_API_KEY",
+          "writable": false
+        },
+        {
+          "name": "ANTHROPIC_KEY",
+          "vaultId": "AAAAAAAAAAAAAAAAAAAAAA",
+          "source": "ANTHROPIC_KEY",
+          "writable": false
+        },
+        {
+          "name": "DB_URL",
+          "vaultId": "BBBBBBBBBBBBBBBBBBBBBB",
+          "source": "DB_URL",
+          "writable": true
+        },
+        {
+          "name": "ZED",
+          "vaultId": "BBBBBBBBBBBBBBBBBBBBBB",
+          "source": "Z",
+          "writable": true
+        }
+      ],
+      "name": "勾选只取存在的变量并保持勾选顺序，全部变量按名字排序并应用改名",
+      "refs": [
+        {
+          "vaultId": "AAAAAAAAAAAAAAAAAAAAAA",
+          "scope": "pick",
+          "writable": false,
+          "items": [
+            {
+              "name": "OPENAI_API_KEY",
+              "as": "LLM_KEY"
+            },
+            {
+              "name": "MISSING"
+            },
+            {
+              "name": "ANTHROPIC_KEY"
+            }
+          ]
+        },
+        {
+          "vaultId": "BBBBBBBBBBBBBBBBBBBBBB",
+          "scope": "all",
+          "writable": true,
+          "items": [
+            {
+              "name": "Z",
+              "as": "ZED"
+            }
+          ]
+        }
+      ],
+      "shadowed": [],
+      "vaults": {
+        "AAAAAAAAAAAAAAAAAAAAAA": [
+          "OPENAI_API_KEY",
+          "OTHER",
+          "ANTHROPIC_KEY"
+        ],
+        "BBBBBBBBBBBBBBBBBBBBBB": [
+          "Z",
+          "DB_URL"
+        ]
+      }
+    },
+    {
+      "duplicates": [
+        "K"
+      ],
+      "items": [
+        {
+          "name": "K",
+          "vaultId": "AAAAAAAAAAAAAAAAAAAAAA",
+          "source": "K",
+          "writable": false
+        },
+        {
+          "name": "J",
+          "vaultId": "BBBBBBBBBBBBBBBBBBBBBB",
+          "source": "J",
+          "writable": false
+        }
+      ],
+      "name": "同名时排在前面的引用优先，其余被遮住",
+      "refs": [
+        {
+          "vaultId": "AAAAAAAAAAAAAAAAAAAAAA",
+          "scope": "all",
+          "writable": false,
+          "items": []
+        },
+        {
+          "vaultId": "BBBBBBBBBBBBBBBBBBBBBB",
+          "scope": "all",
+          "writable": false,
+          "items": []
+        }
+      ],
+      "shadowed": [
+        {
+          "name": "K",
+          "vaultId": "BBBBBBBBBBBBBBBBBBBBBB",
+          "source": "K",
+          "writable": false
+        }
+      ],
+      "vaults": {
+        "AAAAAAAAAAAAAAAAAAAAAA": [
+          "K"
+        ],
+        "BBBBBBBBBBBBBBBBBBBBBB": [
+          "K",
+          "J"
+        ]
+      }
+    },
+    {
+      "duplicates": [
+        "K"
+      ],
+      "items": [
+        {
+          "name": "J",
+          "vaultId": "BBBBBBBBBBBBBBBBBBBBBB",
+          "source": "J",
+          "writable": false
+        },
+        {
+          "name": "K",
+          "vaultId": "BBBBBBBBBBBBBBBBBBBBBB",
+          "source": "K",
+          "writable": false
+        }
+      ],
+      "name": "勾选的变量不存在也参与重名检查",
+      "refs": [
+        {
+          "vaultId": "AAAAAAAAAAAAAAAAAAAAAA",
+          "scope": "pick",
+          "writable": false,
+          "items": [
+            {
+              "name": "X",
+              "as": "K"
+            }
+          ]
+        },
+        {
+          "vaultId": "BBBBBBBBBBBBBBBBBBBBBB",
+          "scope": "all",
+          "writable": false,
+          "items": []
+        }
+      ],
+      "shadowed": [],
+      "vaults": {
+        "AAAAAAAAAAAAAAAAAAAAAA": [],
+        "BBBBBBBBBBBBBBBBBBBBBB": [
+          "K",
+          "J"
+        ]
+      }
+    },
+    {
+      "duplicates": [
+        "B"
+      ],
+      "items": [
+        {
+          "name": "B",
+          "vaultId": "AAAAAAAAAAAAAAAAAAAAAA",
+          "source": "A",
+          "writable": false
+        },
+        {
+          "name": "C",
+          "vaultId": "AAAAAAAAAAAAAAAAAAAAAA",
+          "source": "C",
+          "writable": false
+        }
+      ],
+      "name": "同一个变量库里改名撞上另一个变量",
+      "refs": [
+        {
+          "vaultId": "AAAAAAAAAAAAAAAAAAAAAA",
+          "scope": "all",
+          "writable": false,
+          "items": [
+            {
+              "name": "A",
+              "as": "B"
+            }
+          ]
+        }
+      ],
+      "shadowed": [
+        {
+          "name": "B",
+          "vaultId": "AAAAAAAAAAAAAAAAAAAAAA",
+          "source": "B",
+          "writable": false
+        }
+      ],
+      "vaults": {
+        "AAAAAAAAAAAAAAAAAAAAAA": [
+          "A",
+          "B",
+          "C"
+        ]
+      }
+    },
+    {
+      "duplicates": [],
+      "items": [
+        {
+          "name": "K",
+          "vaultId": "AAAAAAAAAAAAAAAAAAAAAA",
+          "source": "K",
+          "writable": true
+        }
+      ],
+      "name": "已删除的变量库不提供变量",
+      "refs": [
+        {
+          "vaultId": "GGGGGGGGGGGGGGGGGGGGGG",
+          "scope": "all",
+          "writable": false,
+          "items": []
+        },
+        {
+          "vaultId": "AAAAAAAAAAAAAAAAAAAAAA",
+          "scope": "pick",
+          "writable": true,
+          "items": [
+            {
+              "name": "K"
+            }
+          ]
+        }
+      ],
+      "shadowed": [],
+      "vaults": {
+        "AAAAAAAAAAAAAAAAAAAAAA": [
+          "K",
+          "L"
+        ]
+      }
+    }
+  ]
+}

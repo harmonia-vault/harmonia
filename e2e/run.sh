@@ -162,14 +162,14 @@ cli var rm OpenAI NOTED >/dev/null
 
 step "批量导入：一次请求写入，重跑跳过已写入的，逐条输出结果"
 printf 'IMPORT_A=1\nIMPORT_B="two words"\n' >"$TMP/import.env"
-cli import --env OpenAI --file "$TMP/import.env" >"$TMP/import.out" || { cat "$TMP/import.out"; fail "导入失败"; }
+cli import --vault OpenAI --file "$TMP/import.env" >"$TMP/import.out" || { cat "$TMP/import.out"; fail "导入失败"; }
 grep -q "已写入 2 个" "$TMP/import.out" || fail "第一次导入应写入 2 个：$(cat "$TMP/import.out")"
 expect_eq "$(manager phone var-get OpenAI IMPORT_B)" "two words" "手机读取导入的值"
-expect_eq "$(cli import --env OpenAI --file "$TMP/import.env" --json | grep -c '"unchanged"')" "2" "重跑时全部未变化"
-printf '{"IMPORT_A":"1","IMPORT_C":"3"}' | cli import --env OpenAI --file - >/dev/null || fail "从标准输入导入 JSON 失败"
+expect_eq "$(cli import --vault OpenAI --file "$TMP/import.env" --json | grep -c '"unchanged"')" "2" "重跑时全部未变化"
+printf '{"IMPORT_A":"1","IMPORT_C":"3"}' | cli import --vault OpenAI --file - >/dev/null || fail "从标准输入导入 JSON 失败"
 expect_eq "$(manager phone var-get OpenAI IMPORT_C)" "3" "JSON 导入"
 printf 'IMPORT_D=4\n没有等号\n' >"$TMP/bad.env"
-if cli import --env OpenAI --file "$TMP/bad.env" >/dev/null 2>&1; then fail "有无法识别的行时不应导入"; fi
+if cli import --vault OpenAI --file "$TMP/bad.env" >/dev/null 2>&1; then fail "有无法识别的行时不应导入"; fi
 expect_eq "$(manager phone var-get OpenAI IMPORT_D)" "" "解析失败时整份都不应写入"
 RC=0; cli exec --env OpenAI:MISSING -- true 2>/dev/null || RC=$?
 expect_eq "$RC" "125" "exec 自身出错时退出码为 125"
@@ -225,6 +225,37 @@ expect_eq "$(cli exec --env "$OTHER_ID:OPENAI_API_KEY" -- printenv OPENAI_API_KE
 # 终端里是旧值时，不加 --env 也以最新值为准（同名变量只传一份）。
 expect_eq "$(bash -c "export OPENAI_API_KEY=stale; HARMONIA_HOME='$TMP/cli' '$TMP/harmonia' exec -- sh -c 'env | grep -c ^OPENAI_API_KEY=; printenv OPENAI_API_KEY'" 2>/dev/null | tr '\n' ' ')" "1 sk-second " "同名变量只传最新值"
 
+step "两层结构：环境引用变量库，按勾选和改名展开，写回变量库里的原变量"
+manager phone vault-create Shared >/dev/null
+manager phone var-set Shared TOKEN "tok-1" >/dev/null
+manager phone var-set Shared MODEL "gpt" >/dev/null
+manager phone env-define Mix Shared:pick:rw:TOKEN=LLM_TOKEN OpenAI:all >/dev/null
+if manager phone env-define Dup OpenAI:all Other:all >/dev/null 2>&1; then fail "两个变量库都有 OPENAI_API_KEY 时不应能保存环境"; fi
+manager phone env-define Dup OpenAI:all Other:all:OPENAI_API_KEY=OTHER_KEY >/dev/null || fail "给重名变量改名后应能保存"
+manager phone env-delete Dup >/dev/null
+manager phone grants e2e-laptop OpenAI:rw Other:ro Mix:rw >/dev/null
+cli sync >/dev/null
+expect_eq "$(cli exec --env Mix -- sh -c 'printf "%s %s %s" "$LLM_TOKEN" "${MODEL-unset}" "$OPENAI_API_KEY"' 2>/dev/null)" "tok-1 unset sk-second" "勾选并改名的变量、引用全部变量的变量库"
+cli var list --env Mix | grep -q "LLM_TOKEN.*来自 Shared / TOKEN" || fail "var list 没有显示变量来自哪个变量库：$(cli var list --env Mix)"
+cli var set Mix LLM_TOKEN "tok-2" --yes >/dev/null || fail "通过环境用新名字修改失败"
+expect_eq "$(manager phone var-get Shared TOKEN)" "tok-2" "写回变量库里的原变量"
+if cli var set Mix OPENAI_API_KEY "x" --yes 2>"$TMP/w.err"; then fail "引用不允许修改时不应能写入"; fi
+grep -q "不允许修改" "$TMP/w.err" || fail "不允许修改的提示不清楚：$(cat "$TMP/w.err")"
+if cli var set Mix BRAND_NEW "x" 2>"$TMP/w.err"; then fail "环境里没有的变量不应能通过环境新增"; fi
+grep -q "可以新增变量的变量库：“OpenAI”" "$TMP/w.err" || fail "没有列出可以新增变量的变量库：$(cat "$TMP/w.err")"
+cli var set OpenAI BRAND_NEW "x" >/dev/null || fail "名字同时是环境和变量库时应能直接新增"
+expect_eq "$(manager phone var-get OpenAI BRAND_NEW)" "x" "新增到同名变量库"
+cli var rm OpenAI BRAND_NEW --yes >/dev/null
+manager phone grants e2e-laptop OpenAI:rw Other:ro Mix:rw:nolocal >/dev/null
+cli sync >/dev/null
+if cli exec --env Mix -- true 2>"$TMP/nl.err"; then fail "没有开启本机解密时不应拿到变量"; fi
+grep -q "允许本机解密" "$TMP/nl.err" || fail "没有说明怎么开启本机解密：$(cat "$TMP/nl.err")"
+cli env list | grep -q "未开启本机解密" || fail "env list 没有显示未开启本机解密"
+expect_eq "$(manager phone devices | grep e2e-laptop | cut -f3)" "OpenAI:rw,Other:ro:off,Mix:rw:nolocal" "手机看到关闭了本机解密的环境"
+manager phone grants e2e-laptop OpenAI:rw Other:ro >/dev/null
+manager phone env-delete Mix >/dev/null
+manager phone vault-delete Shared >/dev/null
+
 step "手机看到各台设备的版本"
 cli sync >/dev/null
 DEVICES=$(manager phone devices)
@@ -276,7 +307,7 @@ manager phone2 env-create FromPhone2 >/dev/null
 manager phone2 var-set FromPhone2 SHARED "from-phone-2" >/dev/null
 expect_eq "$(manager phone var-get FromPhone2 SHARED)" "from-phone-2" "第一台手机读取第二台手机创建的环境"
 
-step "M13 电脑管理登录：通过本机管理页面的接口登录、解锁、新建环境、批量导入、复制和退出"
+step "M13 电脑管理登录：通过本机管理页面的接口登录、解锁、新建变量库和环境、批量导入、复制和退出"
 MPORT=8798
 MURL="http://127.0.0.1:$MPORT"
 MPASS="E2e-$RANDOM-Mgr"
@@ -312,10 +343,13 @@ grep -q "signSeed\|boxSeed" "$TMP/cli/manager.json" && fail "管理身份的密�
 [ -f "$TMP/cli/keys.json" ] || fail "管理登录不应影响日常登录"
 ENVS=$(mapi /api/envs/list)
 for e in OpenAI Other FromPhone2; do printf %s "$ENVS" | grep -q "\"name\":\"$e\"" || fail "管理页面看不到环境 $e：$ENVS"; done
-NEWENV=$(mapi /api/envs/create '{"name":"FromComputer"}' | field id)
-[ -n "$NEWENV" ] || fail "电脑没能新建环境"
+CREATED=$(mapi /api/vaults/create '{"name":"FromComputer","withEnv":true}')
+NEWVAULT=$(printf %s "$CREATED" | field id)
+NEWENV=$(printf %s "$CREATED" | field envId)
+[ -n "$NEWVAULT" ] && [ -n "$NEWENV" ] || fail "电脑没能新建变量库和同名环境：$CREATED"
 B_ENV='{"env":"'$NEWENV'"}'
-IMPORT='{"env":"'$NEWENV'","text":"# 注释\nA=1\nB=\"two words\"\nexport C='"'"'x y'"'"'\n1BAD=x\n","names":["A","B","C"]}'
+B_VAULT='{"vault":"'$NEWVAULT'"}'
+IMPORT='{"vault":"'$NEWVAULT'","text":"# 注释\nA=1\nB=\"two words\"\nexport C='"'"'x y'"'"'\n1BAD=x\n","names":["A","B","C"]}'
 PREVIEW=$(mapi /api/import/preview "$IMPORT")
 expect_eq "$(printf %s "$PREVIEW" | grep -o '"status":"new"' | wc -l | tr -d ' ')" "3" "导入对比：三个新增"
 printf %s "$PREVIEW" | grep -q '"line":5' || fail "导入对比应当指出第 5 行不合法：$PREVIEW"
@@ -323,14 +357,23 @@ mapi /api/import/apply "$IMPORT" | grep -q '"error"' && fail "批量导入有失
 expect_eq "$(manager phone var-get FromComputer B)" "two words" "手机读取电脑新建环境里导入的变量"
 expect_eq "$(manager phone2 var-get FromComputer C)" "x y" "第二台手机同样能读取"
 expect_eq "$(mapi /api/import/preview "$IMPORT" | grep -o '"status":"same"' | wc -l | tr -d ' ')" "3" "再次对比：三个不变"
-OTHER=$(printf %s "$ENVS" | grep -o '"id":"[^"]*","name":"Other"' | cut -d'"' -f4)
-mapi /api/copy/apply "{\"from\":\"$NEWENV\",\"to\":\"$OTHER\",\"names\":[\"A\"]}" | grep -q '"error"' && fail "跨环境复制失败"
-expect_eq "$(manager phone var-get Other A)" "1" "手机读取复制到其他环境的变量"
-mapi /api/vars/delete "{\"env\":\"$NEWENV\",\"names\":[\"A\",\"B\"]}" | grep -q '"error"' && fail "多选删除失败"
-expect_eq "$(mapi /api/vars/list "$B_ENV" | grep -o '"name":"[^"]*"' | tr -d '\n')" '"name":"C"' "删除后只剩一个变量"
+OTHER=$(mapi /api/vaults/list | grep -o '"id":"[^"]*","name":"Other"' | cut -d'"' -f4)
+mapi /api/copy/apply "{\"from\":\"$NEWVAULT\",\"to\":\"$OTHER\",\"names\":[\"A\"]}" | grep -q '"error"' && fail "跨变量库复制失败"
+expect_eq "$(manager phone var-get Other A)" "1" "手机读取复制到其他变量库的变量"
+B_REFS='{"name":"Combo","refs":[{"vaultId":"'$NEWVAULT'","scope":"pick","items":[{"name":"C","as":"CC"}]},{"vaultId":"'$OTHER'","scope":"all"}]}'
+mapi /api/envs/preview "$B_REFS" | grep -q '"duplicates":\[\]' || fail "预览不应有重名：$(mapi /api/envs/preview "$B_REFS")"
+COMBO=$(mapi /api/envs/create "$B_REFS" | field id)
+[ -n "$COMBO" ] || fail "电脑没能新建引用两个变量库的环境"
+mapi /api/envs/get '{"env":"'$COMBO'"}' | grep -q '"name":"CC","vaultId":"'$NEWVAULT'","source":"C"' || fail "环境里应有改名后的 CC"
+expect_eq "$(manager phone var-get Combo CC)" "x y" "手机读取电脑新建的环境里改名后的变量"
+B_DUP='{"name":"Dup","refs":[{"vaultId":"'$OTHER'","scope":"all"},{"vaultId":"'$NEWVAULT'","scope":"pick","items":[{"name":"A"}]}]}'
+mapi /api/envs/create "$B_DUP" | grep -q '"error"' || fail "重名时不应能新建环境"
+mapi /api/envs/delete '{"env":"'$COMBO'"}' >/dev/null
+mapi /api/vars/delete "{\"vault\":\"$NEWVAULT\",\"names\":[\"A\",\"B\"]}" | grep -q '"error"' && fail "多选删除失败"
+expect_eq "$(mapi /api/vars/list "$B_VAULT" | grep -o '"name":"[^"]*"' | tr -d '\n')" '"name":"C"' "删除后只剩一个变量"
 manager phone var-set FromComputer FROM_PHONE "pushed" >/dev/null
 START=$(date +%s)
-until mapi /api/vars/list "$B_ENV" | grep -q FROM_PHONE; do
+until mapi /api/vars/list "$B_VAULT" | grep -q FROM_PHONE; do
   [ $(( $(date +%s) - START )) -le 5 ] || fail "手机上的修改 5 秒内没有出现在管理页面"
   sleep 0.2
 done
@@ -342,7 +385,8 @@ expect_eq "$(mapi /api/unlock "$B_PASS" | field phase)" "unlocked" "用口令解
 [[ "$(cli status)" == *管理登录*已登录* ]] || fail "status 应当显示管理登录"
 [[ "$(manager phone devices)" == *"e2e 管理"* ]] || fail "手机的设备列表里应当有电脑的管理身份"
 mapi /api/envs/delete "$B_ENV" >/dev/null
-if manager phone var-get FromComputer C >/dev/null 2>&1; then fail "电脑删除环境后手机不应还能读取"; fi
+mapi /api/vaults/delete "$B_VAULT" >/dev/null
+if manager phone var-get FromComputer C >/dev/null 2>&1; then fail "电脑删除变量库和环境后手机不应还能读取"; fi
 expect_eq "$(mapi /api/logout "$B_PASS" | field phase)" "login" "退出管理登录"
 [ -f "$TMP/cli/manager.json" ] && fail "退出管理登录后应当删除本机的管理密钥"
 [[ "$(manager phone devices)" == *"e2e 管理"* ]] && fail "退出管理登录后手机上不应还有这台电脑的管理身份"

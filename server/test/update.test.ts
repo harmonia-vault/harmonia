@@ -6,7 +6,7 @@ describe("自动更新开关", () => {
     const s = new TestServer();
     const a = await TestAccount.create(s);
     const e1 = await a.createEnv(s, [a.phone.id], "A");
-    const cli = await pairClient(s, a, [{ envId: e1, role: "ro" }]);
+    const cli = await pairClient(s, a, [{ environmentId: e1, role: "ro", localDecrypt: true }]);
     const self = async () => (await s.ok("GET", "/api/v1/sync?since=0", { token: cli.token })).self;
     const seen = async () =>
       (await s.ok("GET", "/api/v1/sync?since=0", { token: a.phone.token })).manager.devices.find((d: { id: string }) => d.id === cli.id);
@@ -32,8 +32,8 @@ describe("让电脑更新", () => {
     const s = new TestServer();
     const a = await TestAccount.create(s);
     const e1 = await a.createEnv(s, [a.phone.id], "A");
-    const cli = await pairClient(s, a, [{ envId: e1, role: "ro" }]);
-    const other = await pairClient(s, a, [{ envId: e1, role: "ro" }]);
+    const cli = await pairClient(s, a, [{ environmentId: e1, role: "ro", localDecrypt: true }]);
+    const other = await pairClient(s, a, [{ environmentId: e1, role: "ro", localDecrypt: true }]);
     const path = `/api/v1/devices/${cli.id}/update`;
 
     const offline = await s.call("POST", path, { token: a.phone.token });
@@ -54,7 +54,7 @@ describe("让电脑更新", () => {
     const s = new TestServer();
     const a = await TestAccount.create(s);
     const e1 = await a.createEnv(s, [a.phone.id], "A");
-    const cli = await pairClient(s, a, [{ envId: e1, role: "ro" }]);
+    const cli = await pairClient(s, a, [{ environmentId: e1, role: "ro", localDecrypt: true }]);
     const sync = (version: string) =>
       s.ok("GET", "/api/v1/sync?since=0", { token: cli.token, headers: { "x-harmonia-version": version } });
     const notified = () => s.pushes.filter((p) => p.target === "managers" && p.msg.type === "changed").length;

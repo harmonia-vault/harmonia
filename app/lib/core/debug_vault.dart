@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'api.dart';
 import 'crypto.dart';
 import 'models.dart';
+import 'refs.dart';
 import 'store.dart';
 import 'vault.dart';
 
@@ -80,11 +81,12 @@ class DebugVault extends Vault {
 
   void reset({DebugScenario scenario = DebugScenario.normal}) {
     this.scenario = scenario;
-    _nextId = 3;
+    _nextId = 10;
     _rotations.clear();
     config = sampleConfig;
     localKey = Uint8List(32);
     cache = SyncCache()..self = {'kind': 'manager'};
+    _defs.clear();
     cache.manager = {
       'devices': [
         _device('debug-phone', '示例 iPhone', 'ios', 'manager', [], version: '0.4.5'),
@@ -92,8 +94,8 @@ class DebugVault extends Vault {
         _device('debug-computer', '开发电脑', 'windows', 'client', [
           Grant('debug-env-1', 'rw', 0),
         ], version: '0.10.1-beta.1'),
-        // 没有版本：还没升级到会上报版本的命令行，也不支持在手机上更新。
-        _device('debug-mac', '个人 Mac', 'darwin', 'client', [Grant('debug-env-2', 'ro', 0)]),
+        // 没有版本：还没升级到会上报版本的命令行，也不支持在手机上更新。没有开启本机解密。
+        _device('debug-mac', '个人 Mac', 'darwin', 'client', [Grant('debug-env-2', 'ro', 0, localDecrypt: false)]),
         // 已是最新版本，开着自动更新；后台服务不在线。
         _device('debug-linux', '构建服务器', 'linux', 'client', [Grant('debug-env-2', 'ro', 0)], version: '0.10.0')
           ..['autoUpdate'] = true,
@@ -105,28 +107,53 @@ class DebugVault extends Vault {
     requests.clear();
     _notes
       ..clear()
-      ..['debug-env-1/API_KEY'] = '示例备注：只用于页面调试\n第二行说明';
+      ..['debug-vault-1/API_KEY'] = '示例备注：只用于页面调试\n第二行说明';
     _broken
       ..clear()
-      ..add('debug-env-1/OLD_TOKEN');
+      ..add('debug-vault-1/OLD_TOKEN');
+    cache.manager!['vaults'] = <Map<String, dynamic>>[];
+    cache.manager!['environments'] = <Map<String, dynamic>>[];
     if (scenario == DebugScenario.empty) {
-      cache.manager = {'devices': <dynamic>[]};
+      cache.manager!['devices'] = <dynamic>[];
+      _rebuild();
       return;
     }
-    cache.environments = [
-      Environment('debug-env-1', '开发环境', 1, 'rw', 0),
-      Environment('debug-env-2', '自动化工具', 1, 'rw', 0),
-      Environment('debug-env-3', '个人服务', 1, 'rw', 0),
+    cache.manager!['vaults'] = <Map<String, dynamic>>[
+      for (final (id, name) in [
+        ('debug-vault-1', '开发密钥'),
+        ('debug-vault-2', '共享模型'),
+        ('debug-vault-3', '个人服务'),
+        ('debug-vault-4', '备用模型'),
+      ])
+        <String, dynamic>{'id': id, 'name': name, 'keyVersion': '1'},
     ];
+    _defs.addAll([
+      EnvDef('debug-env-1', '开发环境', [const EnvRef('debug-vault-1', 'all', writable: true)]),
+      EnvDef('debug-env-2', '自动化工具', [
+        const EnvRef('debug-vault-2', 'pick', items: [RefItem('OPENAI_API_KEY', 'LLM_KEY'), RefItem('MODEL')]),
+      ]),
+      EnvDef('debug-env-3', '个人服务', [const EnvRef('debug-vault-3', 'all', writable: true)]),
+      // 名字冲突（被遮住的 MODEL）和已失效的引用。
+      EnvDef('debug-env-4', '合并示例', [
+        const EnvRef('debug-vault-2', 'all'),
+        const EnvRef('debug-vault-4', 'all'),
+        const EnvRef('debug-vault-gone', 'all'),
+      ]),
+    ]);
     cache.variables = {
-      'debug-env-1': {
+      'debug-vault-1': {
         'API_KEY': CachedVariable('demo-key-not-a-secret', 1),
         'API_URL': CachedVariable('https://api.example.invalid', 1),
         // 模拟解不开的变量，用来检查“无法解密”的显示和删除。
         'OLD_TOKEN': CachedVariable('', 1),
       },
-      'debug-env-2': {'MODEL': CachedVariable('demo-model', 1)},
+      'debug-vault-2': {
+        'MODEL': CachedVariable('demo-model', 1),
+        'OPENAI_API_KEY': CachedVariable('demo-openai-not-a-secret', 1),
+      },
+      'debug-vault-4': {'MODEL': CachedVariable('demo-backup-model', 1)},
     };
+    _rebuild();
     requests.add(
       PairingRequest({
         'id': 'debug-pairing',
@@ -203,57 +230,136 @@ class DebugVault extends Vault {
   final _notes = <String, String>{};
   final _broken = <String>{};
 
-  @override
-  Map<String, VarEntry> entries(String envId) => {
-    for (final e in (cache.variables[envId] ?? {}).entries)
-      if (!_broken.contains('$envId/${e.key}')) e.key: VarEntry(e.value.value, note: _notes['$envId/${e.key}'] ?? ''),
-  };
+  /// 环境的定义；每次修改后由 [_rebuild] 按引用展开成 cache.environments，和服务端的同步结果一致。
+  final _defs = <EnvDef>[];
 
-  @override
-  List<String> brokenVariables(String envId) => [
-    for (final n in (cache.variables[envId] ?? {}).keys)
-      if (_broken.contains('$envId/$n')) n,
-  ]..sort();
+  List<Map<String, dynamic>> get _vaultList => (cache.manager!['vaults'] as List).cast<Map<String, dynamic>>();
 
-  @override
-  Future<void> createEnvironment(String name) async {
-    check();
-    cache.environments.add(Environment('debug-env-${++_nextId}', name.trim(), 1, 'rw', 0));
+  void _rebuild() {
+    final ids = _vaultList.map((v) => v['id']).toSet();
+    cache.manager!['environments'] = [
+      for (final e in _defs)
+        {
+          'id': e.id,
+          'name': e.name,
+          'refs': [
+            for (final r in e.refs) {...r.toJson(), 'missing': !ids.contains(r.vaultId)},
+          ],
+        },
+    ];
+    cache.environments = [
+      for (final e in _defs)
+        () {
+          final r = expandRefs(e.refs, variableNames);
+          return Environment(e.id, e.name, 'rw', 0, items: r.items, shadowed: r.shadowed);
+        }(),
+    ];
+  }
+
+  int _defIndex(String id) {
+    final i = _defs.indexWhere((e) => e.id == id);
+    if (i < 0) throw VaultException('环境不存在，可能已被删除。');
+    return i;
   }
 
   @override
-  Future<void> renameEnvironment(String id, String name) async {
+  Map<String, VarEntry> entries(String vaultId) => {
+    for (final e in (cache.variables[vaultId] ?? {}).entries)
+      if (!_broken.contains('$vaultId/${e.key}'))
+        e.key: VarEntry(e.value.value, note: _notes['$vaultId/${e.key}'] ?? ''),
+  };
+
+  @override
+  List<String> brokenVariables(String vaultId) => [
+    for (final n in (cache.variables[vaultId] ?? {}).keys)
+      if (_broken.contains('$vaultId/$n')) n,
+  ]..sort();
+
+  @override
+  Map<String, VarEntry> envEntries(String envId) {
+    final out = <String, VarEntry>{};
+    for (final it in environment(envId).items) {
+      final e = entries(it.vaultId)[it.source];
+      if (e != null) out[it.name] = e;
+    }
+    return out;
+  }
+
+  @override
+  Future<({String vaultId, String? envId})> createVault(String name, {bool withEnv = true}) async {
     check();
-    final index = cache.environments.indexWhere((e) => e.id == id);
-    final old = cache.environments[index];
-    cache.environments[index] = Environment(id, name.trim(), old.keyVersion, old.role, old.expiresAt);
+    final id = 'debug-vault-${++_nextId}';
+    _vaultList.add({'id': id, 'name': name.trim(), 'keyVersion': '1'});
+    String? envId;
+    if (withEnv) {
+      envId = 'debug-env-${++_nextId}';
+      _defs.add(EnvDef(envId, name.trim(), [EnvRef(id, 'all', writable: true)]));
+    }
+    _rebuild();
+    return (vaultId: id, envId: envId);
+  }
+
+  @override
+  Future<void> renameVault(String id, String name) async {
+    check();
+    _vaultList.firstWhere((v) => v['id'] == id)['name'] = name.trim();
+  }
+
+  @override
+  Future<void> deleteVault(String id) async {
+    check();
+    _vaultList.removeWhere((v) => v['id'] == id);
+    cache.variables.remove(id);
+    _rebuild();
+  }
+
+  @override
+  Future<String> createEnvironment(String name, List<EnvRef> refs) async {
+    check();
+    final dup = duplicateNames(refs, variableNames);
+    if (dup.isNotEmpty) throw VaultException('环境里有重名的变量：${dup.join('、')}。请给其中一个改名，或取消勾选。');
+    final id = 'debug-env-${++_nextId}';
+    _defs.add(EnvDef(id, name.trim(), refs));
+    _rebuild();
+    return id;
+  }
+
+  @override
+  Future<void> saveEnvironment(String id, String name, List<EnvRef> refs) async {
+    check();
+    final dup = duplicateNames(refs, variableNames);
+    if (dup.isNotEmpty) throw VaultException('环境里有重名的变量：${dup.join('、')}。请给其中一个改名，或取消勾选。');
+    _defs[_defIndex(id)] = EnvDef(id, name.trim(), refs);
+    _rebuild();
   }
 
   @override
   Future<void> deleteEnvironment(String id) async {
     check();
-    cache.environments.removeWhere((e) => e.id == id);
-    cache.variables.remove(id);
+    _defs.removeAt(_defIndex(id));
     for (final d in devices) {
-      (d.json['grants'] as List).removeWhere((g) => g['envId'] == id);
+      (d.json['grants'] as List).removeWhere((g) => g['environmentId'] == id);
     }
+    _rebuild();
   }
 
   @override
-  Future<void> setVariable(String envId, String name, String value, String note) async {
+  Future<void> setVariable(String vaultId, String name, String value, String note) async {
     check();
-    environment(envId);
-    (cache.variables[envId] ??= {})[name] = CachedVariable(value, 1);
-    _notes['$envId/$name'] = note.trim();
-    _broken.remove('$envId/$name');
+    if (!_vaultList.any((v) => v['id'] == vaultId)) throw VaultException('变量库不存在，可能已被删除。');
+    (cache.variables[vaultId] ??= {})[name] = CachedVariable(value, 1);
+    _notes['$vaultId/$name'] = note.trim();
+    _broken.remove('$vaultId/$name');
+    _rebuild();
   }
 
   @override
-  Future<void> deleteVariable(String envId, String name) async {
+  Future<void> deleteVariable(String vaultId, String name) async {
     check();
-    cache.variables[envId]?.remove(name);
-    _notes.remove('$envId/$name');
-    _broken.remove('$envId/$name');
+    cache.variables[vaultId]?.remove(name);
+    _notes.remove('$vaultId/$name');
+    _broken.remove('$vaultId/$name');
+    _rebuild();
   }
 
   @override

@@ -39,20 +39,6 @@ func (a *App) Env(nameOrID string) (*api.Environment, error) {
 	return vault.Find(cache, nameOrID)
 }
 
-func (a *App) writableEnv(nameOrID string) (*api.Environment, error) {
-	env, err := a.Env(nameOrID)
-	if err != nil {
-		return nil, err
-	}
-	if vault.Expired(*env, nowMs()) {
-		return nil, fmt.Errorf("这台设备对环境“%s”的授权已到期，请在管理设备上重新授权", env.Name)
-	}
-	if env.Role == "ro" {
-		return nil, fmt.Errorf("这台设备对环境“%s”只有只读权限，不能修改。可以在管理设备上调整权限", env.Name)
-	}
-	return env, nil
-}
-
 // MaxNoteLen 是备注的最大字符数（docs/protocol.md 第 1 节）。
 const MaxNoteLen = 200
 
@@ -99,28 +85,27 @@ func digest(e hc.Entry) [2][32]byte {
 	return [2][32]byte{sha256.Sum256([]byte(e.Value)), sha256.Sum256([]byte(e.Note))}
 }
 
-// SetVariables 把变量写入云端。先同步取得最新状态；skipSame 时跳过值和备注都没变的变量（导入时，
-// 重跑等于从断点继续）；其余用批量写入接口写入。写入后再同步一次，从本机缓存解密回读，核对 SHA-256。
-// 返回每个变量的结果，按名称排序；回读前的同步失败时同时返回 *UnverifiedError。必须在线。
-func (a *App) SetVariables(ctx context.Context, envNameOrID string, changes map[string]VarChange, skipSame bool) ([]VarResult, error) {
+// SetVariables 把变量写入云端。target 是环境或变量库（vaultOnly 时只认变量库）：写环境时用环境里的名字，
+// 写回它所在的变量库；新增变量必须指定变量库（设计文档 17.2）。先同步取得最新状态；skipSame 时跳过
+// 值和备注都没变的变量（导入时，重跑等于从断点继续）；其余按变量库分批写入。写入后再同步一次，
+// 从本机缓存解密回读，核对 SHA-256。返回每个变量的结果，按名称排序；回读前的同步失败时同时返回
+// *UnverifiedError。必须在线。
+func (a *App) SetVariables(ctx context.Context, target string, vaultOnly bool, changes map[string]VarChange, skipSame bool) ([]VarResult, error) {
 	if err := a.Sync(ctx); err != nil {
-		return nil, err
-	}
-	env, err := a.writableEnv(envNameOrID)
-	if err != nil {
 		return nil, err
 	}
 	cache, err := a.Dir.Cache()
 	if err != nil {
 		return nil, err
 	}
-	key, kv, err := vault.EnvKey(cache, a.Keys, env.ID)
+	t, err := vault.ResolveTarget(cache, target, vaultOnly)
 	if err != nil {
 		return nil, err
 	}
-	current, broken, err := vault.Entries(cache, a.Keys, env.ID)
-	if err != nil {
-		return nil, err
+	if t.Env != nil {
+		if err := vault.CheckWritable(t.Env, nowMs()); err != nil {
+			return nil, err
+		}
 	}
 	names := make([]string, 0, len(changes))
 	for n := range changes {
@@ -128,10 +113,16 @@ func (a *App) SetVariables(ctx context.Context, envNameOrID string, changes map[
 	}
 	sort.Strings(names)
 	results := make([]VarResult, len(names))
-	var (
+	type group struct {
+		key   []byte
+		kv    int
+		cur   map[string]hc.Entry
+		bad   []string
 		items []BatchItem
 		idx   []int
-	)
+	}
+	groups := map[string]*group{}
+	dests := make([]vault.Dest, len(names))
 	for i, n := range names {
 		results[i].Name = n
 		fail := func(err error) { results[i].Status, results[i].Err = Failed, err }
@@ -139,10 +130,28 @@ func (a *App) SetVariables(ctx context.Context, envNameOrID string, changes map[
 			fail(err)
 			continue
 		}
+		d, err := vault.WriteDest(cache, t, n, nowMs())
+		if err != nil {
+			fail(err)
+			continue
+		}
+		dests[i] = d
+		g := groups[d.VaultID]
+		if g == nil {
+			g = &group{}
+			if g.key, g.kv, err = vault.VaultKey(cache, a.Keys, d.VaultID); err == nil {
+				g.cur, g.bad, err = vault.VaultEntries(cache, a.Keys, d.VaultID)
+			}
+			if err != nil {
+				fail(err)
+				continue
+			}
+			groups[d.VaultID] = g
+		}
 		ch := changes[n]
-		e, exists := current[n]
+		e, exists := g.cur[d.Source]
 		if ch.Value == nil && !exists {
-			if slices.Contains(broken, n) {
+			if slices.Contains(g.bad, d.Source) {
 				fail(fmt.Errorf("变量 %s 无法解密，请同时给出它的值，重新写入", n))
 			} else {
 				fail(fmt.Errorf("变量 %s 不存在，请同时给出它的值", n))
@@ -167,24 +176,26 @@ func (a *App) SetVariables(ctx context.Context, envNameOrID string, changes map[
 			results[i].Status = Unchanged
 			continue
 		}
-		items = append(items, BatchItem{Name: n, Entry: e})
-		idx = append(idx, i)
-	}
-	if len(items) == 0 {
-		return results, nil
-	}
-	errs, err := WriteBatch(ctx, a.Client, env.ID, key, kv, items)
-	if err != nil {
-		return nil, a.HandleRevoked(err)
+		g.items = append(g.items, BatchItem{Name: d.Source, Entry: e})
+		g.idx = append(g.idx, i)
 	}
 	want := map[int]hc.Entry{}
-	for j, i := range idx {
-		if errs[j] != nil {
-			results[i].Status, results[i].Err = Failed, fmt.Errorf("写入 %s 失败：%w", items[j].Name, errs[j])
+	for vaultID, g := range groups {
+		if len(g.items) == 0 {
 			continue
 		}
-		results[i].Status = Written
-		want[i] = items[j].Entry
+		errs, err := WriteBatch(ctx, a.Client, vaultID, g.key, g.kv, g.items)
+		if err != nil {
+			return nil, a.HandleRevoked(err)
+		}
+		for j, i := range g.idx {
+			if errs[j] != nil {
+				results[i].Status, results[i].Err = Failed, fmt.Errorf("写入 %s 失败：%w", names[i], errs[j])
+				continue
+			}
+			results[i].Status = Written
+			want[i] = g.items[j].Entry
+		}
 	}
 	if len(want) == 0 {
 		return results, nil
@@ -198,25 +209,43 @@ func (a *App) SetVariables(ctx context.Context, envNameOrID string, changes map[
 	if cache, err = a.Dir.Cache(); err != nil {
 		return results, &UnverifiedError{err}
 	}
-	got, _, err := vault.Entries(cache, a.Keys, env.ID)
-	if err != nil {
-		return results, &UnverifiedError{err}
-	}
+	got := map[string]map[string]hc.Entry{}
 	for i, w := range want {
-		if g, ok := got[results[i].Name]; !ok || digest(g) != digest(w) {
+		d := dests[i]
+		if got[d.VaultID] == nil {
+			if got[d.VaultID], _, err = vault.VaultEntries(cache, a.Keys, d.VaultID); err != nil {
+				return results, &UnverifiedError{err}
+			}
+		}
+		if g, ok := got[d.VaultID][d.Source]; !ok || digest(g) != digest(w) {
 			results[i].Status = Failed
-			results[i].Err = fmt.Errorf("%s 已写入，但回读的内容和写入的不一致，可能另一台设备同时修改了它。运行 harmonia var list --env %s 查看", results[i].Name, env.Name)
+			results[i].Err = fmt.Errorf("%s 已写入，但回读的内容和写入的不一致，可能另一台设备同时修改了它。运行 harmonia var list 查看", results[i].Name)
 		}
 	}
 	return results, nil
 }
 
-func (a *App) DeleteVariable(ctx context.Context, envNameOrID, name string) error {
-	env, err := a.writableEnv(envNameOrID)
+// DeleteVariable 删除变量：target 是环境（用环境里的名字）或变量库（用原名），从变量库里删除原变量。
+func (a *App) DeleteVariable(ctx context.Context, target, name string) error {
+	if err := a.Sync(ctx); err != nil {
+		return err
+	}
+	cache, err := a.Dir.Cache()
 	if err != nil {
 		return err
 	}
-	if err := a.Client.DeleteVariable(ctx, env.ID, name, hc.NewID()); err != nil {
+	t, err := vault.ResolveTarget(cache, target, false)
+	if err != nil {
+		return err
+	}
+	if t.Env != nil && !vault.HasItem(t.Env, name) {
+		return fmt.Errorf("环境“%s”里没有 %s，运行 harmonia var list --env %s 查看", t.Env.Name, name, t.Env.Name)
+	}
+	d, err := vault.WriteDest(cache, t, name, nowMs())
+	if err != nil {
+		return err
+	}
+	if err := a.Client.DeleteVariable(ctx, d.VaultID, d.Source, hc.NewID()); err != nil {
 		return a.HandleRevoked(err)
 	}
 	return a.Sync(ctx)
@@ -320,11 +349,7 @@ func (a *App) SetOverride(envNameOrID, name string, value *string) (*api.Environ
 		}
 		env = &api.Environment{ID: envNameOrID, Name: envNameOrID}
 	}
-	cache, err := a.Dir.Cache()
-	if err != nil {
-		return nil, err
-	}
-	if _, ok := cache.Variables[env.ID][name]; !ok && value != nil {
+	if !vault.HasItem(env, name) && value != nil {
 		return nil, fmt.Errorf("环境“%s”中没有变量 %s。本机覆盖只能用于云端已有的变量", env.Name, name)
 	}
 	unlock, err := a.Dir.Lock()

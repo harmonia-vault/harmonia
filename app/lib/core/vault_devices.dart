@@ -6,12 +6,14 @@ mixin VaultDevices {
   ApiClient? get api;
   LocalConfig? get config;
   List<Environment> get environments;
-  Map<String, Uint8List> get _envKeys;
+  List<VaultInfo> get vaults;
+  List<EnvDef> get envDefs;
   SignKey _root();
   Environment environment(String id);
   Future<void> sync({bool full = false});
   Uint8List _verifiedBoxPub(String deviceId, String kind, String signPub, String boxPub, String cert);
-  Map<String, dynamic> _envelope(String envId, int keyVersion, String recipient, Uint8List boxPub, Uint8List envKey);
+  List<Map<String, dynamic>> _sealVaults(Iterable<String> vaultIds, String recipient, Uint8List boxPub);
+  Set<String> _localVaults(Iterable<Grant> grants);
   // ---- 配对 ----
 
   Future<List<PairingRequest>> pendingPairings() async {
@@ -68,18 +70,16 @@ mixin VaultDevices {
     throw VaultException('没有找到匹配的配对请求。请确认核对码正确，并且对方的配对还没有过期（5 分钟）。');
   }
 
-  /// 批准配对。asManager=true 时新设备成为管理设备，拥有全部环境。
+  /// 批准配对。asManager=true 时新设备成为管理设备，拥有全部变量库；否则按 [grants] 授权环境，
+  /// 开启本机解密的环境附上它引用的变量库的封装。
   Future<void> approvePairing(PairingRequest p, {required bool asManager, List<Grant> grants = const []}) async {
     final r = _root();
     _checkPairing(p);
     final kind = asManager ? 'manager' : 'client';
     final cert = b64(crypto.sign(r, deviceCertMsg(p.id, kind, p.signPub, p.boxPub)));
     final boxPub = unb64(p.boxPub);
-    final envIds = asManager ? environments.map((e) => e.id).toList() : grants.map((g) => g.envId).toList();
-    final envelopes = [
-      for (final id in envIds)
-        _envelope(id, environment(id).keyVersion, p.id, boxPub, _envKeys[id]!)..remove('recipient'),
-    ];
+    final vaultIds = asManager ? vaults.map((v) => v.id) : _localVaults(grants);
+    final envelopes = [for (final e in _sealVaults(vaultIds, p.id, boxPub)) e..remove('recipient')];
     await api!.device(
       'POST',
       '/api/v1/pairings/${p.id}/approve',
@@ -101,21 +101,20 @@ mixin VaultDevices {
 
   // ---- 设备管理 ----
 
+  /// 整体替换一台设备的授权。开启了本机解密的环境要附上它引用的全部变量库的封装（先校验设备证书），
+  /// 服务端删掉不再用到的（设计文档 17.2）。
   Future<void> updateGrants(DeviceInfo d, List<Grant> grants) async {
-    final current = d.grants.map((g) => g.envId).toSet();
-    final added = grants.where((g) => !current.contains(g.envId)).toList();
-    Uint8List? boxPub;
-    if (added.isNotEmpty) boxPub = _verifiedBoxPub(d.id, d.kind, d.signPub, d.boxPub, d.cert);
+    final local = _localVaults(grants);
+    final envelopes = local.isEmpty
+        ? const <Map<String, dynamic>>[]
+        : [
+            for (final e in _sealVaults(local, d.id, _verifiedBoxPub(d.id, d.kind, d.signPub, d.boxPub, d.cert)))
+              e..remove('recipient'),
+          ];
     await api!.device(
       'PUT',
       '/api/v1/devices/${d.id}/grants',
-      body: {
-        'grants': grants.map((g) => g.toJson()).toList(),
-        'envelopes': [
-          for (final g in added)
-            _envelope(g.envId, environment(g.envId).keyVersion, d.id, boxPub!, _envKeys[g.envId]!)..remove('recipient'),
-        ],
-      },
+      body: {'grants': grants.map((g) => g.toJson()).toList(), 'envelopes': envelopes},
     );
     await sync();
   }
@@ -167,7 +166,7 @@ mixin VaultDevices {
       '/api/v1/devices/$deviceId/activation',
       body: {
         'envs': [
-          for (final g in ordered) {'envId': g.envId, 'active': g.active},
+          for (final g in ordered) {'environmentId': g.envId, 'active': g.active},
         ],
       },
     );

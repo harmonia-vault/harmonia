@@ -41,6 +41,30 @@ Future<void> main(List<String> argv) async {
   }
 
   String envId(String name) => vault.environments.firstWhere((e) => e.name == name || e.id == name).id;
+  String vaultId(String name) => vault.vaults.firstWhere((v) => v.name == name || v.id == name).id;
+  // 授权写成 环境:权限[:nolocal]，nolocal 表示不开启本机解密。
+  Grant grant(String spec) {
+    final p = spec.split(':');
+    return Grant(envId(p[0]), p[1], 0, localDecrypt: !p.contains('nolocal'));
+  }
+
+  // 引用写成 变量库:all|pick[:rw][:原名=新名,原名...]，例如 共享:pick:OPENAI_API_KEY=LLM_KEY。
+  EnvRef ref(String spec) {
+    final p = spec.split(':');
+    final items = <RefItem>[];
+    for (final part in p.skip(2).where((x) => x != 'rw' && x.isNotEmpty)) {
+      for (final it in part.split(',')) {
+        final kv = it.split('=');
+        items.add(RefItem(kv[0], kv.length > 1 ? kv[1] : null));
+      }
+    }
+    return EnvRef(vaultId(p[0]), p[1], writable: p.contains('rw'), items: items);
+  }
+
+  // 变量：先按变量库找，找不到再按环境（用环境里的名字）。
+  Map<String, VarEntry> values(String target) => vault.vaults.any((v) => v.name == target || v.id == target)
+      ? vault.entries(vaultId(target))
+      : vault.envEntries(envId(target));
   DeviceInfo device(String name) => vault.devices.firstWhere((d) => d.name == name || d.id == name);
 
   // 注册会话在 register / verify 与 setup 之间保存在测试目录中。
@@ -77,15 +101,38 @@ Future<void> main(List<String> argv) async {
       await vault.adopt(await account.completeSetup(await loadRegistration(), draft, opt('name', '测试手机')));
       print(draft.formattedCode);
     case 'env-create':
-      await (await loaded()).createEnvironment(args[0]);
-      print(envId(args[0]));
+      // 新建变量库和同名环境（引用全部变量，可以修改），和 App 里的默认做法相同。
+      final r = await (await loaded()).createVault(args[0]);
+      print(r.envId);
+    case 'vault-create':
+      // 只建变量库。
+      print((await (await loaded()).createVault(args[0], withEnv: false)).vaultId);
+    case 'env-define':
+      // env-define <环境名> <引用...>：环境不存在时新建，存在时整体替换引用。
+      final v = await loaded();
+      final refs = [for (final spec in args.sublist(1)) ref(spec)];
+      final existing = v.environments.where((e) => e.name == args[0]).firstOrNull;
+      if (existing == null) {
+        print(await v.createEnvironment(args[0], refs));
+      } else {
+        await v.saveEnvironment(existing.id, args[0], refs);
+        print(existing.id);
+      }
+    case 'env-delete':
+      await (await loaded()).deleteEnvironment(envId(args[0]));
+      print('ok');
+    case 'vault-delete':
+      await (await loaded()).deleteVault(vaultId(args[0]));
+      print('ok');
     case 'var-set':
-      await (await loaded()).setVariable(envId(args[0]), args[1], args[2], args.length > 3 ? args[3] : '');
+      await (await loaded()).setVariable(vaultId(args[0]), args[1], args[2], args.length > 3 ? args[3] : '');
       print('ok');
     case 'var-get':
-      print((await loaded()).entries(envId(args[0]))[args[1]]?.value ?? '');
+      await loaded();
+      print(values(args[0])[args[1]]?.value ?? '');
     case 'var-note':
-      print((await loaded()).entries(envId(args[0]))[args[1]]?.note ?? '');
+      await loaded();
+      print(values(args[0])[args[1]]?.note ?? '');
     case 'pairing-code':
       // 生成配对码，输出 8 位码。
       print((await (await loaded()).createPairingCode()).code);
@@ -104,15 +151,13 @@ Future<void> main(List<String> argv) async {
         await v.approvePairing(
           p,
           asManager: false,
-          grants: [for (final g in args.sublist(1)) Grant(envId(g.split(':')[0]), g.split(':')[1], 0)],
+          grants: [for (final g in args.sublist(1)) grant(g)],
         );
       }
       print(p.id);
     case 'grants':
       final v = await loaded();
-      await v.updateGrants(device(args[0]), [
-        for (final g in args.sublist(1)) Grant(envId(g.split(':')[0]), g.split(':')[1], 0),
-      ]);
+      await v.updateGrants(device(args[0]), [for (final g in args.sublist(1)) grant(g)]);
       print('ok');
     case 'activation':
       // 按给定顺序设置某台设备的激活状态，环境名后加 :off 表示停用。
@@ -145,7 +190,9 @@ Future<void> main(List<String> argv) async {
     case 'devices':
       final v = await loaded();
       for (final d in v.devices) {
-        final grants = d.grants.map((g) => '${v.environment(g.envId).name}:${g.role}${g.active ? '' : ':off'}');
+        final grants = d.grants.map(
+          (g) => '${v.environment(g.envId).name}:${g.role}${g.active ? '' : ':off'}${g.localDecrypt ? '' : ':nolocal'}',
+        );
         print(
           '${d.name}\t${d.kind}\t${grants.join(',')}\t${d.systemVars ? 'system-vars' : ''}\t${d.version}'
           '\t${d.autoUpdate ? 'auto-update' : ''}',

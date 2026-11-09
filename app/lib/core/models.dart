@@ -1,40 +1,89 @@
 // 同步数据模型（docs/protocol.md 3.4）。
+import 'refs.dart';
+
+export 'refs.dart' show EnvItem, EnvRef, RefItem;
+
+/// 这台设备被授权的一个环境；管理设备能看到全部环境。[items] 是服务端按引用展开的最终名字。
 class Environment {
-  Environment(this.id, this.name, this.keyVersion, this.role, this.expiresAt);
+  Environment(
+    this.id,
+    this.name,
+    this.role,
+    this.expiresAt, {
+    this.localDecrypt = true,
+    this.items = const [],
+    this.shadowed = const [],
+  });
   final String id;
   final String name;
-  final int keyVersion;
   final String role;
   final int expiresAt;
+  final bool localDecrypt;
+  final List<EnvItem> items;
+
+  /// 被遮住的同名变量：“全部变量”引用的变量库后来新增了重名的变量（设计文档 17.1）。
+  final List<EnvItem> shadowed;
 
   factory Environment.fromJson(Map<String, dynamic> j) => Environment(
     j['id'] as String,
     j['name'] as String,
-    int.parse(j['keyVersion'] as String),
     j['role'] as String,
     j['expiresAt'] as int,
+    localDecrypt: j['localDecrypt'] as bool? ?? true,
+    items: _items(j['items']),
+    shadowed: _items(j['shadowed']),
   );
+
+  static List<EnvItem> _items(Object? raw) =>
+      ((raw as List?) ?? []).map((i) => EnvItem.fromJson((i as Map).cast<String, dynamic>())).toList();
 
   Map<String, dynamic> toJson() => {
     'id': id,
     'name': name,
-    'keyVersion': '$keyVersion',
     'role': role,
     'expiresAt': expiresAt,
+    'localDecrypt': localDecrypt,
+    'items': items.map((i) => i.toJson()).toList(),
+    'shadowed': shadowed.map((i) => i.toJson()).toList(),
   };
 }
 
+/// 账号里的一个变量库（只有管理设备能看到全部）。
+class VaultInfo {
+  VaultInfo(this.id, this.name, this.keyVersion);
+  final String id;
+  final String name;
+  final int keyVersion;
+
+  factory VaultInfo.fromJson(Map<String, dynamic> j) =>
+      VaultInfo(j['id'] as String, j['name'] as String, int.parse(j['keyVersion'] as String));
+}
+
+/// 环境的定义：名字和对变量库的引用（只有管理设备能看到）。
+class EnvDef {
+  EnvDef(this.id, this.name, this.refs);
+  final String id;
+  final String name;
+  final List<EnvRef> refs;
+
+  factory EnvDef.fromJson(Map<String, dynamic> j) => EnvDef(
+    j['id'] as String,
+    j['name'] as String,
+    (j['refs'] as List).map((r) => EnvRef.fromJson((r as Map).cast<String, dynamic>())).toList(),
+  );
+}
+
 class Envelope {
-  Envelope(this.envId, this.keyVersion, this.sealed, this.sig);
-  final String envId;
+  Envelope(this.vaultId, this.keyVersion, this.sealed, this.sig);
+  final String vaultId;
   final int keyVersion;
   final String sealed;
   final String sig;
 
   factory Envelope.fromJson(Map<String, dynamic> j) =>
-      Envelope(j['envId'] as String, int.parse(j['keyVersion'] as String), j['sealed'] as String, j['sig'] as String);
+      Envelope(j['vaultId'] as String, int.parse(j['keyVersion'] as String), j['sealed'] as String, j['sig'] as String);
 
-  Map<String, dynamic> toJson() => {'envId': envId, 'keyVersion': '$keyVersion', 'sealed': sealed, 'sig': sig};
+  Map<String, dynamic> toJson() => {'vaultId': vaultId, 'keyVersion': '$keyVersion', 'sealed': sealed, 'sig': sig};
 }
 
 class CachedVariable {
@@ -43,27 +92,36 @@ class CachedVariable {
   final int keyVersion;
 }
 
+/// 一台设备对一个环境的授权。[localDecrypt] 开启时设备持有环境引用到的变量库的钥匙，可以在本机解密。
 class Grant {
-  Grant(this.envId, this.role, this.expiresAt, {this.active = true, this.position = 0});
+  Grant(this.envId, this.role, this.expiresAt, {this.localDecrypt = true, this.active = true, this.position = 0});
   final String envId;
   final String role;
   final int expiresAt;
+  final bool localDecrypt;
 
   /// 激活状态和顺序：排在前面（position 小）的环境提供同名变量。只由服务端下发，修改授权时不提交。
   final bool active;
   final int position;
 
-  Grant copyWith({bool? active}) => Grant(envId, role, expiresAt, active: active ?? this.active, position: position);
+  Grant copyWith({bool? active}) =>
+      Grant(envId, role, expiresAt, localDecrypt: localDecrypt, active: active ?? this.active, position: position);
 
   factory Grant.fromJson(Map<String, dynamic> j) => Grant(
-    j['envId'] as String,
+    j['environmentId'] as String,
     j['role'] as String,
     j['expiresAt'] as int,
+    localDecrypt: j['localDecrypt'] as bool? ?? true,
     active: j['active'] as bool? ?? true,
     position: j['position'] as int? ?? 0,
   );
 
-  Map<String, dynamic> toJson() => {'envId': envId, 'role': role, 'expiresAt': expiresAt};
+  Map<String, dynamic> toJson() => {
+    'environmentId': envId,
+    'role': role,
+    'expiresAt': expiresAt,
+    'localDecrypt': localDecrypt,
+  };
 }
 
 class DeviceInfo {
@@ -128,7 +186,7 @@ class PairingCode {
   String get formatted => code.length == 8 ? '${code.substring(0, 4)}-${code.substring(4)}' : code;
 }
 
-/// 本机持久化的同步缓存（只含密文与封装，没有明文）。
+/// 本机持久化的同步缓存（只含密文与封装，没有明文）。变量按变量库 ID、再按变量库里的原名保存。
 class SyncCache {
   int seq = 0;
   Map<String, dynamic> self = {};
@@ -142,13 +200,22 @@ class SyncCache {
   List<DeviceInfo> get devices =>
       ((manager?['devices'] as List?) ?? []).map((d) => DeviceInfo((d as Map).cast<String, dynamic>())).toList();
 
+  /// 全部变量库，按创建先后（只有管理设备有）。
+  List<VaultInfo> get vaults =>
+      ((manager?['vaults'] as List?) ?? []).map((v) => VaultInfo.fromJson((v as Map).cast<String, dynamic>())).toList();
+
+  /// 全部环境的定义，按创建先后（只有管理设备有）。
+  List<EnvDef> get envDefs => ((manager?['environments'] as List?) ?? [])
+      .map((e) => EnvDef.fromJson((e as Map).cast<String, dynamic>()))
+      .toList();
+
   Map<String, dynamic> toJson() => {
     'seq': seq,
     'self': self,
     'environments': environments.map((e) => e.toJson()).toList(),
     'envelopes': envelopes.map((e) => e.toJson()).toList(),
     'variables': variables.map(
-      (env, vars) => MapEntry(env, vars.map((n, v) => MapEntry(n, {'value': v.value, 'keyVersion': v.keyVersion}))),
+      (vault, vars) => MapEntry(vault, vars.map((n, v) => MapEntry(n, {'value': v.value, 'keyVersion': v.keyVersion}))),
     ),
     'manager': manager,
   };

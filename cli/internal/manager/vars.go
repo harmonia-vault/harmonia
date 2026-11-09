@@ -18,7 +18,7 @@ type Result struct {
 	Error string `json:"error,omitempty"`
 }
 
-// DiffItem 说明把一个变量写入某个环境会发生什么：new（新增）、changed（修改）、same（不变）。
+// DiffItem 说明把一个变量写入某个变量库会发生什么：new（新增）、changed（修改）、same（不变）。
 type DiffItem struct {
 	Name   string `json:"name"`
 	Status string `json:"status"`
@@ -33,11 +33,11 @@ type VarInfo struct {
 	Broken bool   `json:"broken,omitempty"`
 }
 
-// Vars 列出一个环境里的全部变量，按名称排序。
-func (s *Session) Vars(envID string) ([]VarInfo, error) {
+// Vars 列出一个变量库里的全部变量，按名称排序。
+func (s *Session) Vars(vaultID string) ([]VarInfo, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	vals, broken, err := s.entriesLocked(envID)
+	vals, broken, err := s.entriesLocked(vaultID)
 	if err != nil {
 		return nil, err
 	}
@@ -53,10 +53,10 @@ func (s *Session) Vars(envID string) ([]VarInfo, error) {
 }
 
 // Value 解密一个变量的值。
-func (s *Session) Value(envID, name string) (string, error) {
+func (s *Session) Value(vaultID, name string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	vals, broken, err := s.entriesLocked(envID)
+	vals, broken, err := s.entriesLocked(vaultID)
 	if err != nil {
 		return "", err
 	}
@@ -70,22 +70,22 @@ func (s *Session) Value(envID, name string) (string, error) {
 	return e.Value, nil
 }
 
-func (s *Session) entriesLocked(envID string) (map[string]hc.Entry, []string, error) {
-	if _, err := s.envLocked(envID); err != nil {
+func (s *Session) entriesLocked(vaultID string) (map[string]hc.Entry, []string, error) {
+	if _, err := s.vaultLocked(vaultID); err != nil {
 		return nil, nil, err
 	}
-	return vault.Entries(s.cache, s.keys, envID)
+	return vault.VaultEntries(s.cache, s.keys, vaultID)
 }
 
-// Diff 比较要写入的变量与环境里现有的值和备注。names 给出顺序。
-func (s *Session) Diff(envID string, changes map[string]app.VarChange, names []string) ([]DiffItem, error) {
+// Diff 比较要写入的变量与变量库里现有的值和备注。names 给出顺序。
+func (s *Session) Diff(vaultID string, changes map[string]app.VarChange, names []string) ([]DiffItem, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.diffLocked(envID, changes, names)
+	return s.diffLocked(vaultID, changes, names)
 }
 
-func (s *Session) diffLocked(envID string, changes map[string]app.VarChange, names []string) ([]DiffItem, error) {
-	cur, broken, err := s.entriesLocked(envID)
+func (s *Session) diffLocked(vaultID string, changes map[string]app.VarChange, names []string) ([]DiffItem, error) {
+	cur, broken, err := s.entriesLocked(vaultID)
 	if err != nil {
 		return nil, err
 	}
@@ -116,16 +116,16 @@ func apply(e hc.Entry, ch app.VarChange) hc.Entry {
 	return e
 }
 
-// SetVars 把一批变量写入环境，用批量写入接口每批最多 100 项；返回每个变量的结果。必须在线。
+// SetVars 把一批变量写入变量库，用批量写入接口每批最多 100 项；返回每个变量的结果。必须在线。
 // 没有给出备注的变量保留原来的备注。
-func (s *Session) SetVars(ctx context.Context, envID string, changes map[string]app.VarChange) ([]Result, error) {
+func (s *Session) SetVars(ctx context.Context, vaultID string, changes map[string]app.VarChange) ([]Result, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.setLocked(ctx, envID, changes)
+	return s.setLocked(ctx, vaultID, changes)
 }
 
-func (s *Session) setLocked(ctx context.Context, envID string, changes map[string]app.VarChange) ([]Result, error) {
-	cur, broken, err := s.entriesLocked(envID)
+func (s *Session) setLocked(ctx context.Context, vaultID string, changes map[string]app.VarChange) ([]Result, error) {
+	cur, broken, err := s.entriesLocked(vaultID)
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +147,7 @@ func (s *Session) setLocked(ctx context.Context, envID string, changes map[strin
 		items = append(items, app.BatchItem{Name: name, Entry: e})
 		idx = append(idx, i)
 	}
-	return s.writeLocked(ctx, envID, out, items, idx)
+	return s.writeLocked(ctx, vaultID, out, items, idx)
 }
 
 // entryFor 算出写入后的变量内容，检查名称、备注和长度。
@@ -177,10 +177,10 @@ func entryFor(name string, ch app.VarChange, cur map[string]hc.Entry, broken []s
 }
 
 // DeleteVars 删除一批变量。
-func (s *Session) DeleteVars(ctx context.Context, envID string, names []string) ([]Result, error) {
+func (s *Session) DeleteVars(ctx context.Context, vaultID string, names []string) ([]Result, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, err := s.envLocked(envID); err != nil {
+	if _, err := s.vaultLocked(vaultID); err != nil {
 		return nil, err
 	}
 	out := make([]Result, len(names))
@@ -191,20 +191,20 @@ func (s *Session) DeleteVars(ctx context.Context, envID string, names []string) 
 		items[i] = app.BatchItem{Name: name, Delete: true}
 		idx[i] = i
 	}
-	return s.writeLocked(ctx, envID, out, items, idx)
+	return s.writeLocked(ctx, vaultID, out, items, idx)
 }
 
 // writeLocked 用批量写入接口写入 items（idx 是各项在 out 中的位置），把结果记到 out，最后同步一次。
 // 本机已被移除时整体返回 api.ErrRevoked。
-func (s *Session) writeLocked(ctx context.Context, envID string, out []Result, items []app.BatchItem, idx []int) ([]Result, error) {
+func (s *Session) writeLocked(ctx context.Context, vaultID string, out []Result, items []app.BatchItem, idx []int) ([]Result, error) {
 	if len(items) == 0 {
 		return out, nil
 	}
-	key, kv, err := vault.EnvKey(s.cache, s.keys, envID)
+	key, kv, err := vault.VaultKey(s.cache, s.keys, vaultID)
 	if err != nil {
 		return nil, err
 	}
-	errs, err := app.WriteBatch(ctx, s.client, envID, key, kv, items)
+	errs, err := app.WriteBatch(ctx, s.client, vaultID, key, kv, items)
 	if err != nil {
 		return nil, err
 	}
@@ -216,7 +216,7 @@ func (s *Session) writeLocked(ctx context.Context, envID string, out []Result, i
 	return out, s.syncLocked(ctx)
 }
 
-// selected 取出来源环境里选中的变量（连同备注）；已经不存在的名称被忽略。
+// selected 取出来源变量库里选中的变量（连同备注）；已经不存在的名称被忽略。
 func (s *Session) selected(from string, names []string) (map[string]app.VarChange, []string, error) {
 	src, _, err := s.entriesLocked(from)
 	if err != nil {
@@ -233,12 +233,12 @@ func (s *Session) selected(from string, names []string) (map[string]app.VarChang
 	return vars, kept, nil
 }
 
-// CopyDiff 说明把所选变量从一个环境复制到另一个环境会发生什么。
+// CopyDiff 说明把所选变量从一个变量库复制到另一个变量库会发生什么。
 func (s *Session) CopyDiff(from, to string, names []string) ([]DiffItem, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if from == to {
-		return nil, errors.New("请选择另一个环境")
+		return nil, errors.New("请选择另一个变量库")
 	}
 	vars, kept, err := s.selected(from, names)
 	if err != nil {
@@ -247,12 +247,12 @@ func (s *Session) CopyDiff(from, to string, names []string) ([]DiffItem, error) 
 	return s.diffLocked(to, vars, kept)
 }
 
-// Copy 把所选变量复制到另一个环境：在本机解密后用目标环境的密钥重新加密，明文不经过浏览器。
+// Copy 把所选变量复制到另一个变量库：在本机解密后用目标变量库的库钥重新加密，明文不经过浏览器。
 func (s *Session) Copy(ctx context.Context, from, to string, names []string) ([]Result, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if from == to {
-		return nil, errors.New("请选择另一个环境")
+		return nil, errors.New("请选择另一个变量库")
 	}
 	vars, _, err := s.selected(from, names)
 	if err != nil {

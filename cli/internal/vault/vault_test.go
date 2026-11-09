@@ -1,6 +1,8 @@
 package vault
 
 import (
+	"maps"
+	"slices"
 	"strings"
 	"testing"
 
@@ -27,13 +29,18 @@ func (f *fixture) sync(t *testing.T, since int64, envs map[string]map[string]str
 	for id, vars := range envs {
 		key := hc.Random(32)
 		sealed, _ := hc.Seal(key, f.dev.Box.Pub[:])
-		s.Environments = append(s.Environments, api.Environment{ID: id, Name: id, KeyVersion: "1", Role: "rw"})
-		s.Envelopes = append(s.Envelopes, api.Envelope{EnvID: id, KeyVersion: "1", Sealed: hc.B64(sealed),
+		env := api.Environment{ID: id, Name: id, Role: "rw", LocalDecrypt: true, CreateVaults: []string{id}}
+		s.Vaults = append(s.Vaults, api.Vault{ID: id, KeyVersion: "1"})
+		s.VaultNames = append(s.VaultNames, api.VaultName{ID: id, Name: id})
+		s.Envelopes = append(s.Envelopes, api.Envelope{VaultID: id, KeyVersion: "1", Sealed: hc.B64(sealed),
 			Sig: hc.B64(f.root.Sign(hc.EnvelopeMsg(id, 1, f.dev.ID, sealed)))})
-		for n, v := range vars {
-			ct, _ := hc.EncryptVar(key, id, 1, n, hc.Entry{Value: v})
-			s.Variables = append(s.Variables, api.Variable{EnvID: id, Name: n, Value: ct, KeyVersion: "1"})
+		names := slices.Sorted(maps.Keys(vars))
+		for _, n := range names {
+			ct, _ := hc.EncryptVar(key, id, 1, n, hc.Entry{Value: vars[n]})
+			s.Variables = append(s.Variables, api.Variable{VaultID: id, Name: n, Value: ct, KeyVersion: "1"})
+			env.Items = append(env.Items, api.EnvItem{Name: n, VaultID: id, Source: n, Writable: true})
 		}
+		s.Environments = append(s.Environments, env)
 	}
 	s.Variables = append(s.Variables, extra...)
 	return s
@@ -70,11 +77,12 @@ func TestApplyMergeOverride(t *testing.T) {
 		}
 	}
 	for _, e := range s.Envelopes {
-		if e.EnvID == "low" {
+		if e.VaultID == "low" {
 			s2.Envelopes = append(s2.Envelopes, e)
 		}
 	}
-	s2.Variables = []api.Variable{{EnvID: "low", Name: "B", Deleted: true}}
+	s2.Vaults = []api.Vault{{ID: "low", KeyVersion: "1"}}
+	s2.Variables = []api.Variable{{VaultID: "low", Name: "B", Deleted: true}}
 	if err := Apply(f.cache, s2, 1, hc.B64(f.root.Pub), f.dev.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -246,7 +254,8 @@ func TestSelectPicks(t *testing.T) {
 func TestBrokenVariableOnlyAffectsItself(t *testing.T) {
 	f := newFixture(t)
 	s := f.sync(t, 0, map[string]map[string]string{"e": {"GOOD": "ok"}},
-		api.Variable{EnvID: "e", Name: "BAD", Value: hc.B64(hc.Random(60)), KeyVersion: "1"})
+		api.Variable{VaultID: "e", Name: "BAD", Value: hc.B64(hc.Random(60)), KeyVersion: "1"})
+	s.Environments[0].Items = append(s.Environments[0].Items, api.EnvItem{Name: "BAD", VaultID: "e", Source: "BAD", Writable: true})
 	if err := Apply(f.cache, s, 0, hc.B64(f.root.Pub), f.dev.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -261,5 +270,27 @@ func TestBrokenVariableOnlyAffectsItself(t *testing.T) {
 		if _, _, err := Select(f.cache, f.dev, []Pick{p}, nil, 0); err == nil || !strings.Contains(err.Error(), "var rm") {
 			t.Fatalf("%+v：应报无法解密并给出处理办法：%v", p, err)
 		}
+	}
+}
+
+// 名字同时是环境和变量库时（新建变量库时一起创建的同名环境），环境里没有的变量按变量库新增；
+// 只是环境的名字时仍然报错并列出可以新增变量的变量库。
+func TestNewVariableThroughSameNameEnvironment(t *testing.T) {
+	f := newFixture(t)
+	s := f.sync(t, 0, map[string]map[string]string{"proj": {"A": "1"}})
+	s.Environments = append(s.Environments, api.Environment{ID: "env2", Name: "only-env", Role: "rw", LocalDecrypt: true})
+	if err := Apply(f.cache, s, 0, hc.B64(f.root.Pub), f.dev.ID); err != nil {
+		t.Fatal(err)
+	}
+	tg, err := ResolveTarget(f.cache, "proj", false)
+	if err != nil || tg.Env == nil {
+		t.Fatalf("应先匹配到环境：%+v %v", tg, err)
+	}
+	if d, err := WriteDest(f.cache, tg, "NEW", 0); err != nil || d.VaultID != "proj" || d.Source != "NEW" {
+		t.Fatalf("应改写到同名变量库：%+v %v", d, err)
+	}
+	tg, _ = ResolveTarget(f.cache, "only-env", false)
+	if _, err := WriteDest(f.cache, tg, "NEW", 0); err == nil || !strings.Contains(err.Error(), "“proj”") {
+		t.Fatalf("没有同名变量库时应报错并列出变量库：%v", err)
 	}
 }

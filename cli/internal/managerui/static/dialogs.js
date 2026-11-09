@@ -1,4 +1,4 @@
-// 管理界面里的对话框：环境名、变量编辑、批量导入、跨环境复制、设置。
+// 管理界面里的对话框：改名、变量编辑、批量导入、跨变量库复制、设置。
 import { call } from './api.js';
 import { RULE } from './auth.js';
 import { STATUS, confirmBox, field, h, modal, mount, run, secretInput, toast } from './dom.js';
@@ -21,7 +21,7 @@ export function nameDialog(title, label, initial, action, save) {
 }
 
 // varDialog 添加（v 为空）或编辑一个变量；v 是列表里的 {name, note}。
-export function varDialog(env, v) {
+export function varDialog(vault, v) {
   const name = v?.name;
   return modal(name ? '编辑变量' : '添加变量', (close) => {
     const nameIn = h('input', { type: 'text', class: 'mono', value: name || '', readOnly: !!name, required: true, maxLength: 128, placeholder: 'OPENAI_API_KEY', spellcheck: false, autocomplete: 'off' });
@@ -33,7 +33,7 @@ export function varDialog(env, v) {
       error.textContent = '原来的内容无法解密，请重新填写值和备注，保存后覆盖。';
       setTimeout(() => valueIn.focus());
     } else if (name) {
-      call('/api/vars/value', { env, name }).then(({ value }) => {
+      call('/api/vars/value', { vault, name }).then(({ value }) => {
         valueIn.value = value;
         valueIn.placeholder = '';
         submit.disabled = false;
@@ -48,7 +48,7 @@ export function varDialog(env, v) {
         ev.preventDefault();
         run(submit, '正在保存……', error, async () => {
           const key = nameIn.value.trim();
-          const { results } = await call('/api/vars/set', { env, vars: { [key]: { value: valueIn.value, note: noteIn.value } } });
+          const { results } = await call('/api/vars/set', { vault, vars: { [key]: { value: valueIn.value, note: noteIn.value } } });
           if (results[0]?.error) throw new Error(results[0].error);
           toast(`已保存 ${key}。`);
           close(true);
@@ -57,7 +57,7 @@ export function varDialog(env, v) {
     },
       field('名称', nameIn, name ? '名称不能修改；需要改名时请新建一个再删除旧的。' : '只能包含字母、数字和下划线，不能以数字开头。'),
       field('值', valueIn),
-      field('备注', noteIn, '可选，最多 200 个字。备注和值一起加密，只有能读取这个环境的设备能看到。'),
+      field('备注', noteIn, '可选，最多 200 个字。备注和值一起加密，只有能读取这个变量的设备能看到。'),
       error,
       h('div', { class: 'actions' }, h('button', { type: 'button', text: '取消', onclick: () => close() }), submit));
   });
@@ -84,8 +84,8 @@ function failureList(failed) {
 }
 
 // importDialog 批量导入；initial 是拖入文件时已经读到的内容。
-export function importDialog(env, initial = '') {
-  return modal(`批量导入到“${env.name}”`, (close) => {
+export function importDialog(vault, initial = '') {
+  return modal(`批量导入到变量库“${vault.name}”`, (close) => {
     const body = h('div', { class: 'stack' });
     let done = false;
     let draft = initial;
@@ -103,7 +103,7 @@ export function importDialog(env, initial = '') {
       next.onclick = () => run(next, '正在对比……', error, async () => {
         if (!text.value.trim()) throw new Error('请先粘贴内容，或选择一个文件。');
         draft = text.value;
-        const res = await call('/api/import/preview', { env: env.id, text: text.value });
+        const res = await call('/api/import/preview', { vault: vault.id, text: text.value });
         review(text.value, res);
       });
       mount(body,
@@ -124,11 +124,11 @@ export function importDialog(env, initial = '') {
       apply.onclick = () => run(apply, '正在导入……', error, async () => {
         const names = list.chosen();
         if (!names.length) throw new Error('没有勾选任何变量。');
-        const { results } = await call('/api/import/apply', { env: env.id, text, names });
+        const { results } = await call('/api/import/apply', { vault: vault.id, text, names });
         done = true;
         const failed = failures(results);
         if (!failed.length) {
-          toast(`已导入 ${results.length} 个变量到“${env.name}”。`);
+          toast(`已导入 ${results.length} 个变量到“${vault.name}”。`);
           return finish();
         }
         for (const [name, box] of list.boxes) box.checked = failed.some((r) => r.name === name);
@@ -151,10 +151,10 @@ export function importDialog(env, initial = '') {
   }, { wide: true });
 }
 
-export function copyDialog(env, names, envs) {
-  return modal('复制到其他环境', (close) => {
+export function copyDialog(vault, names, vaults) {
+  return modal('复制到其他变量库', (close) => {
     const body = h('div', { class: 'stack' });
-    const others = envs.filter((e) => e.id !== env.id);
+    const others = vaults.filter((e) => e.id !== vault.id);
     const target = h('select', {}, others.map((e) => h('option', { value: e.id, text: e.name })));
     const slot = h('div', {});
     const error = h('p', { class: 'error', role: 'alert' });
@@ -164,7 +164,7 @@ export function copyDialog(env, names, envs) {
       apply.disabled = true;
       error.textContent = '';
       try {
-        const { items } = await call('/api/copy/preview', { from: env.id, to: target.value, names });
+        const { items } = await call('/api/copy/preview', { from: vault.id, to: target.value, names });
         list = diffList(items);
         mount(slot, list.el);
         apply.disabled = items.length === 0;
@@ -178,7 +178,7 @@ export function copyDialog(env, names, envs) {
       const chosen = list.chosen();
       if (!chosen.length) throw new Error('没有勾选任何变量。');
       const to = others.find((e) => e.id === target.value);
-      const { results } = await call('/api/copy/apply', { from: env.id, to: to.id, names: chosen });
+      const { results } = await call('/api/copy/apply', { from: vault.id, to: to.id, names: chosen });
       const failed = failures(results);
       if (failed.length) {
         mount(error, `${results.length - failed.length} 个已复制，${failed.length} 个没有成功：`, failureList(failed));
@@ -188,8 +188,8 @@ export function copyDialog(env, names, envs) {
       close(true);
     });
     mount(body,
-      h('p', { text: `把“${env.name}”中选中的 ${names.length} 个变量复制到另一个环境。目标环境里同名的变量会被覆盖。` }),
-      field('目标环境', target), slot, error,
+      h('p', { text: `把“${vault.name}”中选中的 ${names.length} 个变量复制到另一个变量库。目标变量库里同名的变量会被覆盖。` }),
+      field('目标变量库', target), slot, error,
       h('div', { class: 'actions' }, h('button', { type: 'button', text: '取消', onclick: () => close() }), apply));
     preview();
     return body;

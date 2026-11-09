@@ -1,4 +1,4 @@
-// vectorgen 生成三端共用的测试向量：vectors/crypto.json。
+// vectorgen 生成三端共用的测试向量：vectors/crypto.json，以及环境展开规则的 vectors/refs.json。
 // 固定输入保证派生类向量稳定；带随机 nonce 的密文只用于验证“对端能解开”。
 package main
 
@@ -11,7 +11,9 @@ import (
 
 	"aead.dev/minisign"
 
+	"github.com/harmonia-vault/harmonia/cli/internal/api"
 	hc "github.com/harmonia-vault/harmonia/cli/internal/crypto"
+	"github.com/harmonia-vault/harmonia/cli/internal/refs"
 )
 
 func seed(b byte) []byte {
@@ -89,6 +91,55 @@ func main() {
 	}
 	data := must(json.MarshalIndent(v, "", "  "))
 	path := filepath.Join(out, "crypto.json")
+	if err := os.WriteFile(path, append(data, '\n'), 0o644); err != nil {
+		panic(err)
+	}
+	fmt.Println("已写入", path)
+	writeRefs(out)
+}
+
+// writeRefs 生成环境展开规则的向量：给定引用和各变量库现存的变量名，期望的最终名字、被遮住的和重名。
+func writeRefs(out string) {
+	const a, b, gone = "AAAAAAAAAAAAAAAAAAAAAA", "BBBBBBBBBBBBBBBBBBBBBB", "GGGGGGGGGGGGGGGGGGGGGG"
+	type tc struct {
+		Name   string              `json:"name"`
+		Refs   []api.Ref           `json:"refs"`
+		Vaults map[string][]string `json:"vaults"`
+	}
+	cases := []tc{
+		{"勾选只取存在的变量并保持勾选顺序，全部变量按名字排序并应用改名", []api.Ref{
+			{VaultID: a, Scope: "pick", Items: []api.RefItem{{Name: "OPENAI_API_KEY", As: "LLM_KEY"}, {Name: "MISSING"}, {Name: "ANTHROPIC_KEY"}}},
+			{VaultID: b, Scope: "all", Writable: true, Items: []api.RefItem{{Name: "Z", As: "ZED"}}},
+		}, map[string][]string{a: {"OPENAI_API_KEY", "OTHER", "ANTHROPIC_KEY"}, b: {"Z", "DB_URL"}}},
+		{"同名时排在前面的引用优先，其余被遮住", []api.Ref{
+			{VaultID: a, Scope: "all"}, {VaultID: b, Scope: "all"},
+		}, map[string][]string{a: {"K"}, b: {"K", "J"}}},
+		{"勾选的变量不存在也参与重名检查", []api.Ref{
+			{VaultID: a, Scope: "pick", Items: []api.RefItem{{Name: "X", As: "K"}}}, {VaultID: b, Scope: "all"},
+		}, map[string][]string{a: {}, b: {"K", "J"}}},
+		{"同一个变量库里改名撞上另一个变量", []api.Ref{
+			{VaultID: a, Scope: "all", Items: []api.RefItem{{Name: "A", As: "B"}}},
+		}, map[string][]string{a: {"A", "B", "C"}}},
+		{"已删除的变量库不提供变量", []api.Ref{
+			{VaultID: gone, Scope: "all"}, {VaultID: a, Scope: "pick", Writable: true, Items: []api.RefItem{{Name: "K"}}},
+		}, map[string][]string{a: {"K", "L"}}},
+	}
+	var list []map[string]any
+	for _, c := range cases {
+		names := func(id string) []string { return c.Vaults[id] }
+		for i := range c.Refs {
+			if c.Refs[i].Items == nil {
+				c.Refs[i].Items = []api.RefItem{}
+			}
+		}
+		items, shadowed := refs.Expand(c.Refs, names)
+		list = append(list, map[string]any{
+			"name": c.Name, "refs": c.Refs, "vaults": c.Vaults,
+			"items": items, "shadowed": shadowed, "duplicates": refs.Duplicates(c.Refs, names),
+		})
+	}
+	data := must(json.MarshalIndent(map[string]any{"cases": list}, "", "  "))
+	path := filepath.Join(out, "refs.json")
 	if err := os.WriteFile(path, append(data, '\n'), 0o644); err != nil {
 		panic(err)
 	}

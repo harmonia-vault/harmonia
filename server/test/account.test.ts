@@ -73,7 +73,7 @@ describe("注册与查询账号", () => {
     const syncB = await s.ok("GET", "/api/v1/sync?since=0", { token: b.phone.token });
     expect(syncB.environments).toHaveLength(0);
     // B 的令牌不能访问 A 的数据：令牌里的账号 ID 决定了路由目标。
-    const cross = await s.call("PATCH", `/api/v1/environments/${envA}`, { token: b.phone.token, body: { name: "x" } });
+    const cross = await s.call("PATCH", `/api/v1/vaults/${envA}`, { token: b.phone.token, body: { name: "x" } });
     expect(cross.status).toBe(404);
   });
 

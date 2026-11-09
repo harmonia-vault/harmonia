@@ -55,7 +55,7 @@ class _ActivationEditorState extends State<ActivationEditor> {
     for (final g in _grants) {
       if (!g.active || (g.expiresAt != 0 && g.expiresAt <= now)) continue;
       final name = widget.c.vault.environment(g.envId).name;
-      for (final v in widget.c.vault.cache.variables[g.envId]?.keys ?? const <String>[]) {
+      for (final v in widget.c.vault.environment(g.envId).items.map((i) => i.name)) {
         by.putIfAbsent(v, () => []).add(name);
       }
     }

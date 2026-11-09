@@ -31,32 +31,58 @@ type PairingRequest struct {
 	Authorized bool `json:"authorized"`
 }
 
+// Environment 是这台设备被授权的一个环境，Items 是服务端按引用展开的最终名字（docs/protocol.md 3.4）。
 type Environment struct {
-	ID         string `json:"id"`
-	Name       string `json:"name"`
-	KeyVersion string `json:"keyVersion"`
-	Role       string `json:"role"`
-	ExpiresAt  int64  `json:"expiresAt"`
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Role      string `json:"role"`
+	ExpiresAt int64  `json:"expiresAt"`
+	// LocalDecrypt 表示这个环境允许在本机解密：设备持有它引用的变量库的钥匙。
+	LocalDecrypt bool `json:"localDecrypt"`
 	// Active 与 Position 是授权上的激活状态和顺序（越小越靠前，同名变量由靠前的环境提供）。
-	Active   bool `json:"active"`
-	Position int  `json:"position"`
+	Active   bool      `json:"active"`
+	Position int       `json:"position"`
+	Items    []EnvItem `json:"items"`
+	Shadowed []EnvItem `json:"shadowed"`
+	// CreateVaults 是可以通过这个环境新增变量的变量库（全部变量、可以修改的引用）。
+	CreateVaults []string `json:"createVaults"`
+}
+
+// EnvItem 是环境里的一个变量：Name 是环境里的名字，Source 是变量库里的原名。
+type EnvItem struct {
+	Name     string `json:"name"`
+	VaultID  string `json:"vaultId"`
+	Source   string `json:"source"`
+	Writable bool   `json:"writable"`
+}
+
+// VaultName 是这台设备的环境引用到的变量库的名字。
+type VaultName struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// Vault 是这台设备可以在本机解密的变量库。
+type Vault struct {
+	ID         string `json:"id"`
+	KeyVersion string `json:"keyVersion"`
 }
 
 // ActivationItem 是提交激活状态时的一项，整个列表按顺序排列。
 type ActivationItem struct {
-	EnvID  string `json:"envId"`
+	EnvID  string `json:"environmentId"`
 	Active bool   `json:"active"`
 }
 
 type Envelope struct {
-	EnvID      string `json:"envId"`
+	VaultID    string `json:"vaultId"`
 	KeyVersion string `json:"keyVersion"`
 	Sealed     string `json:"sealed"`
 	Sig        string `json:"sig"`
 }
 
 type Variable struct {
-	EnvID      string `json:"envId"`
+	VaultID    string `json:"vaultId"`
 	Name       string `json:"name"`
 	Value      string `json:"value"`
 	KeyVersion string `json:"keyVersion"`
@@ -65,7 +91,9 @@ type Variable struct {
 }
 
 type Sync struct {
-	Seq  int64 `json:"seq"`
+	Seq int64 `json:"seq"`
+	// Full 表示 Variables 是范围内的完整列表，客户端用它整体替换缓存。
+	Full bool `json:"full"`
 	Self struct {
 		ID               string `json:"id"`
 		Kind             string `json:"kind"`
@@ -77,6 +105,8 @@ type Sync struct {
 		AutoUpdate bool `json:"autoUpdate"`
 	} `json:"self"`
 	Environments []Environment `json:"environments"`
+	VaultNames   []VaultName   `json:"vaultNames"`
+	Vaults       []Vault       `json:"vaults"`
 	Envelopes    []Envelope    `json:"envelopes"`
 	Variables    []Variable    `json:"variables"`
 	// Manager 只返回给管理设备。
@@ -89,7 +119,38 @@ type ManagerInfo struct {
 	Recovery   struct {
 		BoxPub string `json:"boxPub"`
 	} `json:"recovery"`
-	Devices []Device `json:"devices"`
+	Vaults       []ManagerVault `json:"vaults"`
+	Environments []ManagerEnv   `json:"environments"`
+	Devices      []Device       `json:"devices"`
+}
+
+// ManagerVault 是账号里的一个变量库。
+type ManagerVault struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	KeyVersion string `json:"keyVersion"`
+}
+
+// ManagerEnv 是账号里的一个环境和它的引用。
+type ManagerEnv struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Refs []Ref  `json:"refs"`
+}
+
+// Ref 是环境对一个变量库的引用（docs/protocol.md 3.2）。Missing 只出现在同步结果里，表示变量库已被删除。
+type Ref struct {
+	VaultID  string    `json:"vaultId"`
+	Scope    string    `json:"scope"`
+	Writable bool      `json:"writable"`
+	Items    []RefItem `json:"items"`
+	Missing  bool      `json:"missing,omitempty"`
+}
+
+// RefItem 是引用里的一个变量：Name 是变量库里的原名，As 是在环境里的新名字（空表示不改名）。
+type RefItem struct {
+	Name string `json:"name"`
+	As   string `json:"as,omitempty"`
 }
 
 type Device struct {
@@ -104,11 +165,13 @@ type Device struct {
 
 // DeviceGrant 是一台设备对一个环境的授权；ExpiresAt 为 0 表示一直有效。
 type DeviceGrant struct {
-	EnvID     string `json:"envId"`
-	ExpiresAt int64  `json:"expiresAt"`
+	EnvironmentID string `json:"environmentId"`
+	Role          string `json:"role"`
+	ExpiresAt     int64  `json:"expiresAt"`
+	LocalDecrypt  bool   `json:"localDecrypt"`
 }
 
-// NewEnvelope 是新建环境时提交的一份环境钥封装；Recipient 是设备 ID 或 recovery。
+// NewEnvelope 是提交的一份库钥封装；Recipient 是设备 ID 或 recovery。
 type NewEnvelope struct {
 	Recipient  string `json:"recipient"`
 	KeyVersion string `json:"keyVersion"`
@@ -177,8 +240,8 @@ type VarWrite struct {
 	Value string `json:"value"`
 }
 
-// PatchVariables 批量写入和删除一个环境里的变量（docs/protocol.md 3.2）：整批生效或整批拒绝。
-func (c *Client) PatchVariables(ctx context.Context, envID, keyVersion string, set []VarWrite, del []string, idemKey string) error {
+// PatchVariables 批量写入和删除一个变量库里的变量（docs/protocol.md 3.2）：整批生效或整批拒绝。
+func (c *Client) PatchVariables(ctx context.Context, vaultID, keyVersion string, set []VarWrite, del []string, idemKey string) error {
 	if set == nil {
 		set = []VarWrite{}
 	}
@@ -186,11 +249,11 @@ func (c *Client) PatchVariables(ctx context.Context, envID, keyVersion string, s
 		del = []string{}
 	}
 	body := map[string]any{"keyVersion": keyVersion, "set": set, "delete": del}
-	return c.DeviceWrite(ctx, "PATCH", "/api/v1/environments/"+envID+"/variables", body, nil, map[string]string{"idempotency-key": idemKey})
+	return c.DeviceWrite(ctx, "PATCH", "/api/v1/vaults/"+vaultID+"/variables", body, nil, map[string]string{"idempotency-key": idemKey})
 }
 
-func (c *Client) DeleteVariable(ctx context.Context, envID, name, idemKey string) error {
-	return c.DeviceWrite(ctx, "DELETE", "/api/v1/environments/"+envID+"/variables/"+name, nil, nil, map[string]string{"idempotency-key": idemKey})
+func (c *Client) DeleteVariable(ctx context.Context, vaultID, name, idemKey string) error {
+	return c.DeviceWrite(ctx, "DELETE", "/api/v1/vaults/"+vaultID+"/variables/"+name, nil, nil, map[string]string{"idempotency-key": idemKey})
 }
 
 func (c *Client) RevokeSelf(ctx context.Context) error {
@@ -202,13 +265,32 @@ func (c *Client) RevokeSelfManager(ctx context.Context, confirmLast bool) error 
 	return c.Device(ctx, "POST", "/api/v1/devices/self/revoke", map[string]any{"confirmLast": confirmLast}, nil, nil)
 }
 
-func (c *Client) CreateEnvironment(ctx context.Context, id, name string, envelopes []NewEnvelope) error {
+// CreateVault 新建变量库，envelopes 覆盖全部管理设备和恢复码。
+func (c *Client) CreateVault(ctx context.Context, id, name string, envelopes []NewEnvelope) error {
 	body := map[string]any{"id": id, "name": name, "envelopes": envelopes}
+	return c.Device(ctx, "POST", "/api/v1/vaults", body, nil, nil)
+}
+
+func (c *Client) RenameVault(ctx context.Context, id, name string) error {
+	return c.Device(ctx, "PATCH", "/api/v1/vaults/"+id, map[string]string{"name": name}, nil, nil)
+}
+
+func (c *Client) DeleteVault(ctx context.Context, id string) error {
+	return c.Device(ctx, "DELETE", "/api/v1/vaults/"+id, nil, nil, nil)
+}
+
+func (c *Client) CreateEnvironment(ctx context.Context, id, name string, refs []Ref) error {
+	body := map[string]any{"id": id, "name": name, "refs": refs}
 	return c.Device(ctx, "POST", "/api/v1/environments", body, nil, nil)
 }
 
-func (c *Client) RenameEnvironment(ctx context.Context, id, name string) error {
-	return c.Device(ctx, "PATCH", "/api/v1/environments/"+id, map[string]string{"name": name}, nil, nil)
+// PutEnvironment 整体替换环境的名字和引用；envelopes 是新引用的变量库给开启本机解密的设备的封装。
+func (c *Client) PutEnvironment(ctx context.Context, id, name string, refs []Ref, envelopes []NewEnvelope) error {
+	if envelopes == nil {
+		envelopes = []NewEnvelope{}
+	}
+	body := map[string]any{"name": name, "refs": refs, "envelopes": envelopes}
+	return c.Device(ctx, "PUT", "/api/v1/environments/"+id, body, nil, nil)
 }
 
 func (c *Client) DeleteEnvironment(ctx context.Context, id string) error {

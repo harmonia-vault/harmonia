@@ -13,10 +13,11 @@ import (
 	"strings"
 
 	"github.com/harmonia-vault/harmonia/cli/internal/app"
+	"golang.org/x/term"
 )
 
 func cmdVar(ctx context.Context, args []string) error {
-	f, err := parseFlags(args, "env=", "note=", "show")
+	f, err := parseFlags(args, "env=", "note=", "show", "yes")
 	if err != nil {
 		return err
 	}
@@ -33,9 +34,13 @@ func cmdVar(ctx context.Context, args []string) error {
 	switch f.args[0] {
 	case "set":
 		if len(f.args) < 3 || len(f.args) > 4 {
-			return errors.New("用法：harmonia var set <环境> <变量名> [值] [--note 备注]")
+			return errors.New("用法：harmonia var set <变量库|环境> <变量名> [值] [--note 备注] [--yes]。新增变量要指定变量库")
 		}
-		env, name := f.args[1], f.args[2]
+		target, name := f.args[1], f.args[2]
+		if !confirmWrite(a, target, name, false, f.bools["yes"]) {
+			fmt.Println("已取消。")
+			return nil
+		}
 		var ch app.VarChange
 		if note, ok := f.values["note"]; ok {
 			ch.Note = &note
@@ -49,7 +54,7 @@ func cmdVar(ctx context.Context, args []string) error {
 			}
 			ch.Value = &value
 		}
-		res, err := a.SetVariables(ctx, env, map[string]app.VarChange{name: ch}, false)
+		res, err := a.SetVariables(ctx, target, false, map[string]app.VarChange{name: ch}, false)
 		if err != nil && res == nil {
 			return err
 		}
@@ -60,7 +65,7 @@ func cmdVar(ctx context.Context, args []string) error {
 			return err
 		}
 		fmt.Printf("已写入 %s，回读校验一致。\n", name)
-		notes, err := a.Shadowing(env, name)
+		notes, err := a.Shadowing(target, name)
 		if err != nil {
 			return err
 		}
@@ -69,7 +74,11 @@ func cmdVar(ctx context.Context, args []string) error {
 		}
 	case "rm":
 		if len(f.args) != 3 {
-			return errors.New("用法：harmonia var rm <环境> <变量名>")
+			return errors.New("用法：harmonia var rm <变量库|环境> <变量名> [--yes]")
+		}
+		if !confirmWrite(a, f.args[1], f.args[2], true, f.bools["yes"]) {
+			fmt.Println("已取消。")
+			return nil
 		}
 		if err := a.DeleteVariable(ctx, f.args[1], f.args[2]); err != nil {
 			return err
@@ -81,13 +90,27 @@ func cmdVar(ctx context.Context, args []string) error {
 	return nil
 }
 
+// confirmWrite 在终端里修改或删除已有变量前确认：写的是变量库里的原变量，会影响所有引用它的环境。
+// 给了 --yes 或不在终端里运行时不询问，只提示。
+func confirmWrite(a *app.App, target, name string, del, yes bool) bool {
+	notice := a.WriteNotice(target, name, del)
+	if notice == "" {
+		return true
+	}
+	if yes || !term.IsTerminal(int(os.Stdin.Fd())) {
+		fmt.Fprintln(os.Stderr, "注意："+sentence(notice))
+		return true
+	}
+	return confirmYes(notice + "。继续吗？")
+}
+
 func cmdImport(ctx context.Context, args []string) error {
-	f, err := parseFlags(args, "env=", "file=", "format=", "json")
+	f, err := parseFlags(args, "vault=", "file=", "format=", "json")
 	if err != nil {
 		return err
 	}
-	if f.values["env"] == "" {
-		return errors.New("用法：harmonia import --env <环境> [--file 文件|-] [--format dotenv|json] [--json]")
+	if f.values["vault"] == "" {
+		return errors.New("用法：harmonia import --vault <变量库> [--file 文件|-] [--format dotenv|json] [--json]")
 	}
 	a, err := app.Load(true)
 	if err != nil {
@@ -114,7 +137,7 @@ func cmdImport(ctx context.Context, args []string) error {
 	for n, v := range vars {
 		changes[n] = app.VarChange{Value: &v}
 	}
-	res, err := a.SetVariables(ctx, f.values["env"], changes, true)
+	res, err := a.SetVariables(ctx, f.values["vault"], true, changes, true)
 	if res == nil {
 		return err
 	}
