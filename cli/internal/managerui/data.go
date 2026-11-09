@@ -31,19 +31,9 @@ func (s *Server) dataRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/vaults/list", op(s, func(_ context.Context, sess *manager.Session, _ none) (any, error) {
 		return map[string]any{"vaults": sess.Vaults()}, nil
 	}))
-	mux.HandleFunc("POST /api/vaults/create", op(s, func(ctx context.Context, sess *manager.Session, in struct {
-		Name    string
-		WithEnv bool
-	}) (any, error) {
-		id, envID, err := sess.CreateVault(ctx, in.Name, in.WithEnv)
-		if err != nil && id == "" {
-			return nil, err
-		}
-		out := map[string]string{"id": id, "envId": envID}
-		if err != nil {
-			out["warning"] = err.Error()
-		}
-		return out, nil
+	mux.HandleFunc("POST /api/vaults/create", op(s, func(ctx context.Context, sess *manager.Session, in struct{ Name string }) (any, error) {
+		id, err := sess.CreateVault(ctx, in.Name)
+		return map[string]string{"id": id}, err
 	}))
 	mux.HandleFunc("POST /api/vaults/rename", op(s, func(ctx context.Context, sess *manager.Session, in struct{ Vault, Name string }) (any, error) {
 		return nil, sess.RenameVault(ctx, in.Vault, in.Name)

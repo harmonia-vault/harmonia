@@ -38,7 +38,6 @@ class Prefs {
     this.updateChannel,
     this.developerOptions = false,
     Map<String, String>? approvalChoices,
-    this.localDecryptHintSeen = false,
   }) : approvalChoices = approvalChoices ?? {};
   String? server;
   String? email;
@@ -46,9 +45,6 @@ class Prefs {
 
   /// 每台电脑上次批准时的选择（设备 ID → ApprovalChoice.encode()）。
   final Map<String, String> approvalChoices;
-
-  /// 升级后“哪些电脑开启了本机解密”的提示已经看过（设计文档 17.3）。
-  bool localDecryptHintSeen;
 
   /// 在“关于”页连点版本号 5 次打开，设置页底部才出现开发者选项。
   bool developerOptions;
@@ -59,7 +55,6 @@ class Prefs {
     'updateChannel': updateChannel,
     'developerOptions': developerOptions,
     'approvalChoices': approvalChoices,
-    'localDecryptHintSeen': localDecryptHintSeen,
   };
   factory Prefs.fromJson(Map<String, dynamic> j) => Prefs(
     server: j['server'] as String?,
@@ -67,7 +62,6 @@ class Prefs {
     updateChannel: j['updateChannel'] as String?,
     developerOptions: j['developerOptions'] == true,
     approvalChoices: ((j['approvalChoices'] as Map?) ?? {}).cast<String, String>(),
-    localDecryptHintSeen: j['localDecryptHintSeen'] == true,
   );
 }
 
@@ -163,12 +157,6 @@ class AppController extends ChangeNotifier {
   Future<void> rememberApprovalChoice(String deviceId, ApprovalChoice choice) async {
     prefs.approvalChoices[deviceId] = choice.encode();
     await _savePrefs();
-  }
-
-  Future<void> markLocalDecryptHintSeen() async {
-    prefs.localDecryptHintSeen = true;
-    await _savePrefs();
-    notifyListeners();
   }
 
   Future<void> refreshApprovals() async {

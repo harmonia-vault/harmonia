@@ -390,7 +390,7 @@ func listApprovalVars(cache *state.Cache, e api.Environment, ov state.Overrides)
 	for _, p := range shadowProblems(cache, e) {
 		fmt.Println("  注意：" + sentence(p))
 	}
-	fmt.Printf("  这个环境没有开启本机解密，运行 harmonia exec --env %s -- <命令> 时会请求手机批准。\n", e.Name)
+	fmt.Printf("  用 harmonia exec --env %s -- <命令> 运行时会请求手机批准。\n", e.Name)
 }
 
 // approvalNote 说明 where（Shell 集成或用户环境变量）不包含没有开启本机解密的环境，没有这样的环境时返回空。
@@ -408,7 +408,7 @@ func approvalNote(a *app.App, where string) []string {
 	if len(names) == 0 {
 		return nil
 	}
-	return []string{fmt.Sprintf("环境%s没有开启本机解密，%s不包含它们的变量；用 harmonia exec 运行命令时会请求手机批准。", strings.Join(names, ""), where)}
+	return []string{fmt.Sprintf("环境%s需要手机批准，%s不包含它们的变量，请用 harmonia exec 运行命令。", strings.Join(names, ""), where)}
 }
 
 // printAuthorizations 列出正在生效的、经手机批准的授权。

@@ -93,8 +93,17 @@ class DebugVault extends Vault with DebugApprovals {
       'devices': [
         _device('debug-phone', '示例 iPhone', 'ios', 'manager', [], version: '0.4.5'),
         // 测试版渠道，有新版本可以更新。
+        // 一个开启本机解密的环境，一个 30 天后到期、没有激活的环境。
         _device('debug-computer', '开发电脑', 'windows', 'client', [
           Grant('debug-env-1', 'rw', 0),
+          Grant(
+            'debug-env-4',
+            'ro',
+            DateTime.now().add(const Duration(days: 30)).millisecondsSinceEpoch,
+            localDecrypt: false,
+            active: false,
+            position: 1,
+          ),
         ], version: '0.10.1-beta.1'),
         // 没有版本：还没升级到会上报版本的命令行，也不支持在手机上更新。没有开启本机解密。
         _device('debug-mac', '个人 Mac', 'darwin', 'client', [
@@ -293,17 +302,12 @@ class DebugVault extends Vault with DebugApprovals {
   }
 
   @override
-  Future<({String vaultId, String? envId})> createVault(String name, {bool withEnv = true}) async {
+  Future<String> createVault(String name) async {
     check();
     final id = 'debug-vault-${++_nextId}';
     _vaultList.add({'id': id, 'name': name.trim(), 'keyVersion': '1'});
-    String? envId;
-    if (withEnv) {
-      envId = 'debug-env-${++_nextId}';
-      _defs.add(EnvDef(envId, name.trim(), [EnvRef(id, 'all', writable: true)]));
-    }
     _rebuild();
-    return (vaultId: id, envId: envId);
+    return id;
   }
 
   @override
@@ -417,9 +421,10 @@ class DebugVault extends Vault with DebugApprovals {
   @override
   Future<void> updateGrants(DeviceInfo d, List<Grant> grants) async {
     check();
-    _findDevice(d.id).json['grants'] = grants
-        .map((g) => {...g.toJson(), 'active': g.active, 'position': g.position})
-        .toList();
+    // 与服务端一致：原有授权保留激活状态和顺序，新授权排在最后。
+    _findDevice(d.id).json['grants'] = [
+      for (final (i, g) in grants.indexed) {...g.toJson(), 'active': g.active, 'position': i},
+    ];
   }
 
   @override

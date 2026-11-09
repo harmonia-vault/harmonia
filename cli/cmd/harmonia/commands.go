@@ -359,7 +359,7 @@ func cmdLock(ctx context.Context, args []string) error {
 		fmt.Println("这台电脑上没有正在生效的授权。")
 		return nil
 	}
-	fmt.Printf("已结束 %d 项授权，之后使用没有开启本机解密的环境时需要重新在手机上批准。\n", n)
+	fmt.Printf("已结束 %d 项授权，之后使用时需要重新在手机上批准。\n", n)
 	return nil
 }
 

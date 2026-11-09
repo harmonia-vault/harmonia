@@ -1,4 +1,4 @@
-// 变量库详情（变量）、新建变量库，以及环境页和变量库页共用的变量列表。
+// 变量库详情（变量）、新建变量库，以及环境详情和变量库详情共用的变量列表。
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -7,7 +7,6 @@ import '../core/crypto.dart' show VarEntry;
 import 'app_scope.dart';
 import 'env_page.dart' show EnvironmentPage, refSummary;
 import 'glass.dart';
-import 'glass_controls.dart';
 import 'glass_overlays.dart';
 import 'list_row.dart';
 import 'theme.dart';
@@ -40,64 +39,14 @@ Future<String?> askName(BuildContext context, {required String title, String ini
   );
 }
 
-/// 新建变量库的弹窗：名字，以及是否同时创建引用它全部变量的同名环境（默认勾选）。
-Future<({String name, bool withEnv})?> askNewVault(BuildContext context) {
-  final ctl = TextEditingController();
-  var withEnv = true;
-  return showAppDialog<({String name, bool withEnv})>(
-    context: context,
-    useRootNavigator: false,
-    builder: (c) => StatefulBuilder(
-      builder: (c, setState) {
-        void submit() {
-          final name = ctl.text.trim();
-          Navigator.pop(c, name.isEmpty ? null : (name: name, withEnv: withEnv));
-        }
-
-        return AppAlertDialog(
-          title: const Text('新建变量库'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TextField(
-                controller: ctl,
-                autofillHints: null,
-                autofocus: true,
-                maxLength: 64,
-                decoration: const InputDecoration(labelText: '变量库名称', hintText: '例如 OpenAI'),
-                onSubmitted: (_) => submit(),
-              ),
-              AppCheckboxTile(
-                value: withEnv,
-                contentPadding: EdgeInsets.zero,
-                onChanged: (v) => setState(() => withEnv = v),
-                title: const Text('同时创建同名环境'),
-                subtitle: Text(
-                  tidy('电脑通过环境使用变量。只有一个项目时，用同名环境引用全部变量最省事。'),
-                  style: TextStyle(color: context.palette.mute, fontSize: 13),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(c), child: const Text('取消')),
-            FilledButton(onPressed: submit, child: const Text('创建')),
-          ],
-        );
-      },
-    ),
-  );
-}
-
 /// 新建变量库，成功后打开它。
 Future<void> createVaultFlow(BuildContext context, AppController c) async {
-  final input = await askNewVault(context);
-  if (input == null || !context.mounted) return;
+  final name = await askName(context, title: '新建变量库', label: '变量库名称');
+  if (name == null || !context.mounted) return;
   String? id;
   final ok = await runBusy(context, () async {
-    await c.guard(() async => id = (await c.vault.createVault(input.name, withEnv: input.withEnv)).vaultId);
-  }, done: input.withEnv ? '已创建变量库和同名环境' : '已创建变量库');
+    await c.guard(() async => id = await c.vault.createVault(name));
+  }, done: '已创建变量库');
   if (ok && id != null && context.mounted) {
     await Navigator.push(
       context,

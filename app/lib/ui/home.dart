@@ -1,4 +1,4 @@
-// 已接入后的主界面：环境 / 设备 / 设置。
+// 已接入后的主界面：变量库 / 环境 / 设备 / 设置。
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
@@ -10,6 +10,7 @@ import 'environments.dart';
 import 'settings.dart';
 import 'theme.dart';
 import 'glass.dart';
+import 'vaults_tab.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key, required this.c});
@@ -32,13 +33,14 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final c = widget.c;
-    final pages = [EnvironmentsTab(c: c), DevicesTab(c: c), SettingsTab(c: c)];
+    final pages = [VaultsTab(c: c), EnvironmentsTab(c: c), DevicesTab(c: c), SettingsTab(c: c)];
     final glass = usesGlass(context);
     final nav = _NavBar(
       selected: _tab,
       onSelect: (i) => setState(() => _tab = i),
       items: [
-        const _NavItem(Icons.inventory_2_outlined, Icons.inventory_2, '环境'),
+        const _NavItem(Icons.inventory_2_outlined, Icons.inventory_2, '变量库'),
+        const _NavItem(Icons.layers_outlined, Icons.layers, '环境'),
         _NavItem(Icons.devices_outlined, Icons.devices, '设备', badge: c.pendingPairingCount),
         const _NavItem(Icons.settings_outlined, Icons.settings, '设置'),
       ],
@@ -150,7 +152,12 @@ class _NavBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = context.palette;
     if (usesGlass(context)) {
-      const icons = [CupertinoIcons.square_stack_3d_up, CupertinoIcons.device_laptop, CupertinoIcons.gear_alt];
+      const icons = [
+        CupertinoIcons.archivebox,
+        CupertinoIcons.square_stack_3d_up,
+        CupertinoIcons.device_laptop,
+        CupertinoIcons.gear_alt,
+      ];
       // 保留库的完整交互，仅压低常规高度；大字号为文字增加空间。
       final barHeight = 60 + (MediaQuery.textScalerOf(context).scale(11) - 11).clamp(0, double.infinity) * 1.5;
       return _NavSafeArea(

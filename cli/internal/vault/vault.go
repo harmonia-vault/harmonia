@@ -154,7 +154,7 @@ func VaultEntries(c *state.Cache, k *state.DeviceKeys, vaultID string) (map[stri
 type ErrNeedApproval struct{ Env string }
 
 func (e *ErrNeedApproval) Error() string {
-	return fmt.Sprintf("环境“%s”没有开启本机解密，变量值要在手机上批准后才能使用：用 harmonia exec 或 export 时会自动请求", e.Env)
+	return fmt.Sprintf("环境“%s”的变量要在手机上批准后才能使用，harmonia exec、export 会自动请求", e.Env)
 }
 
 // Entries 解密一个环境的全部变量（值和备注），键是环境里的名字。解不开的变量不放进结果，

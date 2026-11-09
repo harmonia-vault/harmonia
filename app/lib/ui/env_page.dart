@@ -128,7 +128,7 @@ class _EnvironmentPageState extends State<EnvironmentPage> with LeaveWhenGone {
             EmptyState(
               icon: Icons.key_off_outlined,
               title: '这个环境还没有变量',
-              body: '环境里的变量来自它引用的变量库。编辑引用，选择要用的变量库和变量。',
+              body: '编辑引用，选择要用的变量库和变量。',
               action: FilledButton(onPressed: _editRefs, child: const Text('编辑引用')),
             )
           else
@@ -151,7 +151,7 @@ class _EnvironmentPageState extends State<EnvironmentPage> with LeaveWhenGone {
           if (env.items.isNotEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(Space.xs, Space.sm, Space.xs, 0),
-              child: Text(tidy('变量保存在变量库里，修改会影响所有用到它的环境。新增变量请到变量库里添加。'), style: TextStyle(color: p.mute, fontSize: 13)),
+              child: Text(tidy('修改会影响所有用到这个变量库的环境；新增变量请到变量库里添加。'), style: TextStyle(color: p.mute, fontSize: 13)),
             ),
           SectionTitle(
             '引用的变量库（${def?.refs.length ?? 0}）',
@@ -198,7 +198,7 @@ class _EnvironmentPageState extends State<EnvironmentPage> with LeaveWhenGone {
                       title: Text(d.name),
                       subtitle: Text(() {
                         final g = d.grants.firstWhere((g) => g.envId == env.id);
-                        final local = g.localDecrypt ? '允许本机解密' : '只能看到变量名';
+                        final local = g.localDecrypt ? '允许本机解密' : '需手机批准';
                         return '${roleNames[g.role]} · ${formatExpiry(g.expiresAt)} · $local';
                       }()),
                     ),

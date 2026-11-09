@@ -30,7 +30,7 @@ type response struct {
 }
 
 // errNotRunning 表示保管进程没有在运行。
-var errNotRunning = errors.New("保管进程没有在运行")
+var errNotRunning = errors.New("后台没有在运行")
 
 func call(dir string, req request) (*response, error) {
 	conn, err := net.DialTimeout("unix", SocketPath(dir), 2*time.Second)
@@ -44,7 +44,7 @@ func call(dir string, req request) (*response, error) {
 	}
 	var res response
 	if err := json.NewDecoder(conn).Decode(&res); err != nil {
-		return nil, errors.New("保管进程没有回应，可以运行 harmonia lock 后重试")
+		return nil, errors.New("后台没有回应，可以运行 harmonia lock 后重试")
 	}
 	if res.Error != "" {
 		return nil, errors.New(res.Error)
@@ -80,7 +80,7 @@ func Put(dir, bin string, a Auth) error {
 			return err
 		}
 	}
-	return errors.New("保管进程没能启动")
+	return errors.New("后台没能启动")
 }
 
 // List 列出保管进程持有的授权；没有在运行时返回空。

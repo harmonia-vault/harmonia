@@ -14,6 +14,7 @@ import 'about.dart';
 import 'ai_prompt.dart';
 import 'approval.dart';
 import 'auth_pages.dart';
+import 'device_grants.dart';
 import 'devices.dart';
 import 'device_review.dart';
 import 'env_editor.dart';
@@ -36,6 +37,7 @@ import 'widgets.dart';
 import 'theme.dart';
 import 'variable_edit.dart';
 import 'vaults.dart';
+import 'vaults_tab.dart';
 
 class DebugPageEntry {
   const DebugPageEntry(this.name, this.page, {this.stage = Stage.home, this.prepare, this.followStage = true});
@@ -51,7 +53,8 @@ Map<String, List<DebugPageEntry>> debugPages() => {
     DebugPageEntry('首页、底栏交互动效与系统间距', (s) => s.vault.paired ? HomePage(c: s.c) : SignInPage(c: s.c)),
     DebugPageEntry('玻璃透明度与折射对照', (s) => GlassDebugPage(c: s.c)),
     DebugPageEntry('通知默认动效与下载进度', (_) => const FeedbackDebugPage()),
-    DebugPageEntry('环境与变量库列表、新建菜单与行尾间距', (s) => EnvironmentsTab(c: s.c)),
+    DebugPageEntry('变量库列表、新建按钮与行尾间距', (s) => VaultsTab(c: s.c)),
+    DebugPageEntry('环境列表、新建按钮与行尾间距', (s) => EnvironmentsTab(c: s.c)),
     DebugPageEntry('设备列表、添加设备菜单与行尾间距', (s) => s.vault.paired ? DevicesTab(c: s.c) : SignInPage(c: s.c)),
     DebugPageEntry('设置、白色滑块与输入弹窗', (s) => s.vault.paired ? SettingsTab(c: s.c) : SignInPage(c: s.c)),
     DebugPageEntry('关于、连点版本号与开源许可', (s) => AboutPage(c: s.c)),
@@ -72,7 +75,21 @@ Map<String, List<DebugPageEntry>> debugPages() => {
       '无法解密的变量（删除或重新填写）',
       (s) => _vault(s, (id) => VariableEditPage(c: s.c, vaultId: id, name: s.vault.brokenVariables(id).firstOrNull)),
     ),
-    DebugPageEntry('设备详情与权限', (s) => _devicePage(s, 'debug-computer')),
+    DebugPageEntry('设备详情：已授权的环境、本机解密标记、激活开关与拖动排序', (s) => _devicePage(s, 'debug-computer')),
+    DebugPageEntry(
+      '环境授权面板：改权限和有效期、开启本机解密的确认、取消授权',
+      (s) => DebugOverlay(
+        background: _devicePage(s, 'debug-computer'),
+        show: (c) => editDeviceGrant(c, s.c, 'debug-computer', 'debug-env-4'),
+      ),
+    ),
+    DebugPageEntry(
+      '添加环境：只列还没授权的，默认只读、长期有效',
+      (s) => DebugOverlay(
+        background: _devicePage(s, 'debug-computer'),
+        show: (c) => addDeviceGrant(c, s.c, 'debug-computer'),
+      ),
+    ),
     DebugPageEntry('电脑版本与更新：有新版本、让电脑更新、自动更新', (s) => _devicePage(s, 'debug-computer')),
     DebugPageEntry('电脑版本与更新：已是最新、后台服务不在线', (s) => _devicePage(s, 'debug-linux')),
     DebugPageEntry('电脑版本与更新：版本未知、不支持在手机上更新', (s) => _devicePage(s, 'debug-mac')),
@@ -80,17 +97,16 @@ Map<String, List<DebugPageEntry>> debugPages() => {
     DebugPageEntry('生成配对码与剩余时间', (s) => DebugOverlay(show: (c) => showPairingCode(c, s.c))),
     DebugPageEntry('复制 AI 安装提示词（仅服务器或含邮箱和配对码）', (s) => DebugOverlay(show: (c) => showAiPrompt(c, s.c))),
     DebugPageEntry(
-      '批准与拒绝设备（用配对码发起）',
+      '批准与拒绝设备（用配对码发起，添加环境并设置授权）',
       (s) => s.vault.requests.isEmpty
           ? const Center(child: Text('当前没有待批准请求，请重置示例。'))
           : ReviewPairingPage(c: s.c, request: s.vault.requests.first, scanned: false),
     ),
     DebugPageEntry(
-      '设备列表：电脑的批准请求、本机解密提示',
+      '设备列表：电脑的批准请求',
       (s) => DevicesTab(c: s.c),
       prepare: (s) async {
         s.c.approvals = await s.vault.pendingApprovals();
-        s.c.prefs.localDecryptHintSeen = false;
       },
     ),
     DebugPageEntry('批准使用变量：请求码、命令、按环境列出、有效时长与范围', (s) => _approval(s, debugApproval())),
@@ -190,10 +206,10 @@ Map<String, List<DebugPageEntry>> debugPages() => {
       '首页新建变量库、遮罩与键盘弹出避让',
       (s) => DebugOverlay(
         background: HomePage(c: s.c),
-        show: (c) => askNewVault(c),
+        show: (c) => askName(c, title: '新建变量库', label: '变量库名称'),
       ),
     ),
-    DebugPageEntry('新建变量库弹窗（同时创建同名环境）', (s) => DebugOverlay(show: (c) => createVaultFlow(c, s.c))),
+    DebugPageEntry('新建变量库，创建后打开它', (s) => DebugOverlay(show: (c) => createVaultFlow(c, s.c))),
     DebugPageEntry(
       '重命名弹窗',
       (s) => DebugOverlay(
