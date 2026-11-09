@@ -358,9 +358,8 @@ class Vault with VaultDevices, VaultApprovals, VaultEnvironments, VaultRecovery 
         if (!r.missing) r.vaultId,
   };
 
-  /// 新建变量库：生成库钥，封装给全部管理设备（先校验设备证书）和恢复码。[withEnv] 时同时新建一个同名环境，
-  /// 引用它的全部变量并允许修改（设计文档 17.1）。返回变量库 ID 和环境 ID。
-  Future<({String vaultId, String? envId})> createVault(String name, {bool withEnv = true}) async {
+  /// 新建变量库：生成库钥，封装给全部管理设备（先校验设备证书）和恢复码，返回变量库 ID（设计文档 17.1）。
+  Future<String> createVault(String name) async {
     _root();
     final id = crypto.newId();
     final key = crypto.random(32);
@@ -371,21 +370,8 @@ class Vault with VaultDevices, VaultApprovals, VaultEnvironments, VaultRecovery 
     final rec = cache.manager!['recovery'] as Map;
     envelopes.add(_envelope(id, 1, 'recovery', unb64(rec['boxPub'] as String), key));
     await api!.device('POST', '/api/v1/vaults', body: {'id': id, 'name': name.trim(), 'envelopes': envelopes});
-    String? envId;
-    if (withEnv) {
-      envId = crypto.newId();
-      await api!.device(
-        'POST',
-        '/api/v1/environments',
-        body: {
-          'id': envId,
-          'name': name.trim(),
-          'refs': [EnvRef(id, 'all', writable: true).toJson()],
-        },
-      );
-    }
     await sync();
-    return (vaultId: id, envId: envId);
+    return id;
   }
 
   Future<void> renameVault(String id, String name) async {

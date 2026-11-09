@@ -3,16 +3,15 @@ import 'package:flutter/material.dart';
 
 import '../app/controller.dart';
 import '../core/models.dart';
-import 'activation.dart';
 import 'approval.dart' show AuthorizationsSection;
 import 'approval_list.dart';
+import 'device_grants.dart';
 import 'device_update.dart';
 import 'vaults.dart' show askName;
 import 'lock.dart';
 import 'pairing.dart';
 import 'theme.dart';
 import 'glass.dart';
-import 'glass_controls.dart';
 import 'widgets.dart';
 import 'list_row.dart';
 
@@ -126,7 +125,6 @@ class _DevicesTabState extends State<DevicesTab> {
       },
       padding: const EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, 96),
       children: [
-        LocalDecryptHint(c: c),
         if (_pending.isNotEmpty || c.approvals.isNotEmpty) ...[
           const SectionTitle('等待批准'),
           PendingApprovals(c: c),
@@ -167,145 +165,6 @@ class _DevicesTabState extends State<DevicesTab> {
   }
 }
 
-const _expiryChoices = <String, Duration?>{
-  '长期有效': null,
-  '1 天': Duration(days: 1),
-  '7 天': Duration(days: 7),
-  '30 天': Duration(days: 30),
-  '90 天': Duration(days: 90),
-};
-
-int expiryFrom(String label) {
-  final d = _expiryChoices[label];
-  return d == null ? 0 : DateTime.now().add(d).millisecondsSinceEpoch;
-}
-
-/// 编辑一台电脑对各环境的权限。null 表示无权限。
-/// 新授权的环境默认不允许本机解密：电脑每次用变量时在手机上批准（设计文档 17.2）。
-const defaultLocalDecrypt = false;
-
-/// “允许本机解密”开关下方的说明（设计文档 17.2）。
-const localDecryptRisk =
-    '开启后，这个环境用到的变量库钥匙会保存在这台电脑上。能读取你文件的程序，或拿到这台电脑数据目录的人，'
-    '可以解开这些变量库里的全部变量（包括这个环境没有选中的）。适合服务器、CI 等无法等待手机批准的场合。';
-const localDecryptOff = '关闭时，电脑每次用到这个环境的变量，都要在手机上批准。';
-
-class GrantEditor extends StatelessWidget {
-  const GrantEditor({
-    super.key,
-    required this.envs,
-    required this.roles,
-    required this.expiry,
-    required this.local,
-    required this.onChanged,
-  });
-  final List<Environment> envs;
-  final Map<String, String?> roles;
-  final Map<String, String> expiry;
-
-  /// 每个环境的“允许本机解密”。
-  final Map<String, bool> local;
-  final VoidCallback onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final glass = usesGlass(context);
-    // 左右边距和标题字号与同页的列表行一致；分隔线从内容起点开始。
-    final inset = glass ? 18.0 : Space.lg;
-    final titleStyle = Theme.of(context).listTileTheme.titleTextStyle ?? Theme.of(context).textTheme.titleMedium;
-    return Card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (final (i, e) in envs.indexed) ...[
-            if (i > 0) Divider(indent: inset),
-            Padding(
-              // 名字行比文字高出一截，上边距少留一点，看上去与下边距一致。
-              padding: EdgeInsets.fromLTRB(inset, 10, inset, 14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // 有效期跟在环境名右侧；行高固定为选择框的高度，切换“无”时下面的权限行不跳动。
-                  SizedBox(
-                    height: 32,
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(e.name, style: titleStyle, overflow: TextOverflow.ellipsis),
-                        ),
-                        if (roles[e.id] != null)
-                          // 玻璃菜单的触发处左右各有 8 的按压余量，向右挪回，让文字与权限分段的右边缘对齐。
-                          Transform.translate(
-                            offset: Offset(glass ? 8 : 0, 0),
-                            child: AppSelect<String>(
-                              semanticLabel: '“${e.name}”的有效期',
-                              value: expiry[e.id] ?? '长期有效',
-                              options: [
-                                for (final k in {..._expiryChoices.keys, if (expiry[e.id] != null) expiry[e.id]!})
-                                  (value: k, label: k),
-                              ],
-                              onChanged: (v) {
-                                expiry[e.id] = v;
-                                onChanged();
-                              },
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: Space.sm),
-                  AppSegmented<String>(
-                    options: const [
-                      (value: 'none', label: '无'),
-                      (value: 'ro', label: '只读'),
-                      (value: 'rw', label: '读写'),
-                    ],
-                    value: roles[e.id] ?? 'none',
-                    onChanged: (v) {
-                      if (roles[e.id] == null) local.putIfAbsent(e.id, () => defaultLocalDecrypt);
-                      roles[e.id] = v == 'none' ? null : v;
-                      onChanged();
-                    },
-                  ),
-                  if (roles[e.id] != null) ...[
-                    const SizedBox(height: Space.sm),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('允许本机解密'),
-                              const SizedBox(height: 2),
-                              Text(
-                                tidy((local[e.id] ?? defaultLocalDecrypt) ? localDecryptRisk : localDecryptOff),
-                                style: TextStyle(color: context.palette.mute, fontSize: 13),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: Space.md),
-                        AppSwitch(
-                          value: local[e.id] ?? defaultLocalDecrypt,
-                          onChanged: (v) {
-                            local[e.id] = v;
-                            onChanged();
-                          },
-                        ),
-                      ],
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
 class DevicePage extends StatefulWidget {
   const DevicePage({super.key, required this.c, required this.deviceId});
   final AppController c;
@@ -315,56 +174,9 @@ class DevicePage extends StatefulWidget {
 }
 
 class _DevicePageState extends State<DevicePage> {
-  Map<String, String?>? _roles;
-  final _expiry = <String, String>{};
-  final _local = <String, bool>{};
-  bool _dirty = false;
-
   AppController get c => widget.c;
 
   DeviceInfo? get _device => c.vault.devices.where((d) => d.id == widget.deviceId).firstOrNull;
-
-  void _reset(DeviceInfo d) {
-    _roles = {for (final g in d.grants) g.envId: g.role};
-    _local
-      ..clear()
-      ..addAll({for (final g in d.grants) g.envId: g.localDecrypt});
-    _expiry.clear();
-    for (final g in d.grants) {
-      if (g.expiresAt != 0) _expiry[g.envId] = formatExpiry(g.expiresAt);
-    }
-    _dirty = false;
-  }
-
-  Future<void> _save(DeviceInfo d) async {
-    final grants = <Grant>[];
-    for (final e in c.vault.environments) {
-      final role = _roles![e.id];
-      if (role == null) continue;
-      final label = _expiry[e.id] ?? '长期有效';
-      final old = d.grants.where((g) => g.envId == e.id).firstOrNull;
-      final expiresAt = _expiryChoices.containsKey(label) ? expiryFrom(label) : (old?.expiresAt ?? 0);
-      grants.add(Grant(e.id, role, expiresAt, localDecrypt: _local[e.id] ?? defaultLocalDecrypt));
-    }
-    // 新开启本机解密时说明风险，再验证身份（设计文档 17.2）。
-    final turnedOn = grants.where((g) => g.localDecrypt && !(_grantOf(d, g.envId)?.localDecrypt ?? false)).toList();
-    if (turnedOn.isNotEmpty) {
-      final names = turnedOn.map((g) => '“${c.vault.environment(g.envId).name}”').join('、');
-      final ok = await confirmDialog(
-        context,
-        title: '允许“${d.name}”在本机解密？',
-        body: '涉及 $names。\n$localDecryptRisk',
-        ok: '允许',
-      );
-      if (!ok || !mounted) return;
-    }
-    if (!await confirmIdentity(context, '验证身份以修改“${d.name}”的权限')) return;
-    if (!mounted) return;
-    final ok = await runBusy(context, () => c.guard(() => c.vault.updateGrants(d, grants)), done: '权限已更新');
-    if (ok && mounted) setState(() => _reset(_device!));
-  }
-
-  Grant? _grantOf(DeviceInfo d, String envId) => d.grants.where((g) => g.envId == envId).firstOrNull;
 
   Future<void> _revoke(DeviceInfo d) async {
     final me = d.id == c.vault.config!.deviceId;
@@ -406,7 +218,6 @@ class _DevicePageState extends State<DevicePage> {
   Widget build(BuildContext context) {
     final d = _device;
     if (d == null) return const Scaffold(body: Center(child: Text('设备已被移除')));
-    if (_roles == null) _reset(d);
     final me = d.id == c.vault.config!.deviceId;
     return AppPage(
       appBar: AppBarSurface(
@@ -445,20 +256,7 @@ class _DevicePageState extends State<DevicePage> {
             ),
           ),
           if (!d.isManager) ...[
-            const SectionTitle('环境权限'),
-            if (c.vault.environments.isEmpty)
-              const Banner2('还没有环境。')
-            else
-              GrantEditor(
-                envs: c.vault.environments,
-                roles: _roles!,
-                expiry: _expiry,
-                local: _local,
-                onChanged: () => setState(() => _dirty = true),
-              ),
-            const SizedBox(height: Space.lg),
-            FilledButton(onPressed: _dirty ? () => _save(d) : null, child: const Text('保存权限')),
-            if (d.grants.isNotEmpty) ActivationEditor(c: c, device: d),
+            DeviceGrants(c: c, deviceId: d.id),
             AuthorizationsSection(c: c, device: d),
             CliUpdateSection(c: c, deviceId: d.id),
             if (d.platform == 'windows') ...[

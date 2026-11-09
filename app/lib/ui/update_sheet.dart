@@ -1,8 +1,8 @@
 // 发现新版本时的底部面板：版本、更新内容、接下来怎么做，以及一到两个操作。Android 与 iOS 共用。
 import 'package:flutter/material.dart';
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
 import 'app_icon.dart';
+import 'app_sheet.dart';
 import 'theme.dart';
 import 'glass.dart';
 import 'widgets.dart';
@@ -31,60 +31,16 @@ Future<UpdateChoice?> showUpdateSheet(
   required String primary,
   String? secondary,
 }) {
-  final contentKey = GlobalKey();
-  return showModalBottomSheet<UpdateChoice>(
-    context: context,
-    isScrollControlled: true,
-    // 内容多的时候面板会很高，留出状态栏的位置。
-    useSafeArea: true,
-    showDragHandle: !usesGlass(context),
-    backgroundColor: usesGlass(context) ? Colors.transparent : context.palette.paper,
-    barrierColor: usesGlass(context) ? glassBarrierColor(context) : null,
-    sheetAnimationStyle: MediaQuery.disableAnimationsOf(context) ? AnimationStyle.noAnimation : null,
-    builder: (c) {
-      final content = _UpdateSheet(
-        version: version,
-        current: current,
-        notes: _parseNotes(notes),
-        hint: hint,
-        primary: primary,
-        secondary: secondary,
-      );
-      if (!usesGlass(c)) return content;
-      return GlassMaterializeTransition(
-        animation: ModalRoute.of(c)!.animation!,
-        // 面板已由系统路由滑入，不再叠加缩放；材质与内容同步渐显。
-        scaleFrom: 1,
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(12, 12, 12, MediaQuery.paddingOf(c).bottom + 12),
-          child: AppSurface(
-            color: c.palette.card,
-            radius: 36,
-            panel: true,
-            child: RepaintBoundary(
-              key: contentKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    child: Container(
-                      width: 32,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: c.palette.mute.withValues(alpha: 0.4),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
-                  Flexible(child: content),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-    },
+  return showAppSheet<UpdateChoice>(
+    context,
+    builder: (_) => _UpdateSheet(
+      version: version,
+      current: current,
+      notes: _parseNotes(notes),
+      hint: hint,
+      primary: primary,
+      secondary: secondary,
+    ),
   );
 }
 

@@ -414,10 +414,11 @@ grep -q "signSeed\|boxSeed" "$TMP/cli/manager.json" && fail "管理身份的密�
 [ -f "$TMP/cli/keys.json" ] || fail "管理登录不应影响日常登录"
 ENVS=$(mapi /api/envs/list)
 for e in OpenAI Other FromPhone2; do printf %s "$ENVS" | grep -q "\"name\":\"$e\"" || fail "管理页面看不到环境 $e：$ENVS"; done
-CREATED=$(mapi /api/vaults/create '{"name":"FromComputer","withEnv":true}')
-NEWVAULT=$(printf %s "$CREATED" | field id)
-NEWENV=$(printf %s "$CREATED" | field envId)
-[ -n "$NEWVAULT" ] && [ -n "$NEWENV" ] || fail "电脑没能新建变量库和同名环境：$CREATED"
+NEWVAULT=$(mapi /api/vaults/create '{"name":"FromComputer"}' | field id)
+[ -n "$NEWVAULT" ] || fail "电脑没能新建变量库"
+expect_eq "$(mapi /api/envs/list | grep -c '"name":"FromComputer"' || true)" "0" "新建变量库不应同时建环境"
+NEWENV=$(mapi /api/envs/create '{"name":"FromComputer","refs":[{"vaultId":"'$NEWVAULT'","scope":"all","writable":true}]}' | field id)
+[ -n "$NEWENV" ] || fail "电脑没能新建引用新变量库的环境"
 B_ENV='{"env":"'$NEWENV'"}'
 B_VAULT='{"vault":"'$NEWVAULT'"}'
 IMPORT='{"vault":"'$NEWVAULT'","text":"# 注释\nA=1\nB=\"two words\"\nexport C='"'"'x y'"'"'\n1BAD=x\n","names":["A","B","C"]}'

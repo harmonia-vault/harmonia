@@ -115,7 +115,7 @@ func (a *App) remote(ctx context.Context, cache *state.Cache, picks []vault.Pick
 			err = keeper.Put(a.Dir.Path, bin, keeper.Auth{ID: g.RequestID, Scope: g.Scope, ExpiresAt: g.ExpiresAt, Values: vals})
 		}
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "harmonia：没能把批准的变量交给保管进程（%v），下次使用时需要重新批准。\n", err)
+			fmt.Fprintf(os.Stderr, "harmonia：没能在后台保存批准的变量（%v），下次使用时需要重新批准。\n", err)
 		}
 	}
 	return out, nil

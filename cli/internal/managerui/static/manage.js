@@ -74,7 +74,7 @@ export function manageView(st, apply) {
 
   async function createVault() {
     const r = await vaultDialog();
-    if (r) select(r.envId ? { kind: 'env', id: r.envId } : { kind: 'vault', id: r.id });
+    if (r) select({ kind: 'vault', id: r.id });
   }
 
   async function createEnv() {
@@ -118,7 +118,7 @@ export function manageView(st, apply) {
     if (vaults.length === 0) {
       return mount(main, h('div', { class: 'blank' }, glyph('file', 96),
         h('h1', { text: '先建一个变量库' }),
-        h('p', { text: '变量库保存变量，例如“OpenAI”“博客生产”。环境引用变量库里的变量，再到手机上决定哪些电脑可以使用哪个环境。新建变量库时默认会同时建好同名环境。' }),
+        h('p', { text: '变量库保存变量，例如“OpenAI”“博客生产”。环境引用变量库里的变量，再到手机上决定哪些电脑可以使用哪个环境。' }),
         labeled('plus', '新建变量库', { class: 'primary big', onclick: createVault })));
     }
     return mount(main, h('div', { class: 'blank' }, glyph('file', 96),

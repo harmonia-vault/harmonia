@@ -19,8 +19,8 @@ void main() {
   tearDown(() => vault.close());
 
   test('变量库、环境与变量的增改删跨次读取一致，删除环境同时撤销设备引用', () async {
-    final created = await vault.createVault('新的示例');
-    final id = created.vaultId, envId = created.envId!;
+    final id = await vault.createVault('新的示例');
+    final envId = await vault.createEnvironment('新的示例', [EnvRef(id, 'all', writable: true)]);
     await vault.setVariable(id, 'TOKEN', 'demo-only', '');
     await vault.setVariable(id, 'TOKEN', 'changed', '  用途说明  ');
     await vault.renameVault(id, '已改名');
@@ -32,7 +32,9 @@ void main() {
     expect(vault.entries(id)['TOKEN']!.note, '用途说明');
     expect(vault.environment(envId).items.single.name, 'TOKEN');
     expect(vault.devices.last.grants.single.envId, envId);
-    await vault.saveEnvironment(envId, '改名后的环境', [EnvRef(id, 'all', items: const [RefItem('TOKEN', 'RENAMED')])]);
+    await vault.saveEnvironment(envId, '改名后的环境', [
+      EnvRef(id, 'all', items: const [RefItem('TOKEN', 'RENAMED')]),
+    ]);
     expect(vault.envEntries(envId).keys, ['RENAMED']);
     await vault.deleteVariable(id, 'TOKEN');
     expect(values(vault, id), isEmpty);

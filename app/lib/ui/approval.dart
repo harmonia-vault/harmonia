@@ -132,7 +132,7 @@ class _ApprovalPageState extends State<ApprovalPage> {
           ),
           if (_gone) ...[
             const SizedBox(height: Space.lg),
-            const Banner2('这次请求已失效：电脑上已取消或等待超过 2 分钟，也可能已在另一台管理设备上处理。\n需要时请在电脑上重新运行命令。', warn: true),
+            const Banner2('请求已失效：电脑已取消或超时，或已在其他管理设备上处理。需要时在电脑上重新运行命令。', warn: true),
             const SizedBox(height: Space.xl),
             FilledButton(onPressed: () => Navigator.pop(context), child: const Text('关闭')),
           ] else
@@ -146,11 +146,11 @@ class _ApprovalPageState extends State<ApprovalPage> {
     final blocked = _problem ?? _writeError;
     return [
       const SizedBox(height: Space.lg),
-      const Text('请求码（要和电脑上显示的一致）'),
+      const Text('请求码'),
       const SizedBox(height: Space.sm),
       CodeBox(a.code, copyable: false),
       const SizedBox(height: Space.sm),
-      const Banner2('只批准你刚刚在电脑上发起的请求。不是你发起的，或者请求码对不上，请点“拒绝”。', warn: true),
+      const Banner2('确认是你刚在电脑上发起的、请求码一致，再批准。', warn: true),
       const SectionTitle('请求'),
       Card(
         child: Column(
@@ -240,14 +240,14 @@ class _ApprovalPageState extends State<ApprovalPage> {
           ),
         ),
       const SizedBox(height: Space.sm),
-      Text('写入的是变量库里的原变量，所有引用它的环境都会看到新值。写入请求每次都要批准。', style: _muted(context)),
+      Text('改的是变量库里的原变量，引用它的环境都会受影响。', style: _muted(context)),
     ];
   }
 
   List<Widget> _options() {
     final current = _choice.duration;
     return [
-      const SectionTitle('有效时长'),
+      const SizedBox(height: Space.lg),
       Card(
         child: ListTile(
           title: const Text('有效时长'),
@@ -261,13 +261,13 @@ class _ApprovalPageState extends State<ApprovalPage> {
             ],
             onChanged: _pickDuration,
           ),
-          subtitle: Text(current.isForever ? '电脑重启或退出登录后需要重新批准' : (current.isOnce ? '只用于这一次运行' : '期间再用这些变量不用再批准')),
+          subtitle: Text(current.isForever ? '到电脑重启或退出登录为止' : (current.isOnce ? '只用于这一次运行' : '期间不再询问')),
         ),
       ),
       if (!current.isOnce) ...[
         const SectionTitle('授权范围'),
         if (_windows)
-          const Banner2('Windows 上暂时无法区分终端，只能授权给这台电脑上的所有程序。')
+          const Banner2('Windows 上只能授权给这台电脑上的所有程序。')
         else
           AppSegmented<String>(
             options: const [(value: scopeTerminal, label: '仅这个终端'), (value: scopeAll, label: '这台电脑上的所有程序')],
@@ -275,12 +275,7 @@ class _ApprovalPageState extends State<ApprovalPage> {
             onChanged: (s) => setState(() => _choice = ApprovalChoice(current, s)),
           ),
         const SizedBox(height: Space.sm),
-        Text(
-          _choice.scope == scopeAll
-              ? '用于 IDE、AI 工具这类不在终端里运行的程序。有效期内这台电脑上的程序都能使用这些变量。'
-              : '只有发起请求的那个终端里的程序能用，终端关闭后授权随之结束。',
-          style: _muted(context),
-        ),
+        Text(_choice.scope == scopeAll ? '这台电脑上的程序都能用，适合 IDE、AI 工具。' : '只在发起请求的终端里有效，关闭终端即结束。', style: _muted(context)),
       ],
     ];
   }
@@ -401,7 +396,7 @@ class _AuthorizationsSectionState extends State<AuthorizationsSection> {
           ),
         ),
         const SizedBox(height: Space.sm),
-        Text('结束后电脑上的保管进程会丢掉这些变量；电脑不在线时，要等它下次连上服务器才结束。', style: _muted(context)),
+        Text('电脑离线时，要等它重新联网才会结束。', style: _muted(context)),
       ],
     );
   }

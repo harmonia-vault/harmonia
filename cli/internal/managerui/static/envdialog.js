@@ -4,11 +4,10 @@ import { field, h, iconButton, labeled, modal, mount, run, toast } from './dom.j
 
 const NAME_RE = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
 
-// vaultDialog 新建变量库，默认同时新建同名环境；返回 { id, envId }。
+// vaultDialog 新建变量库；返回 { id }。
 export function vaultDialog() {
   return modal('新建变量库', (close) => {
     const input = h('input', { type: 'text', maxLength: 64, required: true, placeholder: '例如：OpenAI、博客生产' });
-    const withEnv = h('input', { type: 'checkbox', checked: true });
     const error = h('p', { class: 'error', role: 'alert' });
     const submit = h('button', { class: 'primary', type: 'submit', text: '新建' });
     setTimeout(() => input.focus());
@@ -17,16 +16,11 @@ export function vaultDialog() {
       onsubmit: (ev) => {
         ev.preventDefault();
         run(submit, '正在新建……', error, async () => {
-          const r = await call('/api/vaults/create', { name: input.value, withEnv: withEnv.checked });
-          if (r.warning) toast(r.warning, 'error');
-          close(r);
+          close(await call('/api/vaults/create', { name: input.value }));
         });
       },
     },
-    h('p', { class: 'mute', text: '变量库保存变量。电脑通过环境拿到变量库里的变量，所以通常还要有一个引用它的环境。' }),
     field('变量库名', input),
-    h('label', { class: 'check' }, withEnv, h('span', {}, h('b', { text: '同时创建同名环境' }),
-      h('span', { class: 'hint', text: '引用这个变量库的全部变量，可以修改。之后在手机上把这个环境授权给电脑即可使用。' }))),
     error,
     h('div', { class: 'actions' }, h('button', { type: 'button', text: '取消', onclick: () => close() }), submit));
   });

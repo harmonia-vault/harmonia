@@ -101,12 +101,13 @@ Future<void> main(List<String> argv) async {
       await vault.adopt(await account.completeSetup(await loadRegistration(), draft, opt('name', '测试手机')));
       print(draft.formattedCode);
     case 'env-create':
-      // 新建变量库和同名环境（引用全部变量，可以修改），和 App 里的默认做法相同。
-      final r = await (await loaded()).createVault(args[0]);
-      print(r.envId);
+      // 新建变量库和引用它全部变量、可以修改的同名环境，测试里常用的一步准备。
+      final v = await loaded();
+      final id = await v.createVault(args[0]);
+      print(await v.createEnvironment(args[0], [EnvRef(id, 'all', writable: true)]));
     case 'vault-create':
       // 只建变量库。
-      print((await (await loaded()).createVault(args[0], withEnv: false)).vaultId);
+      print(await (await loaded()).createVault(args[0]));
     case 'env-define':
       // env-define <环境名> <引用...>：环境不存在时新建，存在时整体替换引用。
       final v = await loaded();

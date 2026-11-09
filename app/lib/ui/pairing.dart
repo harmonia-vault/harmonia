@@ -6,7 +6,9 @@ import '../core/api.dart';
 import '../core/crypto.dart';
 import '../core/models.dart';
 import 'ai_prompt.dart';
-import 'devices.dart' show GrantEditor, defaultLocalDecrypt, expiryFrom, platformIcon, platformName;
+import 'device_grants.dart';
+import 'devices.dart' show platformIcon, platformName;
+import 'grant_sheet.dart';
 import 'lock.dart';
 import 'pairing_code.dart';
 import 'scanner.dart';
@@ -141,9 +143,7 @@ class ReviewPairingPage extends StatefulWidget {
 class _ReviewPairingPageState extends State<ReviewPairingPage> {
   late bool _manager = widget.request.canManage;
   late bool _matched = widget.scanned;
-  final _roles = <String, String?>{};
-  final _expiry = <String, String>{};
-  final _local = <String, bool>{};
+  final _drafts = <String, GrantDraft>{};
 
   /// 请求曾出现在待批准列表中；之后从列表消失，说明对方已离开或请求已被处理。
   late bool _listed = _inList;
@@ -183,16 +183,7 @@ class _ReviewPairingPageState extends State<ReviewPairingPage> {
   }, done: done);
 
   Future<void> _approve() async {
-    final grants = [
-      for (final e in widget.c.vault.environments)
-        if (_roles[e.id] != null)
-          Grant(
-            e.id,
-            _roles[e.id]!,
-            expiryFrom(_expiry[e.id] ?? '长期有效'),
-            localDecrypt: _local[e.id] ?? defaultLocalDecrypt,
-          ),
-    ];
+    final grants = [for (final MapEntry(key: id, value: d) in _drafts.entries) grantFrom(id, d, null)];
     if (!_manager && grants.isEmpty) {
       final ok = await confirmDialog(context, title: '不授权任何环境？', body: '这台设备接入后暂时无法访问任何变量，之后可以在设备详情中调整。', ok: '仍然批准');
       if (!ok) return;
@@ -299,7 +290,7 @@ class _ReviewPairingPageState extends State<ReviewPairingPage> {
         if (envs.isEmpty)
           const Banner2('还没有任何环境，批准后可以随时在设备详情中授权。')
         else
-          GrantEditor(envs: envs, roles: _roles, expiry: _expiry, local: _local, onChanged: () => setState(() {})),
+          PairingGrants(c: widget.c, deviceName: p.name, drafts: _drafts, onChanged: () => setState(() {})),
       ],
       const SizedBox(height: Space.xl),
       FilledButton(onPressed: _matched ? _approve : null, child: const Text('批准')),

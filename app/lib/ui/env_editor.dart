@@ -324,14 +324,6 @@ class _EnvEditorPageState extends State<EnvEditorPage> {
           if (_refs.isEmpty)
             Text(tidy('还没有引用变量库。点“添加”选择这个环境要用的变量库。'), style: TextStyle(color: p.mute))
           else ...[
-            if (_refs.length > 1)
-              Padding(
-                padding: const EdgeInsets.only(bottom: Space.sm),
-                child: Text(
-                  tidy('多个变量库有同名变量时，排在前面的生效。保存前需要给重名的变量改名，或取消勾选。'),
-                  style: TextStyle(color: p.mute, fontSize: 13),
-                ),
-              ),
             for (var i = 0; i < _refs.length; i++)
               Padding(
                 padding: const EdgeInsets.only(bottom: Space.md),
