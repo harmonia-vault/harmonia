@@ -11,5 +11,5 @@ String aiInstallPrompt(String server, {String? email, String? code}) {
       '端到端加密后同步到用户授权的电脑，你可以用它的命令行取用这些变量，不需要用户把 Key 贴进对话。'
       '请在这台电脑上安装 Harmonia 命令行：macOS、Linux 运行 curl -fsSL $_feed/install.sh | HARMONIA_YES=0 sh；'
       "Windows 在 PowerShell 中运行 \$env:HARMONIA_YES = '0'; irm $_feed/install.ps1 | iex。"
-      '装好后运行 harmonia skill，$login，并询问用户是否开启 Shell 集成和后台服务。';
+      '装好后运行 harmonia skill，$login，并询问用户是否开启后台服务。';
 }

@@ -31,26 +31,24 @@ Windows（PowerShell）：
 $env:HARMONIA_YES = '0'; irm https://github.com/harmonia-vault/harmonia/releases/download/update-feed/install.ps1 | iex
 ```
 
-`HARMONIA_YES=0` 让安装脚本不再询问，只装命令行本身，不装 Shell 集成和后台服务。这两项由你在装好后询问用户，见下一节；不要用 `HARMONIA_YES=1` 替用户决定。
+`HARMONIA_YES=0` 让安装脚本不再询问，只装命令行本身，不装后台服务。后台服务由你在装好后询问用户，见下一节；不要用 `HARMONIA_YES=1` 替用户决定。
 
-## 询问是否开启 Shell 集成和后台服务
+## 询问是否开启后台服务
 
-装好后，向用户解释下面两项，分别问是否开启；用户同意哪项再运行哪项的命令。不论开不开，`harmonia exec -- <命令>` 都能用，接入账号前开启也没问题。用 `harmonia status` 查看两项当前的状态。
-
-**Shell 集成**（Windows 上叫“写入用户环境变量”）
-
-- 作用：macOS、Linux 上在 shell 启动文件（`~/.zshenv`、`~/.bashrc`）里加几行，用户自己打开的终端自动带上已启用环境的变量，变量有变化时按一次回车即可使用新值。Windows 上把变量写进用户环境变量，新启动的程序（包括图形界面程序）都能读到。
-- 不开启时：终端和其他程序里没有这些变量，需要时用 `harmonia exec -- <命令>` 只给这一条命令注入。不开启时本机不保存变量的明文文件。
-- 区别：开启后最省事，在任何终端里直接用；但变量会出现在每个终端（Windows 上是每个新程序）的环境里，同一用户运行的任何程序都能读到，Windows 上还以明文保存在注册表里。不开启时只有通过 `harmonia exec` 启动的程序拿得到变量，范围更小。
-- 开启：`harmonia shell install --yes`（默认按当前 shell；需要时加 `--shell zsh` 或 `--shell bash`）。关闭：`harmonia shell uninstall`，只在用户要求时运行。
-- 开启后，用户已经打开的终端要按命令输出的提示加载一次，或者新开一个终端。
+装好后，向用户解释后台服务，问是否开启；用户同意再运行命令。不论开不开，`harmonia exec -- <命令>` 都能用，接入账号前开启也没问题。用 `harmonia status` 查看当前的状态。
 
 **后台服务**
 
 - 作用：开机（macOS、Windows 上是登录）后在后台运行，保持与服务器的连接：用户在手机上修改变量、授权或撤销这台电脑时，几秒内同步到本机；授权到期后及时停用；每天检查一次新版本。
-- 不开启时：只在运行 `harmonia exec`、`harmonia export`、`harmonia sync` 这类命令时才同步。Shell 集成里的变量要等下一次同步才会更新；手机上撤销这台电脑或授权到期后，本机的变量也要等下一次同步才清除。
+- 不开启时：只在运行 `harmonia exec`、`harmonia export`、`harmonia sync` 这类命令时才同步；手机上撤销这台电脑或授权到期后，本机缓存也要等下一次同步才清除。
 - 区别：开启后变量始终是最新的，撤销也最快生效，代价是一个常驻的后台进程。只用 `harmonia exec` 的话，不开启也能用，因为它每次启动时都会先同步。
 - 开启：`harmonia service install`。Linux 上如果输出提示运行 `sudo loginctl enable-linger ...`，说明退出登录后服务会停止，把这条命令和原因转告用户，由用户决定是否运行；不要自己运行 sudo。关闭：`harmonia service uninstall`，只在用户要求时运行。
+
+**不要主动提出 Shell 集成**（Windows 上叫“写入用户环境变量”）
+
+Shell 集成让用户打开的每个终端（Windows 上是每个新启动的程序）都自动带上全部变量。它的代价是变量对这个用户运行的任何程序都可见，本机还会留一份明文变量文件（Windows 上明文存在注册表里）；绝大多数情况用 `harmonia exec` 就够了，所以不要主动提出，也不要在安装流程里询问。
+
+只有用户自己要求“终端里自动带上变量”时：先说明上面的代价，并告诉用户可以用 `harmonia exec -- <命令>` 代替；用户仍然坚持，才运行 `harmonia shell install --yes`（默认按当前 shell；需要时加 `--shell zsh` 或 `--shell bash`）。开启后，用户已经打开的终端要按命令输出的提示加载一次，或者新开一个终端。关闭：`harmonia shell uninstall`，用户要求时运行。
 
 ## 接入账号（需要用户在手机上批准）
 
@@ -74,7 +72,7 @@ $env:HARMONIA_YES = '0'; irm https://github.com/harmonia-vault/harmonia/releases
 ## 查看
 
 ```bash
-harmonia status                   # 接入状态、环境、Shell 集成和后台服务
+harmonia status                   # 接入状态、环境和后台服务
 harmonia env list                 # 能访问的环境、顺序、ID，以及同名变量由哪个环境提供
 harmonia var list [--env 环境]    # 变量名，默认隐藏值
 ```
@@ -97,7 +95,7 @@ harmonia exec --env 环境A,环境C:API_KEY -- npm test   # 环境A 的全部变
 - 用户要求只用某个或某几个环境（例如测试环境、生产环境）时用 `--env`：命令只拿到这些环境的变量，即使当前终端里已有其他环境的变量。环境名用 `harmonia env list` 查。
 - 只需要某个环境里的个别变量时写成 `环境:变量名`，同一环境要多个变量就写多项（`环境C:A,环境C:B`）。用 `--env` 指定的环境或变量拿不到（不存在、授权到期、无法解密）时命令不会运行，退出码是 125，stderr 里写明原因和处理办法，照着转告用户。
 - 环境既可以用名称也可以用 ID 指定（`harmonia env list` 的 ID 列）。把命令写进脚本、CI 或配置文件时用 ID：环境改名后 ID 不变。
-- 不要假设当前 shell 里已经有这些变量。Shell 集成主要作用于用户自己的终端，你执行命令的 shell 不一定加载它。
+- 不要假设当前 shell 里已经有这些变量，一律用 `harmonia exec` 运行需要变量的命令。
 - `harmonia exec` 启动时先同步一次；连不上服务器时使用本机缓存，并在 stderr 说明原因和缓存是多久前的。`harmonia status`、`harmonia env list`、`harmonia var list` 也是这样。
 - 这台设备没有任何环境的访问权限时，`harmonia exec` 照常运行命令，只在 stderr 提示拿不到变量。这时请用户在管理设备上为这台设备授权。
 - 不要把变量值打印到对话里：避免 `echo $KEY`、`env`、`harmonia export`、`harmonia var list --show`。

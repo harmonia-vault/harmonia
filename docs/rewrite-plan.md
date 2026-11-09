@@ -297,9 +297,14 @@ harmonia uninstall
 - **命令路径**：macOS、Linux 的安装脚本自动把安装目录加入 PATH，独立于可选的变量加载和后台服务，`HARMONIA_YES=0` 也会配置。Zsh 写入 `${ZDOTDIR:-$HOME}/.zshrc`；Bash 写入 `~/.bashrc` 和按 `.bash_profile`、`.bash_login`、`.profile` 顺序实际生效的登录配置，无现有文件时创建 `.profile`；POSIX sh 写入 `.profile`。保留原文件内容，重复安装不重复追加，加载配置不重复添加 PATH 条目。安装结束时明确提示当前终端需执行的 PATH 命令，之后再提示登录；新终端自动生效。
 - 开启 Shell 集成后，后台服务和 CLI 把合并结果原子写入 `~/.harmonia/env.sh`（0600），内容是普通的 `export KEY='value'`，值一律使用单引号字面量安全转义。
 - **没有开启时不生成 `env.sh`**（2026-10-15）：以 `~/.harmonia/shell.sh` 是否存在作为是否开启的标记（`shell install` 写入，`shell uninstall` 删除）；不检查 rc 文件，因为 rc 可能是手动添加的符号链接，后台服务看到的 `ZDOTDIR` 也可能和终端里不同。没有开启时，同步不写 `env.sh`，已有的在下一次同步时删除，只用 `harmonia exec` 的机器上不留变量的明文副本。本机缓存 `cache.json` 里是服务端下发的密文。
-- **安装时询问**：安装脚本装好 `harmonia` 后，如果有终端可以交互，依次询问是否安装 shell 集成和后台服务，直接回车即安装（默认 Y）。shell 集成仍会先显示要修改的文件和内容；没有终端（例如在脚本或 CI 中运行）时跳过询问，只提示对应命令。设置 `HARMONIA_YES=1` 时不询问，有没有终端都直接安装两项（2026-10-13）；shell 集成仍会显示要修改的文件和内容。设置 `HARMONIA_YES=0` 时不询问，两项都不装，只提示对应命令（2026-10-13，供 AI 助手使用，见 5.13）。两者在接入账号之前安装也没问题：`env.sh` 不存在时不加载变量，后台服务在接入前等待（2026-10-07 用户确认）。
-- `harmonia login` 完成后，只提示还没有安装的 shell 集成或后台服务。
-- `harmonia shell install` 先告诉用户要修改的文件和内容，确认后才写入（默认 Y）；已存在的 Harmonia 标记块直接更新，不重复添加：
+- **默认不开启，也不推荐**（2026-11-09 用户调整）：多数场景用 `harmonia exec` 就够了；Shell 集成让变量出现在每个终端的环境里，同一用户的任何程序都能读到，还要在磁盘上留一份明文 `env.sh`。所以：
+  - 安装脚本不再询问、也不安装 Shell 集成，`HARMONIA_YES=1` 只安装后台服务；安装结束的提示介绍 `harmonia exec`。
+  - `harmonia login` 完成后的“接下来”推荐 `harmonia exec -- <命令>`，不再提 Shell 集成；`harmonia env activate` 也不再提示开启。
+  - `harmonia status` 里 Shell 集成未开启时只写“未开启”，不附开启命令；已开启时附一句说明：变量对这个用户的所有程序可见，本机留有明文变量文件，可以用 `harmonia shell uninstall` 关闭。
+  - 已经开启的电脑升级后保持原样，不自动关闭。
+- **安装时询问**：安装脚本装好 `harmonia` 后，如果有终端可以交互，询问是否安装后台服务，直接回车即安装（默认 Y）；没有终端（例如在脚本或 CI 中运行）时跳过询问，只提示对应命令。设置 `HARMONIA_YES=1` 时不询问，直接安装后台服务（2026-10-13）。设置 `HARMONIA_YES=0` 时不询问，不装后台服务，只提示对应命令（2026-10-13，供 AI 助手使用，见 5.13）。后台服务在接入账号之前安装也没问题，它在接入前等待（2026-10-07 用户确认）。
+- `harmonia login` 完成后，只提示还没有安装的后台服务。
+- `harmonia shell install` 先说明代价（变量对这个用户的所有程序可见、本机留有明文变量文件，多数场景用 `harmonia exec` 即可），再列出要修改的文件和内容，确认后才写入（默认 N，2026-11-09）；`--yes` 跳过确认。已存在的 Harmonia 标记块直接更新，不重复添加：
   - zsh 写入 `~/.zshenv`，这样非交互的 zsh 也能读到。
   - bash 写入 `~/.bashrc`，并确保 `~/.bash_profile` 或 `~/.profile` 会加载它。
   - 写入带标记的加载代码，交互式 Shell 同时注册提示符刷新函数；首次安装后，已有终端需按安装提示手动加载一次，或新开终端。
@@ -451,9 +456,9 @@ harmonia uninstall
 
 ### 5.13 给 AI 助手使用（2026-10-13）
 
-目标：用户给 AI 助手（Claude Code、Codex 等）一句提示词，它就能装好 CLI，向用户说明 Shell 集成和后台服务后按用户的选择开启，并知道怎样正确调用 CLI；CLI 升级后，它能拿到新版本的说明。
+目标：用户给 AI 助手（Claude Code、Codex 等）一句提示词，它就能装好 CLI，向用户说明后台服务后按用户的选择开启，并知道怎样正确调用 CLI；CLI 升级后，它能拿到新版本的说明。
 
-- **一行安装**：提示词里用 `HARMONIA_YES=0`，安装脚本不询问，只装命令行，Shell 集成和后台服务都不装（5.8；2026-10-13 用户调整，原先用 `HARMONIA_YES=1` 直接装上）。两个平台都用环境变量，因为 PowerShell 的 `irm | iex` 没法传参数。不能只靠“没有终端就跳过”：AI 助手运行命令的环境有时能打开 `/dev/tty`，脚本会停在询问上。
+- **一行安装**：提示词里用 `HARMONIA_YES=0`，安装脚本不询问，只装命令行，不装后台服务（5.8；2026-10-13 用户调整，原先用 `HARMONIA_YES=1` 直接装上）。两个平台都用环境变量，因为 PowerShell 的 `irm | iex` 没法传参数。不能只靠“没有终端就跳过”：AI 助手运行命令的环境有时能打开 `/dev/tty`，脚本会停在询问上。
 
   ```bash
   curl -fsSL https://github.com/harmonia-vault/harmonia/releases/download/update-feed/install.sh | HARMONIA_YES=0 sh
@@ -463,12 +468,13 @@ harmonia uninstall
   $env:HARMONIA_YES = '0'; irm https://github.com/harmonia-vault/harmonia/releases/download/update-feed/install.ps1 | iex
   ```
 
-  - `HARMONIA_YES=1` 保留，不询问、两项直接装上，供脚本使用。
+  - `HARMONIA_YES=1` 保留，不询问、直接装上后台服务，供脚本使用。
   - 安装脚本不安装技能文件，由提示词让 AI 助手运行 `harmonia skill`（用户确认）。
-- **询问用户**（2026-10-13 用户要求）：装好后，AI 助手按使用说明向用户分别解释两项，问是否开启，用户同意哪项才运行哪项（`harmonia shell install --yes`、`harmonia service install`）。说明里对每一项写清：
-  - 作用：Shell 集成让用户自己的终端（Windows 上是新启动的程序）直接带上变量；后台服务保持与服务器的连接，变量、授权和撤销几秒内同步，授权到期及时停用，每天检查更新。
-  - 不开启时怎么用：用 `harmonia exec -- <命令>` 给单条命令注入（它每次启动先同步一次），或 `harmonia export`；没有后台服务时只在运行这类命令时同步。
-  - 区别：Shell 集成方便，但变量出现在每个终端的环境里，同一用户的任何程序都能读到（Windows 上明文存在注册表）；不开启时只有 `harmonia exec` 启动的程序拿得到。后台服务让变量始终最新、撤销最快生效，代价是一个常驻进程；不开启时 Shell 集成里的变量和撤销都要等下一次同步。
+- **询问用户**（2026-10-13 用户要求；2026-11-09 调整为只问后台服务）：装好后，AI 助手按使用说明向用户解释后台服务，问是否开启，用户同意才运行 `harmonia service install`。说明里写清：
+  - 作用：后台服务保持与服务器的连接，变量、授权和撤销几秒内同步，授权到期及时停用，每天检查更新。
+  - 不开启时怎么用：`harmonia exec -- <命令>` 每次启动先同步一次，只是在运行这类命令时才同步。
+  - 区别：后台服务让变量始终最新、撤销最快生效，代价是一个常驻进程。
+  - AI 助手不主动提出 Shell 集成。用户自己要求“终端里自动带上变量”时，先说明代价（变量对这个用户的所有程序可见、本机留有明文变量文件，Windows 上明文存在注册表）和替代办法 `harmonia exec`，用户坚持才运行 `harmonia shell install --yes`。
   - Linux 上开启后台服务后提示的 `sudo loginctl enable-linger`，由 AI 助手转告用户并说明原因，不自己运行 sudo。
 - **使用说明（技能）**：内容是一份 `SKILL.md`（带 `name`、`description` 头部），放在 `cli/internal/skill/SKILL.md`，编译进 CLI，不单独发布。开头写明对应的 harmonia 版本。内容包括：读取最新说明（会话中途程序可能被后台升级，命令报用法错误时重新运行 `harmonia skill` 或 `--help`）、安装、接入账号要用户在手机上批准（用 `--email`、`--code` 参数，等待最长 5 分钟）、用 `harmonia exec` 使用变量、不把变量值打印到对话里、通过标准输入写入变量值、哪些命令需要用户明确同意才能运行。
 - **`harmonia skill`**：把使用说明输出到标准输出，AI 助手直接读取。
@@ -723,8 +729,9 @@ harmonia uninstall
 
 | 决策 | 结论 |
 | --- | --- |
-| 一行安装的开关 | 环境变量 `HARMONIA_YES`，两个平台写法一致：`1` 不询问、两项都装，`0` 不询问、两项都不装 |
-| AI 安装时的 Shell 集成和后台服务 | 默认不装（提示词用 `HARMONIA_YES=0`）；装好后由 AI 助手向用户解释作用、不开启时怎么用以及区别，按用户选择开启（2026-10-13 用户调整） |
+| 一行安装的开关 | 环境变量 `HARMONIA_YES`，两个平台写法一致：`1` 不询问、装后台服务，`0` 不询问、不装后台服务；Shell 集成任何情况下都不由安装脚本开启（2026-11-09） |
+| AI 安装时的后台服务 | 默认不装（提示词用 `HARMONIA_YES=0`）；装好后由 AI 助手向用户解释作用、不开启时怎么用以及区别，按用户选择开启（2026-10-13 用户调整） |
+| AI 安装时的 Shell 集成 | 不主动提出；用户要求时先说明代价和 `harmonia exec`，用户坚持才开启（2026-11-09 用户调整） |
 | 使用说明的交付 | `harmonia skill` 输出；`harmonia skill install` 写入 `~/.claude/skills`、`~/.agents/skills`（工具目录存在才写）或 `--dir` 指定的目录 |
 | 安装脚本是否装技能文件 | 不装，提示词让 AI 助手自己运行 `harmonia skill` |
 | 提示词 | 各系统通用一句，放在实例首页“接入电脑”一步的安装命令之前和 README“在电脑上接入”开头；AI 助手部署是推荐方式。首页上可复制的内容都有复制按钮 |
@@ -853,7 +860,7 @@ Windows 上的 CLI 与 macOS、Linux 是同一份代码（`cli/`）：命令、�
 Windows 没有每个终端都会读取的 rc 文件；系统自己的办法是“用户环境变量”，新启动的程序都会带上。Harmonia 在 Windows 上用它代替 5.8 的 rc 注入。
 
 - **位置**：注册表 `HKCU\Environment`，也就是“系统属性 → 环境变量”上半部分的“用户变量”，在那里可以直接看到 Harmonia 写入的内容。写入后通知系统“环境变量已变化”。
-- **开关**：`harmonia shell install` 开启，`harmonia shell uninstall` 关闭并恢复原状。开启前先说明将要做什么，确认后才执行（默认 Y）；安装脚本同样会询问。没有开启时，Harmonia 不碰用户环境变量，变量只能通过 `harmonia exec`、`harmonia export` 使用。命令沿用 `shell` 这个名字，是为了三个平台的命令和文档一致；Windows 上的帮助、提示和 `harmonia status` 写的是“用户环境变量”。
+- **开关**：`harmonia shell install` 开启，`harmonia shell uninstall` 关闭并恢复原状。开启前先说明将要做什么和代价，确认后才执行（默认 N，2026-11-09）；安装脚本不询问、不开启（5.8）。没有开启时，Harmonia 不碰用户环境变量，变量只能通过 `harmonia exec`、`harmonia export` 使用。命令沿用 `shell` 这个名字，是为了三个平台的命令和文档一致；Windows 上的帮助、提示和 `harmonia status` 写的是“用户环境变量”。
 - **写入时机**：与另外两个平台重写 `env.sh` 的时机相同：后台服务或 CLI 命令每次同步之后，以及激活、顺序、授权、本地覆盖变化之后。只写有变化的变量，没有变化时不通知系统。
 - **生效边界**：
   - 新启动的程序读到新值：从开始菜单、任务栏、资源管理器启动的程序，Windows Terminal 新开的标签页。
@@ -895,7 +902,7 @@ Windows 没有每个终端都会读取的 rc 文件；系统自己的办法是�
   irm https://github.com/harmonia-vault/harmonia/releases/download/update-feed/install.ps1 | iex
   ```
 
-  脚本按更新渠道的清单下载当前处理器架构对应的 `harmonia.exe`，校验 SHA-256，放到安装目录并加入用户的 `Path`；然后依次询问是否开启“写入用户环境变量”、是否安装后台服务，直接回车即同意（默认 Y）。安装测试版时先运行 `$env:HARMONIA_CHANNEL = 'beta'`；先运行 `$env:HARMONIA_YES = '1'` 时不询问，两项直接开启；`'0'` 时不询问，两项都不开启（5.13）。
+  脚本按更新渠道的清单下载当前处理器架构对应的 `harmonia.exe`，校验 SHA-256，放到安装目录并加入用户的 `Path`；然后询问是否安装后台服务，直接回车即同意（默认 Y）；不询问、也不开启“写入用户环境变量”（5.8，2026-11-09）。安装测试版时先运行 `$env:HARMONIA_CHANNEL = 'beta'`；先运行 `$env:HARMONIA_YES = '1'` 时不询问，直接安装后台服务；`'0'` 时不询问，不安装（5.13）。
 - **发布物**：每个 Release 增加 `harmonia-windows-amd64.exe` 和 `harmonia-windows-arm64.exe`，签名清单的 `assets` 增加 `cli-windows-amd64`、`cli-windows-arm64`；`install.ps1` 与 `install.sh` 一样放在 `update-feed` 中。
 - **不做代码签名**：用安装脚本下载的程序不会被 SmartScreen 拦截；从浏览器手动下载再运行时系统会提示“Windows 已保护你的电脑”，README 说明这种情况以及怎样用清单里的 SHA-256 自行核对。
 - **更新**：`harmonia update` 的步骤与 5.11 相同（下载 → 验证签名和哈希 → 自检 → 替换 → 重启后台服务），旧版本保留为 `harmonia.exe.old`。
