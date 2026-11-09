@@ -1,4 +1,6 @@
 import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { duplicateNames, expand, parseRefs, type Ref } from "../src/core/refs";
 
@@ -68,7 +70,7 @@ describe("展开最终名字", () => {
 
 describe("三端共用的向量", () => {
   type Case = { name: string; refs: Ref[]; vaults: Record<string, string[]>; items: unknown[]; shadowed: unknown[]; duplicates: string[] };
-  const { cases } = JSON.parse(readFileSync(new URL("../../vectors/refs.json", import.meta.url), "utf8")) as { cases: Case[] };
+  const { cases } = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../vectors/refs.json"), "utf8")) as { cases: Case[] };
   for (const c of cases) {
     it(c.name, () => {
       const refs = parseRefs(c.refs);
