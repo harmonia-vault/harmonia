@@ -63,7 +63,7 @@ export class TestServer {
   pushes: Sent[] = [];
   /** 模拟保持着推送连接的设备。 */
   online = new Set<string>();
-  config = { allowRegistration: false, requireVerification: true, version: "0.1.0" };
+  config = { allowRegistration: false, requireVerification: true, version: "0.1.0", relaxedLimits: false };
   /** 模拟入口总量限制；返回 false 表示超限。 */
   entryLimit?: (key: string) => Promise<boolean>;
   mailAvailable = true;
@@ -87,6 +87,9 @@ export class TestServer {
       const deps: Deps = {
         sql,
         now: () => this.clock,
+        get relaxedLimits() {
+          return server.config.relaxedLimits;
+        },
         notifier: {
           send: (target, msg) => this.pushes.push({ target, msg, account: id }),
           disconnect: () => {},

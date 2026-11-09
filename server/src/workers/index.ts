@@ -21,6 +21,8 @@ export interface Env {
   LIMITER?: RateLimit;
   /** 仅本地开发：把验证码打印到日志而不是发送邮件。 */
   DEV_MAIL_LOG?: string;
+  /** 仅本地端到端测试：跳过按网络的每分钟次数限制和邮件重发间隔（docs/protocol.md 3.8）。部署时不要设置。 */
+  DEV_RELAXED_LIMITS?: string;
 }
 
 /**
@@ -132,6 +134,7 @@ export class Account extends DurableObject<Env> {
       waiters,
       mailer: mailer(env),
       now: () => Date.now(),
+      relaxedLimits: env.DEV_RELAXED_LIMITS === "true",
       acceptSocket: (d: Device) => {
         const pair = new WebSocketPair();
         ctx.acceptWebSocket(pair[1], ["device", d.id, d.kind]);
@@ -232,6 +235,7 @@ function backend(env: Env): Backend {
       allowRegistration: env.ALLOW_REGISTRATION === "true",
       requireVerification: env.REQUIRE_EMAIL_VERIFICATION === "true",
       version: VERSION,
+      relaxedLimits: env.DEV_RELAXED_LIMITS === "true",
     },
   };
 }

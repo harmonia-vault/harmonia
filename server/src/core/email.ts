@@ -35,7 +35,7 @@ export function normalizeCode(input: unknown): string {
 function checkBudget(deps: Deps, net: string) {
   const now = deps.now();
   const last = one<{ at: number }>(deps.sql, `SELECT MAX(at) AS at FROM mail_log WHERE net = ?`, net)?.at;
-  if (last && now - last < RESEND_INTERVAL) {
+  if (last && now - last < RESEND_INTERVAL && !deps.relaxedLimits) {
     const wait = RESEND_INTERVAL - (now - last);
     throw rateLimited(`验证码已发送，请 ${Math.ceil(wait / 1000)} 秒后再试。`, wait);
   }

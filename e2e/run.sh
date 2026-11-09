@@ -23,17 +23,19 @@ cleanup() {
 }
 trap cleanup EXIT
 
-step "构建 CLI 与启动本地服务端"
+step "构建 CLI、无界面管理脚本与启动本地服务端"
 (cd "$ROOT/cli" && go build -o "$TMP/harmonia" ./cmd/harmonia)
+# 管理脚本要调用几十次，先编译好，免得每次 dart run 都重新检查和编译。
+(cd "$ROOT/app" && dart build cli --target tool/manager.dart --output "$TMP/manager" --verbosity error)
 (cd "$ROOT/server" && npx wrangler dev --local --port $PORT --persist-to "$TMP/wrangler" \
-  --var DEV_MAIL_LOG:true --var ALLOW_REGISTRATION:true --var REQUIRE_EMAIL_VERIFICATION:true \
+  --var DEV_MAIL_LOG:true --var ALLOW_REGISTRATION:true --var REQUIRE_EMAIL_VERIFICATION:true --var DEV_RELAXED_LIMITS:true \
   >"$TMP/server.log" 2>&1) &
 SERVER_PID=$!
 disown $SERVER_PID
 for _ in $(seq 1 60); do curl -sf "$SERVER/api/v1/instance" >/dev/null && break; sleep 1; done
 curl -sf "$SERVER/api/v1/instance" >/dev/null || fail "服务端没有启动，见 $TMP/server.log"
 
-manager() { (cd "$ROOT/app" && dart run tool/manager.dart --home "$TMP/$1" "${@:2}" 2> >(perl -pe 'BEGIN{$|=1} s/Running build hooks\.\.\.//g' >&2)); }
+manager() { (cd "$ROOT/app" && "$TMP/manager/bundle/bin/manager" --home "$TMP/$1" "${@:2}"); }
 mail_code() { grep -a "to=$EMAIL purpose=$1" "$TMP/server.log" | tail -1 | sed 's/.*code=//'; }
 cli() { HARMONIA_HOME="$TMP/cli" "$TMP/harmonia" "$@"; }
 
@@ -44,8 +46,7 @@ expect_eq "$(printf %s "$REG" | cut -f1)" "verification-required" "注册"
 sleep 1
 manager phone verify --server "$SERVER" --email "$EMAIL" --flow "$(printf %s "$REG" | cut -f2)" --code "$(mail_code verification)" >/dev/null
 expect_eq "$(manager phone lookup --server "$SERVER" --email "$EMAIL")" "uninitialized" "验证后、初始化前查询"
-# 已注册但未初始化的账号可以重新注册，按新注册处理（同一网络 60 秒内只能再发一次验证码）。
-sleep 61
+# 已注册但未初始化的账号可以重新注册，按新注册处理（服务端已放宽重发间隔，见 docs/protocol.md 3.8）。
 REG=$(manager phone register --server "$SERVER" --email "$EMAIL")
 expect_eq "$(printf %s "$REG" | cut -f1)" "verification-required" "重新注册未初始化的账号"
 sleep 1
@@ -172,8 +173,6 @@ if cli import --env OpenAI --file "$TMP/bad.env" >/dev/null 2>&1; then fail "有
 expect_eq "$(manager phone var-get OpenAI IMPORT_D)" "" "解析失败时整份都不应写入"
 RC=0; cli exec --env OpenAI:MISSING -- true 2>/dev/null || RC=$?
 expect_eq "$RC" "125" "exec 自身出错时退出码为 125"
-# 本地测试的请求都来自同一个网络，设备登录挑战每分钟最多 30 次：先等过这一分钟。
-sleep 61
 
 step "J6 本地覆盖：只在本机生效，云端删除后失效"
 cli override set OpenAI FROM_CLI "local-only" >/dev/null
@@ -208,8 +207,6 @@ cli env deactivate Other >/dev/null
 expect_eq "$(manager phone devices | grep e2e-laptop | cut -f3)" "OpenAI:rw,Other:ro:off" "手机看到电脑停用的环境"
 
 step "exec --env：只用指定的环境，终端里其他环境的变量不传给命令"
-# 本地测试的请求都来自同一个网络，设备登录挑战每分钟最多 30 次：先等过这一分钟。
-sleep 61
 manager phone var-set OpenAI ONLY_OPENAI "only-openai" >/dev/null
 START=$(date +%s)
 until grep -q "only-openai" "$TMP/cli/env.sh"; do
@@ -258,8 +255,6 @@ grep -q "只读" "$TMP/ro.err" || fail "只读错误提示不清楚：$(cat "$TM
 cli env list | grep -q Other && fail "未授权的环境不应可见"
 
 step "J9 第二台管理设备用配对码加入，并能管理全部环境"
-# 本地测试的请求都来自同一个网络，设备登录挑战每分钟最多 30 次：先等过这一分钟。
-sleep 61
 PCODE2=$(manager phone pairing-code)
 [ -n "$PCODE2" ] || fail "没有生成配对码"
 manager phone2 pair --server "$SERVER" --email "$EMAIL" --code "$PCODE2" --name "第二台手机" \
@@ -282,8 +277,6 @@ manager phone2 var-set FromPhone2 SHARED "from-phone-2" >/dev/null
 expect_eq "$(manager phone var-get FromPhone2 SHARED)" "from-phone-2" "第一台手机读取第二台手机创建的环境"
 
 step "M13 电脑管理登录：通过本机管理页面的接口登录、解锁、新建环境、批量导入、复制和退出"
-# 设备登录挑战每分钟最多 30 次：先等过这一分钟。
-sleep 61
 MPORT=8798
 MURL="http://127.0.0.1:$MPORT"
 MPASS="E2e-$RANDOM-Mgr"
