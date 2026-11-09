@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import '../app/controller.dart';
 import '../core/models.dart';
 import 'activation.dart';
+import 'approval.dart' show AuthorizationsSection;
+import 'approval_list.dart';
 import 'device_update.dart';
 import 'vaults.dart' show askName;
 import 'lock.dart';
@@ -120,11 +122,14 @@ class _DevicesTabState extends State<DevicesTab> {
       onRefresh: () async {
         await c.syncNow();
         await _loadPending();
+        await c.refreshApprovals();
       },
       padding: const EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, 96),
       children: [
-        if (_pending.isNotEmpty) ...[
+        LocalDecryptHint(c: c),
+        if (_pending.isNotEmpty || c.approvals.isNotEmpty) ...[
           const SectionTitle('等待批准'),
+          PendingApprovals(c: c),
           for (final p in _pending)
             Padding(
               padding: const EdgeInsets.only(bottom: Space.sm),
@@ -176,14 +181,14 @@ int expiryFrom(String label) {
 }
 
 /// 编辑一台电脑对各环境的权限。null 表示无权限。
-/// 新授权的环境默认是否允许本机解密。手机批准解密上线前默认开启，否则电脑拿不到变量值。
-const defaultLocalDecrypt = true;
+/// 新授权的环境默认不允许本机解密：电脑每次用变量时在手机上批准（设计文档 17.2）。
+const defaultLocalDecrypt = false;
 
 /// “允许本机解密”开关下方的说明（设计文档 17.2）。
 const localDecryptRisk =
     '开启后，这个环境用到的变量库钥匙会保存在这台电脑上。能读取你文件的程序，或拿到这台电脑数据目录的人，'
-    '可以解开这些变量库里的全部变量（包括这个环境没有选中的）。';
-const localDecryptOff = '关闭后，这台电脑只能看到这个环境里的变量名，拿不到值。';
+    '可以解开这些变量库里的全部变量（包括这个环境没有选中的）。适合服务器、CI 等无法等待手机批准的场合。';
+const localDecryptOff = '关闭时，电脑每次用到这个环境的变量，都要在手机上批准。';
 
 class GrantEditor extends StatelessWidget {
   const GrantEditor({
@@ -454,6 +459,7 @@ class _DevicePageState extends State<DevicePage> {
             const SizedBox(height: Space.lg),
             FilledButton(onPressed: _dirty ? () => _save(d) : null, child: const Text('保存权限')),
             if (d.grants.isNotEmpty) ActivationEditor(c: c, device: d),
+            AuthorizationsSection(c: c, device: d),
             CliUpdateSection(c: c, deviceId: d.id),
             if (d.platform == 'windows') ...[
               const SectionTitle('系统变量'),

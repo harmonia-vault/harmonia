@@ -6,7 +6,13 @@ import { sweepGuard } from "./guard";
 import { networkId } from "./net";
 import { ApiError, b64, forbidden, obj, randomB64, rateLimited, sha256, unauthorized } from "./util";
 
-export type PushMessage = { type: "changed"; seq: number } | { type: "pairing" } | { type: "revoked" } | { type: "update" };
+export type PushMessage =
+  | { type: "changed"; seq: number }
+  | { type: "pairing" }
+  | { type: "revoked" }
+  | { type: "update" }
+  | { type: "approval" }
+  | { type: "authorization-ended"; id: string };
 export type PushTarget = "all" | "managers" | { device: string };
 
 export interface Notifier {
@@ -20,21 +26,27 @@ export interface Notifier {
 /** 发给配对发起方的最终结果。 */
 export type PairingResult = "approved" | "rejected" | "expired";
 
-/** 配对发起方的等待连接（docs/protocol.md 3.5.1）。 */
-export interface PairingWaiters {
-  accept(pairingId: string): Response;
+/** 关闭等待连接前发给发起方的最后一条消息，例如 {type: "approved"}。 */
+export type WaiterMessage = { type: string; [k: string]: unknown };
+
+/**
+ * 发起方的等待连接：配对请求（docs/protocol.md 3.5.1）和批准请求（3.9）共用，键是配对 ID，
+ * 或带 approval: 前缀的批准请求 ID。
+ */
+export interface Waiters {
+  accept(key: string): Response;
   /** 发起方是否仍保持等待连接。 */
-  waiting(pairingId: string): boolean;
+  waiting(key: string): boolean;
   /** 全部等待连接，以及最近一次收到心跳（或建立连接）的时间。 */
-  list(): { pairingId: string; seenAt: number }[];
-  /** 把结果发给发起方（可省略）并关闭连接。 */
-  close(pairingId: string, result?: PairingResult): void;
+  list(): { key: string; seenAt: number }[];
+  /** 把最后一条消息发给发起方（可省略）并关闭连接。 */
+  close(key: string, msg?: WaiterMessage): void;
 }
 
 export interface Deps {
   sql: Sql;
   notifier: Notifier;
-  waiters: PairingWaiters;
+  waiters: Waiters;
   mailer: Mailer;
   now(): number;
   /** 仅本地端到端测试：跳过按网络的每分钟次数限制和邮件重发间隔（docs/protocol.md 3.8）。 */

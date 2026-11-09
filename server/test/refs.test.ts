@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { duplicateNames, expand, parseRefs, type Ref } from "../src/core/refs";
+import { approvalGrantMsg, approvalRequestMsg, b64 } from "../src/core/util";
 
 const A = "AAAAAAAAAAAAAAAAAAAAAA";
 const B = "BBBBBBBBBBBBBBBBBBBBBB";
@@ -78,4 +79,16 @@ describe("三端共用的向量", () => {
       expect(duplicateNames(refs, names(c.vaults))).toEqual(c.duplicates);
     });
   }
+});
+
+describe("批准请求的签名原文与三端一致", () => {
+  const v = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../vectors/crypto.json"), "utf8"));
+  const hex = (b: Uint8Array) => Buffer.from(b).toString("hex");
+  it("请求和结果", async () => {
+    const id = "CCCCCCCCCCCCCCCCCCCCCC";
+    const dev = "AAAAAAAAAAAAAAAAAAAAAA";
+    expect(hex(await approvalRequestMsg(id, dev, v.approval.detail, ""))).toBe(v.messages.approvalRequest);
+    expect(hex(await approvalRequestMsg(id, dev, v.approval.detail, v.approval.payload))).toBe(v.messages.approvalWrite);
+    expect(hex(await approvalGrantMsg(id, b64(new TextEncoder().encode("sealed"))))).toBe(v.messages.approvalGrant);
+  });
 });

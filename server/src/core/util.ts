@@ -95,6 +95,14 @@ export const rootRecoveryMsg = async (generation: number, sealedB64: string) =>
 export const authMsg = (deviceId: string, nonce: string) => canonical("harmonia.auth", deviceId, nonce);
 export const recoveryAuthMsg = (nonce: string) => canonical("harmonia.recovery-auth", nonce);
 
+/** 批准请求（docs/protocol.md 2.2、3.9）：detail、payload 按原样的 UTF-8 字节计算哈希。 */
+export const approvalRequestMsg = async (requestId: string, deviceId: string, detail: string, payload: string) =>
+  canonical("harmonia.approval-request", requestId, deviceId, b64(await sha256(detail)), b64(await sha256(payload)));
+
+/** 批准结果（docs/protocol.md 2.2、3.9）。 */
+export const approvalGrantMsg = async (requestId: string, sealedB64: string) =>
+  canonical("harmonia.approval-grant", requestId, b64(await sha256(unb64(sealedB64))));
+
 // ---- 输入校验 ----
 
 type Json = Record<string, unknown>;

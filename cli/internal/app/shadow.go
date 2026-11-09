@@ -23,7 +23,8 @@ func (a *App) WriteNotice(target, name string, del bool) string {
 	if err != nil {
 		return ""
 	}
-	if _, ok := cache.Variables[d.VaultID][d.Source]; !ok {
+	// 没有开启本机解密时没有变量的密文，按环境里有没有这个变量判断是不是修改已有变量。
+	if _, ok := cache.Variables[d.VaultID][d.Source]; !ok && (!d.Remote() || d.Name == "") {
 		return ""
 	}
 	verb := "修改"

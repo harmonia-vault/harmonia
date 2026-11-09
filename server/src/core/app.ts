@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import type { Deps } from "./context";
 import { authRoutes } from "./auth";
 import { pairingRoutes } from "./pairing";
+import { approvalRoutes, authorizationGuard } from "./approvals";
 import { syncRoutes } from "./sync";
 import { vaultRoutes } from "./vaults";
 import { environmentRoutes } from "./environments";
@@ -21,6 +22,7 @@ export function errorResponse(e: unknown): Response {
 
 export function createAccountApp(deps: Deps): Hono {
   const app = new Hono();
+  authorizationGuard(app, deps);
   authRoutes(app, deps);
   pairingRoutes(app, deps);
   syncRoutes(app, deps);
@@ -28,6 +30,7 @@ export function createAccountApp(deps: Deps): Hono {
   environmentRoutes(app, deps);
   deviceRoutes(app, deps);
   recoveryRoutes(app, deps);
+  approvalRoutes(app, deps);
   app.notFound(() => errorResponse(new ApiError(404, "not_found", "接口不存在，请确认 App 与服务器版本是否匹配。")));
   app.onError((e) => errorResponse(e));
   return app;

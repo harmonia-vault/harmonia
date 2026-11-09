@@ -485,7 +485,7 @@ DEK  = 32 字节随机数，设置管理口令时生成
 
 - `items` 用环境里的最终名字。读取请求列出要取的变量；写入请求列出要写入的变量，`delete` 列出要删除的变量（只有写入请求有）。两者合计 1 到 200 项。
 - `command`、`cwd` 各最长 1000 个字符，只用于在管理设备上显示，客户端负责截断。`detail` 最长 64 KiB，`payload` 最长约 2 MB。
-- 写入请求的 `payload` 解析后是 `{"sealed":[{"managerId", "sealed"}]}`：为 3.4 `managers` 中的每一台各加密一份，`sealed = crypto_box_seal(管理设备 boxPub, 写入内容)`。写入内容是 UTF-8 JSON：`{"requestId": "...", "set": [{"environmentId", "name", "vaultId", "plain": <2.6 的明文对象>}]}`，`vaultId` 与 `detail` 中的一致（新增变量时）或省略（修改已有变量时）。
+- 写入请求的 `payload` 解析后是 `{"sealed":[{"managerId", "sealed"}]}`：为 3.4 `managers` 中的每一台各加密一份，`sealed = crypto_box_seal(管理设备 boxPub, 写入内容)`。写入内容是 UTF-8 JSON：`{"requestId": "...", "set": [{"environmentId", "name", "vaultId", "plain": <2.6 的明文对象>}]}`，`vaultId` 与 `detail` 中的一致（新增变量时）或省略（修改已有变量时）。电脑上读不到原来的值，所以修改已有变量时 `plain` 可以只带要改的字段（例如只改 `note`），管理设备把它合并到原来的明文上再加密；新增变量时 `plain` 必须带 `value`。
 - **请求码** = `CrockfordBase32(SHA-256(detail)[0:3])` 的前 4 个字符。客户端和管理设备都由 `detail` 自己算出并显示，供用户核对。
 - 服务端检查：签名（用设备的 `signPub`）、`deviceId` 是当前会话的设备、`createdAt` 与服务器时间相差不超过 5 分钟、`id` 没有用过；`items` 和 `delete` 中的每一项所在的环境都授权给了这台设备、没有到期、`localDecrypt` 为 false，名字在 3.4 的 `items` 中；写入请求还要求 `role` 为 `rw`：修改的名字是 `writable` 的变量；新增的变量带 `vaultId`（设计文档 17.2：新增变量必须指定变量库，`environmentId` 是提供写权限的那个环境），它必须在这个环境的 `createVaults` 中，名字不能和变量库或环境里已有的名字重复；删除的名字是 `writable` 的变量。不满足时返回 `forbidden` 或 `invalid_request`。
 - 成功返回 `{expiresAt}`，请求 2 分钟内有效。服务端向管理设备推送 `{"type":"approval"}`。
@@ -502,15 +502,15 @@ DEK  = 32 字节随机数，设置管理口令时生成
     "requestId": "...",
     "scope": "once | terminal | all",
     "expiresAt": 0,
-    "values": [{"environmentId": "...", "name": "LLM_KEY", "vaultId": "...", "source": "OPENAI_API_KEY", "seq": 40, "plain": {"value": "...", "note": ""}}]
+    "values": [{"environmentId": "...", "name": "LLM_KEY", "vaultId": "...", "source": "OPENAI_API_KEY", "plain": {"value": "...", "note": ""}}]
   }
   ```
 
-  `scope` 为 `once` 时只用于这一次；`terminal` 只对发起请求的终端有效；`all` 对这台电脑上的所有程序有效。`expiresAt` 为到期时间，`0` 表示长期（`once` 时忽略）。请求体外层的 `scope`、`expiresAt` 与结果里的相同，只供服务端记录和显示；客户端只认结果里经过 root 签名的值。`seq` 是变量当时的版本，保管进程据此发现变量被修改。
+  `scope` 为 `once` 时只用于这一次；`terminal` 只对发起请求的终端有效；`all` 对这台电脑上的所有程序有效。`expiresAt` 为到期时间，`0` 表示长期（`once` 时忽略）。请求体外层的 `scope`、`expiresAt` 与结果里的相同，只供服务端记录和显示；客户端只认结果里经过 root 签名的值。服务端批准时记下这些变量当时的版本（`seq`），变量被修改时结束授权并通知保管进程（见下）。
 - **写入请求**：管理设备解开加密给自己的那一份，核对 `requestId` 和名字与 `detail` 一致，用库钥加密后调用 `PATCH /vaults/{id}/variables` 写入（删除同理），全部成功后再调用批准，请求体为 `{}`。
 - 客户端收到结果后验证 root 签名、核对 `requestId`，再用临时私钥解开。
 
-**正在生效的授权**：读取请求批准时 `scope` 不是 `once`，服务端记录一项授权 `{id, deviceId, items, scope, expiresAt}`（`id` 即请求 ID），只用于显示和结束：变量已经交给了电脑，有效期由电脑上的保管进程执行，服务端无法强制。以下情况服务端删除记录并向那台设备推送 `authorization-ended`：到期、`POST /authorizations/{id}/end`、设备被撤销、对应环境的授权被删除或到期或改为 `localDecrypt`、环境的引用改变。保管进程退出时尽力结束自己持有的授权；没能通知到的（例如断网时关机），CLI 下次同步时发现保管进程没有持有，就结束它。
+**正在生效的授权**：读取请求批准时 `scope` 不是 `once`，服务端记录一项授权 `{id, deviceId, items, scope, expiresAt}`（`id` 即请求 ID），只用于显示和结束：变量已经交给了电脑，有效期由电脑上的保管进程执行，服务端无法强制。以下情况服务端删除记录并向那台设备推送 `authorization-ended`：到期、`POST /authorizations/{id}/end`、设备被撤销、对应环境的授权被删除或到期或改为 `localDecrypt`、环境的引用改变、授权里的变量被修改或删除（按批准时记下的 `seq` 比较）。保管进程退出时尽力结束自己持有的授权；没能通知到的（例如断网时关机），CLI 下次同步时发现保管进程没有持有，就结束它。
 
 **拒绝：`POST /approvals/{id}/reject`**，服务端向发起方推送 `rejected`。
 

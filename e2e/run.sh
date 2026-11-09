@@ -14,6 +14,8 @@ rm -rf "$TMP" && mkdir -p "$TMP"
 step() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 fail() { printf '\033[31m失败：%s\033[0m\n' "$*"; exit 1; }
 expect_eq() { [ "$1" == "$2" ] || fail "$3：期望 [$2]，实际 [$1]"; }
+# expect_has 输出 模式 说明：先拿到完整输出再匹配，避免 grep -q 提前退出让管道失败。
+expect_has() { grep -qE "$2" <<<"$1" || fail "$3：$1"; }
 
 cleanup() {
   [ -n "${DAEMON_PID:-}" ] && kill "$DAEMON_PID" 2>/dev/null || true
@@ -246,15 +248,84 @@ grep -q "可以新增变量的变量库：“OpenAI”" "$TMP/w.err" || fail "�
 cli var set OpenAI BRAND_NEW "x" >/dev/null || fail "名字同时是环境和变量库时应能直接新增"
 expect_eq "$(manager phone var-get OpenAI BRAND_NEW)" "x" "新增到同名变量库"
 cli var rm OpenAI BRAND_NEW --yes >/dev/null
+step "手机批准：没有开启本机解密的环境在使用时请求批准；拒绝、仅这一次、保管进程、仅这个终端、lock、写入"
 manager phone grants e2e-laptop OpenAI:rw Other:ro Mix:rw:nolocal >/dev/null
 cli sync >/dev/null
-if cli exec --env Mix -- true 2>"$TMP/nl.err"; then fail "没有开启本机解密时不应拿到变量"; fi
-grep -q "允许本机解密" "$TMP/nl.err" || fail "没有说明怎么开启本机解密：$(cat "$TMP/nl.err")"
-cli env list | grep -q "未开启本机解密" || fail "env list 没有显示未开启本机解密"
+expect_has "$(cli env list)" "需要手机批准" "env list 没有显示需要手机批准"
+expect_has "$(cli var list --env Mix)" "LLM_TOKEN.*需要手机批准" "var list 应只列出变量名"
 expect_eq "$(manager phone devices | grep e2e-laptop | cut -f3)" "OpenAI:rw,Other:ro:off,Mix:rw:nolocal" "手机看到关闭了本机解密的环境"
+# 等电脑上打印出请求码（只读本地文件，不请求服务器）。电脑在请求创建后才打印，手机上的 approval-approve、
+# approval-reject 按这个码查找请求，找不到就失败，由此核对两边的码一致。
+approval_code() {
+  local code=""
+  for _ in $(seq 1 100); do
+    code=$(grep -o "核对请求码 [0-9A-Z]*" "$TMP/ap.err" 2>/dev/null | cut -d' ' -f2) && [ -n "$code" ] && { echo "$code"; return; }
+    sleep 0.1
+  done
+  fail "电脑上没有发起批准请求：$(cat "$TMP/ap.err")"
+}
+# 后台运行一条要批准的命令，结果写到 ap.out、ap.err。
+ask() { : >"$TMP/ap.err"; "$@" >"$TMP/ap.out" 2>"$TMP/ap.err" & AP=$!; }
+# 不需要批准时命令应在几秒内结束，期间手机上没有请求。
+no_ask() {
+  ask "$@"
+  for _ in $(seq 1 50); do kill -0 $AP 2>/dev/null || break; sleep 0.1; done
+  if kill -0 $AP 2>/dev/null; then kill $AP; fail "保管进程持有授权时不应再请求批准：$(cat "$TMP/ap.err")"; fi
+  wait $AP || fail "命令失败：$(cat "$TMP/ap.err")"
+}
+PRINT_TOKEN=(sh -c 'printf %s "$LLM_TOKEN"')
+
+ask cli exec --env Mix -- "${PRINT_TOKEN[@]}"
+manager phone approval-reject "$(approval_code)" >/dev/null
+rc=0; wait $AP || rc=$?
+expect_eq "$rc" "125" "被拒绝时 exec 的退出码"
+grep -q "手机上拒绝了这次请求" "$TMP/ap.err" || fail "没有说明被拒绝：$(cat "$TMP/ap.err")"
+
+ask cli exec --env Mix -- "${PRINT_TOKEN[@]}"
+manager phone approval-approve "$(approval_code)" once >/dev/null
+wait $AP || fail "批准后命令没有运行：$(cat "$TMP/ap.err")"
+expect_eq "$(cat "$TMP/ap.out")" "tok-2" "批准后拿到变量"
+expect_eq "$(manager phone authorizations | grep -c e2e-laptop || true)" "0" "仅这一次不记录授权"
+
+ask cli exec --env Mix -- "${PRINT_TOKEN[@]}"
+manager phone approval-approve "$(approval_code)" all:30 >/dev/null
+wait $AP || fail "批准后命令没有运行：$(cat "$TMP/ap.err")"
+no_ask cli exec --env Mix -- "${PRINT_TOKEN[@]}"
+expect_eq "$(cat "$TMP/ap.out")" "tok-2" "有效期内由保管进程提供"
+expect_has "$(cli status)" "正在生效的授权" "status 没有列出正在生效的授权"
+expect_has "$(manager phone authorizations)" "e2e-laptop	all" "手机上没有看到正在生效的授权"
+# 变量在手机上被修改：授权随之结束，下次使用重新请求，拿到新值。
+manager phone var-set Shared TOKEN "tok-3" >/dev/null
+expect_eq "$(manager phone authorizations | grep -c e2e-laptop || true)" "0" "变量被修改后授权结束"
+ask cli exec --env Mix -- "${PRINT_TOKEN[@]}"
+manager phone approval-approve "$(approval_code)" terminal:30 >/dev/null
+wait $AP || fail "批准后命令没有运行：$(cat "$TMP/ap.err")"
+expect_eq "$(cat "$TMP/ap.out")" "tok-3" "重新批准后拿到新值"
+no_ask cli exec --env Mix -- "${PRINT_TOKEN[@]}"
+# 另一个终端会话（setsid）不能用“仅这个终端”的授权。电脑上的命令被强行结束（连接异常断开）后，
+# 请求作废，手机上不能再处理。
+ask perl -MPOSIX -e 'POSIX::setsid(); exec @ARGV' env HARMONIA_HOME="$TMP/cli" "$TMP/harmonia" exec --env Mix -- "${PRINT_TOKEN[@]}"
+CODE=$(approval_code)
+kill -9 $AP; wait $AP 2>/dev/null || true
+sleep 1
+if manager phone approval-reject "$CODE" >/dev/null 2>&1; then fail "电脑上结束等待后，请求仍然可以处理"; fi
+expect_has "$(cli lock)" "已结束 1 项授权" "lock 没有结束授权"
+expect_eq "$(manager phone authorizations | grep -c e2e-laptop || true)" "0" "lock 后手机上不再显示"
+for _ in $(seq 1 20); do [ -S "$TMP/cli/keeper.sock" ] || break; sleep 0.1; done
+[ -S "$TMP/cli/keeper.sock" ] && fail "lock 后保管进程应退出"
+# 写入：经手机批准，由手机写入变量库里的原变量。
+ask cli var set Mix LLM_TOKEN "tok-w" --yes
+CODE=$(approval_code)
+expect_has "$(manager phone approvals)" "write	LLM_TOKEN" "写入请求的内容不对"
+manager phone approval-approve "$CODE" >/dev/null
+wait $AP || fail "写入失败：$(cat "$TMP/ap.err")"
+grep -q "已在手机上批准并写入" "$TMP/ap.out" || fail "写入后的提示不对：$(cat "$TMP/ap.out")"
+expect_eq "$(manager phone var-get Shared TOKEN)" "tok-w" "手机写入变量库里的原变量"
 manager phone grants e2e-laptop OpenAI:rw Other:ro >/dev/null
 manager phone env-delete Mix >/dev/null
 manager phone vault-delete Shared >/dev/null
+# 入口每分钟最多 300 个请求（protocol.md 3.8，DEV_RELAXED_LIMITS 不跳过），这一步加上后面几步会超出，等计数清零。
+sleep 61
 
 step "手机看到各台设备的版本"
 cli sync >/dev/null

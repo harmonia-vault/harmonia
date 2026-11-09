@@ -148,11 +148,7 @@ Future<void> main(List<String> argv) async {
       if (args[1] == 'manager') {
         await v.approvePairing(p, asManager: true);
       } else {
-        await v.approvePairing(
-          p,
-          asManager: false,
-          grants: [for (final g in args.sublist(1)) grant(g)],
-        );
+        await v.approvePairing(p, asManager: false, grants: [for (final g in args.sublist(1)) grant(g)]);
       }
       print(p.id);
     case 'grants':
@@ -186,6 +182,43 @@ Future<void> main(List<String> argv) async {
     case 'revoke':
       final v = await loaded();
       await v.revokeDevice(device(args[0]).id);
+      print('ok');
+    case 'approvals':
+      // 列出电脑发来的、等待批准的请求：请求码、读取或写入、变量名。
+      for (final a in await (await loaded()).pendingApprovals()) {
+        print(
+          '${a.code}\t${a.isWrite ? 'write' : 'read'}\t${[...a.items.map((i) => i.name), ...a.deletes.map((i) => '-${i.name}')].join(',')}',
+        );
+      }
+    case 'approval-approve':
+      // approval-approve <请求码> [once|terminal:<分钟>|all:<分钟>|terminal:forever|all:forever]
+      final v = await loaded();
+      final a = (await v.pendingApprovals()).firstWhere((x) => x.code == args[0]);
+      final problem = v.approvalProblem(a);
+      if (problem != null) throw StateError(problem);
+      if (a.isWrite) {
+        await v.approveWrite(a);
+      } else {
+        final spec = (args.length > 1 ? args[1] : 'once').split(':');
+        final minutes = spec.length > 1 && spec[1] != 'forever' ? int.parse(spec[1]) : 0;
+        final expiresAt = minutes == 0 ? 0 : DateTime.now().add(Duration(minutes: minutes)).millisecondsSinceEpoch;
+        await v.approveRead(a, scope: spec[0], expiresAt: expiresAt);
+      }
+      print('ok');
+    case 'approval-reject':
+      final v = await loaded();
+      final a = (await v.pendingApprovals()).firstWhere((x) => x.code == args[0]);
+      await v.rejectApproval(a.id);
+      print('ok');
+    case 'authorizations':
+      // 正在生效的授权：设备名、范围、变量名。
+      final v = await loaded();
+      for (final x in await v.authorizations()) {
+        print('${device(x.deviceId).name}\t${x.scope}\t${x.items.map((i) => i.name).join(',')}\t${x.id}');
+      }
+    case 'authorization-end':
+      final v = await loaded();
+      await v.endAuthorization(args[0]);
       print('ok');
     case 'devices':
       final v = await loaded();

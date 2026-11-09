@@ -157,7 +157,7 @@ describe("两层结构", () => {
 describe("升级转换", () => {
   it("原来的环境变成同 ID 的变量库和引用全部变量的环境，授权开启本机解密", () => {
     const sql = nodeSql();
-    migrate(sql, MIGRATIONS.length - 1);
+    migrate(sql, MIGRATIONS.findIndex((m) => m.some((q) => q.includes("RENAME TO vaults"))));
     sql.run(`INSERT INTO environments (id, name, key_version, created_at) VALUES ('E1', 'OpenAI', 1, 5)`);
     sql.run(`INSERT INTO envelopes (env_id, key_version, recipient, sealed, sig) VALUES ('E1', 1, 'D1', 's', 'g')`);
     sql.run(

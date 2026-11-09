@@ -247,6 +247,19 @@ func AuthMsg(deviceID, nonce string) []byte { return Canonical("harmonia.auth", 
 
 func RecoveryAuthMsg(nonce string) []byte { return Canonical("harmonia.recovery-auth", nonce) }
 
+// ApprovalRequestMsg 是批准请求的签名原文（docs/protocol.md 2.2、3.9）：detail、payload 按原样的字节计算哈希。
+func ApprovalRequestMsg(requestID, deviceID, detail, payload string) []byte {
+	return Canonical("harmonia.approval-request", requestID, deviceID, B64(SHA256([]byte(detail))), B64(SHA256([]byte(payload))))
+}
+
+// ApprovalGrantMsg 是批准结果的签名原文，由 root 签名。
+func ApprovalGrantMsg(requestID string, sealed []byte) []byte {
+	return Canonical("harmonia.approval-grant", requestID, B64(SHA256(sealed)))
+}
+
+// ApprovalCode 是请求码：detail 的 SHA-256 前 3 字节的 Crockford Base32 的前 4 个字符，电脑和手机各自算出供用户核对。
+func ApprovalCode(detail string) string { return b32.EncodeToString(SHA256([]byte(detail))[:3])[:4] }
+
 // ---- 恢复码 ----
 
 type RecoveryKeys struct {

@@ -57,7 +57,7 @@ func TestApplyMergeOverride(t *testing.T) {
 	}
 	acts := []string{"high", "low"}
 	ov := state.Overrides{"low": {"B": "local-b", "NOT_IN_CLOUD": "x"}, "high": {"A": "local-a"}}
-	got, skipped := Merge(f.cache, f.dev, acts, ov, 0)
+	got, skipped := Merge(f.cache, f.dev, acts, ov, nil, 0)
 	want := map[string]string{"A": "local-a", "B": "local-b", "C": "high-c"}
 	if len(skipped) != 0 || len(got) != len(want) {
 		t.Fatalf("got %v skipped %v", got, skipped)
@@ -86,7 +86,7 @@ func TestApplyMergeOverride(t *testing.T) {
 	if err := Apply(f.cache, s2, 1, hc.B64(f.root.Pub), f.dev.ID); err != nil {
 		t.Fatal(err)
 	}
-	got, skipped = Merge(f.cache, f.dev, acts, ov, 0)
+	got, skipped = Merge(f.cache, f.dev, acts, ov, nil, 0)
 	if _, ok := f.cache.Variables["high"]; ok || len(skipped) != 1 || got["A"] != "low-a" || got["B"] != "" {
 		t.Fatalf("after revoke: %v %v", got, skipped)
 	}
@@ -111,10 +111,10 @@ func TestActiveOrderAndConflicts(t *testing.T) {
 	if len(ids) != 2 || ids[0] != "b" || ids[1] != "a" {
 		t.Fatalf("active ids: %v", ids)
 	}
-	if got, _ := Merge(f.cache, f.dev, ids, nil, 0); got["K"] != "from-b" || got["ONLY_A"] != "1" {
+	if got, _ := Merge(f.cache, f.dev, ids, nil, nil, 0); got["K"] != "from-b" || got["ONLY_A"] != "1" {
 		t.Fatalf("merge: %v", got)
 	}
-	cs := Conflicts(f.cache, f.dev, ids, 0)
+	cs := Conflicts(f.cache, ids, 0)
 	if len(cs) != 1 || cs[0].Name != "K" || len(cs[0].Envs) != 2 || cs[0].Envs[0] != "b" {
 		t.Fatalf("conflicts: %+v", cs)
 	}
@@ -126,10 +126,10 @@ func TestExpiredEnvironmentSkippedOffline(t *testing.T) {
 	s.Environments[0].ExpiresAt = 1000
 	Apply(f.cache, s, 0, hc.B64(f.root.Pub), f.dev.ID)
 	acts := []string{"e"}
-	if got, _ := Merge(f.cache, f.dev, acts, nil, 999); got["K"] != "v" {
+	if got, _ := Merge(f.cache, f.dev, acts, nil, nil, 999); got["K"] != "v" {
 		t.Error("should be valid before expiry")
 	}
-	if got, skipped := Merge(f.cache, f.dev, acts, nil, 1000); len(got) != 0 || len(skipped) != 1 {
+	if got, skipped := Merge(f.cache, f.dev, acts, nil, nil, 1000); len(got) != 0 || len(skipped) != 1 {
 		t.Error("should be skipped after expiry")
 	}
 }
@@ -207,20 +207,20 @@ func TestSelectPicks(t *testing.T) {
 	if p := parse("测试:旧")[0]; p.EnvID != "env-b" || p.Var != "" {
 		t.Fatalf("名称带冒号的环境应整个选中：%+v", p)
 	}
-	got, _, err := Select(f.cache, f.dev, parse("开发", "测试:旧", "生产:API_KEY", "env-c:DB_URL", "env-c:SHARED"), state.Overrides{"env-c": {"API_KEY": "local"}}, 0)
+	got, _, err := Select(f.cache, f.dev, parse("开发", "测试:旧", "生产:API_KEY", "env-c:DB_URL", "env-c:SHARED"), state.Overrides{"env-c": {"API_KEY": "local"}}, nil, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	check(got, map[string]string{"A": "a-a", "SHARED": "a-shared", "B": "b-b", "API_KEY": "local", "DB_URL": "c-db"})
 
 	// 指定的变量写在前面时优先于整个环境里的同名变量。
-	got, _, err = Select(f.cache, f.dev, parse("生产:SHARED", "开发"), nil, 0)
+	got, _, err = Select(f.cache, f.dev, parse("生产:SHARED", "开发"), nil, nil, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	check(got, map[string]string{"SHARED": "c-shared", "A": "a-a"})
 
-	if _, _, err := Select(f.cache, f.dev, parse("生产:MISSING"), nil, 0); err == nil || !strings.Contains(err.Error(), "var list --env 生产") {
+	if _, _, err := Select(f.cache, f.dev, parse("生产:MISSING"), nil, nil, 0); err == nil || !strings.Contains(err.Error(), "var list --env 生产") {
 		t.Fatalf("变量不存在时应报错并提示查看：%v", err)
 	}
 	for _, bad := range []string{"生产:", "没有:API_KEY", "没有"} {
@@ -230,7 +230,7 @@ func TestSelectPicks(t *testing.T) {
 	}
 
 	// 指定的变量不在这个环境里、但在别的环境里时，指出在哪里。
-	if _, _, err := Select(f.cache, f.dev, parse("开发:API_KEY"), nil, 0); err == nil || !strings.Contains(err.Error(), "--env 生产:API_KEY") {
+	if _, _, err := Select(f.cache, f.dev, parse("开发:API_KEY"), nil, nil, 0); err == nil || !strings.Contains(err.Error(), "--env 生产:API_KEY") {
 		t.Fatalf("应指出其他环境里有这个变量：%v", err)
 	}
 	if _, err := ParsePick(f.cache, "没有"); err == nil || !strings.Contains(err.Error(), "“开发”") || !strings.Contains(err.Error(), "授权") {
@@ -244,7 +244,7 @@ func TestSelectPicks(t *testing.T) {
 		}
 	}
 	for _, items := range [][]string{{"生产:API_KEY", "开发"}, {"开发", "生产"}} {
-		if _, _, err := Select(f.cache, f.dev, parse(items...), nil, 10); err == nil || !strings.Contains(err.Error(), "到期") {
+		if _, _, err := Select(f.cache, f.dev, parse(items...), nil, nil, 10); err == nil || !strings.Contains(err.Error(), "到期") {
 			t.Fatalf("%v：应报授权到期：%v", items, err)
 		}
 	}
@@ -259,15 +259,15 @@ func TestBrokenVariableOnlyAffectsItself(t *testing.T) {
 	if err := Apply(f.cache, s, 0, hc.B64(f.root.Pub), f.dev.ID); err != nil {
 		t.Fatal(err)
 	}
-	got, skipped := Merge(f.cache, f.dev, []string{"e"}, nil, 0)
+	got, skipped := Merge(f.cache, f.dev, []string{"e"}, nil, nil, 0)
 	if got["GOOD"] != "ok" || len(got) != 1 || len(skipped) != 1 || !strings.Contains(skipped[0], "BAD") {
 		t.Fatalf("got %v skipped %v", got, skipped)
 	}
-	if _, _, err := Select(f.cache, f.dev, []Pick{{EnvID: "e", Var: "GOOD"}}, nil, 0); err != nil {
+	if _, _, err := Select(f.cache, f.dev, []Pick{{EnvID: "e", Var: "GOOD"}}, nil, nil, 0); err != nil {
 		t.Fatalf("只取能解开的变量不应报错：%v", err)
 	}
 	for _, p := range []Pick{{EnvID: "e"}, {EnvID: "e", Var: "BAD"}} {
-		if _, _, err := Select(f.cache, f.dev, []Pick{p}, nil, 0); err == nil || !strings.Contains(err.Error(), "var rm") {
+		if _, _, err := Select(f.cache, f.dev, []Pick{p}, nil, nil, 0); err == nil || !strings.Contains(err.Error(), "var rm") {
 			t.Fatalf("%+v：应报无法解密并给出处理办法：%v", p, err)
 		}
 	}

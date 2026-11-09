@@ -2,7 +2,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { expect } from "vitest";
 import { createAccountApp } from "../src/core/app";
-import type { Deps, PairingResult, PairingWaiters, PushMessage, PushTarget } from "../src/core/context";
+import type { Deps, PushMessage, PushTarget, WaiterMessage, Waiters } from "../src/core/context";
 import { migrate, wipe, type Param, type Sql } from "../src/core/db";
 import { Directory } from "../src/core/directory";
 import { route, type Backend } from "../src/core/router";
@@ -35,9 +35,11 @@ export function nodeSql(): Sql {
 export type Sent = { target: PushTarget; msg: PushMessage; account: string };
 
 /** 内存中的配对等待连接：记录最近心跳时间和发给发起方的结果。 */
-export class FakeWaiters implements PairingWaiters {
+export class FakeWaiters implements Waiters {
   open = new Map<string, number>();
-  results = new Map<string, PairingResult | "left">();
+  /** 关闭时发给发起方的消息类型，没有消息时为 left。 */
+  results = new Map<string, string>();
+  messages = new Map<string, WaiterMessage>();
   constructor(private now: () => number) {}
   accept(pairingId: string) {
     this.open.set(pairingId, this.now());
@@ -47,10 +49,12 @@ export class FakeWaiters implements PairingWaiters {
     return this.open.has(pairingId);
   }
   list() {
-    return [...this.open].map(([pairingId, seenAt]) => ({ pairingId, seenAt }));
+    return [...this.open].map(([key, seenAt]) => ({ key, seenAt }));
   }
-  close(pairingId: string, result?: PairingResult) {
-    if (this.open.delete(pairingId)) this.results.set(pairingId, result ?? "left");
+  close(key: string, msg?: WaiterMessage) {
+    if (!this.open.delete(key)) return;
+    this.results.set(key, msg?.type ?? "left");
+    if (msg) this.messages.set(key, msg);
   }
   ping(pairingId: string) {
     this.open.set(pairingId, this.now());

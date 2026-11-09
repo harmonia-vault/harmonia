@@ -37,12 +37,14 @@ type CachedVar struct {
 }
 
 type Cache struct {
-	Seq          int64                           `json:"seq"`
-	SystemVars   bool                            `json:"systemVars"`
-	AutoUpdate   bool                            `json:"autoUpdate"`
-	Environments []api.Environment               `json:"environments"`
-	VaultNames   []api.VaultName                 `json:"vaultNames"`
-	Envelopes    []api.Envelope                  `json:"envelopes"`
+	Seq          int64             `json:"seq"`
+	SystemVars   bool              `json:"systemVars"`
+	AutoUpdate   bool              `json:"autoUpdate"`
+	Environments []api.Environment `json:"environments"`
+	VaultNames   []api.VaultName   `json:"vaultNames"`
+	Envelopes    []api.Envelope    `json:"envelopes"`
+	// Managers 是证书已经验证过的管理设备。
+	Managers []api.ManagerKey `json:"managers"`
 	// Variables：变量库 ID → 变量库里的原名 → 密文。
 	Variables map[string]map[string]CachedVar `json:"variables"`
 }

@@ -236,23 +236,17 @@ func refresh(ctx context.Context, a *app.App) error {
 	return nil
 }
 
-// effective 返回要注入的变量；envs 非空时只使用这些环境或变量（先列出的优先）。
-func effective(ctx context.Context, a *app.App, envs []string) (map[string]string, error) {
+// effective 返回要注入的变量；envs 非空时只使用这些环境或变量（先列出的优先）。没有开启本机解密的环境
+// 经手机批准取得，command 显示在手机的批准页上。
+func effective(ctx context.Context, a *app.App, envs, command []string) (map[string]string, error) {
 	if err := refresh(ctx, a); err != nil {
 		return nil, err
 	}
-	if len(envs) > 0 {
-		vars, skipped, err := a.Select(envs)
-		for _, s := range skipped {
-			fmt.Fprintln(os.Stderr, "harmonia："+sentence(s))
-		}
-		return vars, err
-	}
 	// 没有任何环境时照常继续，只说明拿不到变量的原因。
-	if cache, err := a.Dir.Cache(); err == nil && len(cache.Environments) == 0 {
+	if cache, err := a.Dir.Cache(); err == nil && len(envs) == 0 && len(cache.Environments) == 0 {
 		fmt.Fprintln(os.Stderr, "harmonia：这台设备还没有任何环境的访问权限，没有可以提供的变量。可以在管理设备上为它授权。")
 	}
-	vars, skipped, err := a.Effective()
+	vars, skipped, err := a.Resolve(ctx, envs, command)
 	for _, s := range skipped {
 		fmt.Fprintln(os.Stderr, "harmonia："+sentence(s))
 	}
@@ -273,7 +267,7 @@ func cmdExec(ctx context.Context, args []string) error {
 		return err
 	}
 	envs := envList(f)
-	vars, err := effective(ctx, a, envs)
+	vars, err := effective(ctx, a, envs, cmdArgs)
 	if err != nil {
 		return err
 	}
@@ -310,7 +304,7 @@ func cmdExport(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	vars, err := effective(ctx, a, envs)
+	vars, err := effective(ctx, a, envs, append([]string{"harmonia", "export"}, args...))
 	if err != nil {
 		return err
 	}
@@ -347,4 +341,33 @@ func cmdDaemon(ctx context.Context, args []string) error {
 		return nil
 	}
 	return err
+}
+
+func cmdLock(ctx context.Context, args []string) error {
+	if _, err := parseFlags(args); err != nil {
+		return err
+	}
+	a, err := app.Load(true)
+	if err != nil {
+		return err
+	}
+	n, err := a.Lock(ctx)
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		fmt.Println("这台电脑上没有正在生效的授权。")
+		return nil
+	}
+	fmt.Printf("已结束 %d 项授权，之后使用没有开启本机解密的环境时需要重新在手机上批准。\n", n)
+	return nil
+}
+
+// cmdKeeper 运行保管进程，由 harmonia 在需要时自动启动，不在帮助里列出。
+func cmdKeeper(ctx context.Context, _ []string) error {
+	a, err := app.Load(true)
+	if err != nil {
+		return err
+	}
+	return a.ServeKeeper(ctx, func(format string, args ...any) {})
 }

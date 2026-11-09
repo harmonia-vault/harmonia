@@ -90,6 +90,14 @@ func TestVectors(t *testing.T) {
 		hex.EncodeToString(RecoveryAuthMsg("nonce-2")) != s("messages", "recoveryAuth") {
 		t.Error("messages")
 	}
+	const reqID, devID = "CCCCCCCCCCCCCCCCCCCCCC", "AAAAAAAAAAAAAAAAAAAAAA"
+	detail := s("approval", "detail")
+	if hex.EncodeToString(ApprovalRequestMsg(reqID, devID, detail, "")) != s("messages", "approvalRequest") ||
+		hex.EncodeToString(ApprovalRequestMsg(reqID, devID, detail, s("approval", "payload"))) != s("messages", "approvalWrite") ||
+		hex.EncodeToString(ApprovalGrantMsg(reqID, []byte("sealed"))) != s("messages", "approvalGrant") ||
+		ApprovalCode(detail) != s("approval", "code") {
+		t.Error("approval messages")
+	}
 }
 
 func TestSealRoundTrip(t *testing.T) {
