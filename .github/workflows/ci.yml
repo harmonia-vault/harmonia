@@ -5,15 +5,49 @@ on:
     branches: [main]
   pull_request:
 
+# CI 的结构见 docs/rewrite-plan.md“自动化回归”。同一分支有新的推送时，取消还在跑的旧运行。
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  # 按改动的路径决定跑哪些任务；改了 CI 或工具版本时全部都跑，只改文档时都不跑。
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      cli: ${{ steps.filter.outputs.cli == 'true' || steps.filter.outputs.ci == 'true' }}
+      server: ${{ steps.filter.outputs.server == 'true' || steps.filter.outputs.ci == 'true' }}
+      app: ${{ steps.filter.outputs.app == 'true' || steps.filter.outputs.ci == 'true' }}
+      e2e: ${{ steps.filter.outputs.cli == 'true' || steps.filter.outputs.server == 'true' || steps.filter.outputs.app == 'true' || steps.filter.outputs.e2e == 'true' || steps.filter.outputs.ci == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: |
+            ci: ['.github/workflows/ci.yml', 'mise.toml']
+            cli: ['cli/**']
+            server: ['server/**']
+            app: ['app/**']
+            e2e: ['e2e/**']
+
+  # 工具版本一律从 mise.toml 读取；每个任务只装自己用到的工具，缓存按任务分开。
   cli:
+    needs: changes
+    if: needs.changes.outputs.cli == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: jdx/mise-action@v5
         with:
-          go-version-file: cli/go.mod
-          cache-dependency-path: cli/go.sum
+          install_args: go
+          cache_key_prefix: mise-cli
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ runner.os }}-${{ hashFiles('cli/go.sum') }}
       - name: 测试
         working-directory: cli
         run: |
@@ -22,13 +56,21 @@ jobs:
           GOOS=darwin GOARCH=arm64 go build -o /dev/null ./cmd/harmonia
 
   cli-windows:
+    needs: changes
+    if: needs.changes.outputs.cli == 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: jdx/mise-action@v5
         with:
-          go-version-file: cli/go.mod
-          cache-dependency-path: cli/go.sum
+          install_args: go
+          cache_key_prefix: mise-cli-windows
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/AppData/Local/go-build
+          key: go-${{ runner.os }}-${{ hashFiles('cli/go.sum') }}
       - name: 测试
         working-directory: cli
         run: |
@@ -36,17 +78,19 @@ jobs:
           go test ./...
 
   server:
+    needs: changes
+    if: needs.changes.outputs.server == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: jdx/mise-action@v5
         with:
-          package_json_file: server/package.json
-      - uses: actions/setup-node@v4
+          install_args: node pnpm
+          cache_key_prefix: mise-server
+      - uses: actions/cache@v4
         with:
-          node-version: 24
-          cache: pnpm
-          cache-dependency-path: server/pnpm-lock.yaml
+          path: ~/.local/share/pnpm/store
+          key: pnpm-${{ runner.os }}-${{ hashFiles('server/pnpm-lock.yaml') }}
       - name: 测试
         working-directory: server
         run: |
@@ -55,13 +99,19 @@ jobs:
           pnpm test
 
   app:
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
+      - uses: jdx/mise-action@v5
         with:
-          flutter-version: 3.47.6
-          cache: true
+          install_args: flutter
+          cache_key_prefix: mise-app
+      - uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: pub-${{ runner.os }}-${{ hashFiles('app/pubspec.lock') }}
       - name: 分析与测试
         working-directory: app
         run: |
@@ -70,40 +120,44 @@ jobs:
           flutter test test/core
 
   ios:
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
+      - uses: jdx/mise-action@v5
         with:
-          flutter-version: 3.47.6
-          cache: true
+          install_args: flutter
+          cache_key_prefix: mise-ios
+      - uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: pub-${{ runner.os }}-${{ hashFiles('app/pubspec.lock') }}
       - name: 无签名构建
         working-directory: app
         run: |
           flutter pub get
           flutter build ios --release --no-codesign
 
+  # 与各单元测试并行，不等它们结束。
   e2e:
+    needs: changes
+    if: needs.changes.outputs.e2e == 'true'
     runs-on: ubuntu-latest
-    needs: [cli, server, app]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: jdx/mise-action@v5
         with:
-          go-version-file: cli/go.mod
-          cache-dependency-path: cli/go.sum
-      - uses: pnpm/action-setup@v4
+          install_args: go node pnpm flutter
+          cache_key_prefix: mise-e2e
+      - uses: actions/cache@v4
         with:
-          package_json_file: server/package.json
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-          cache-dependency-path: server/pnpm-lock.yaml
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: 3.47.6
-          cache: true
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+            ~/.local/share/pnpm/store
+            ~/.pub-cache
+          key: e2e-${{ runner.os }}-${{ hashFiles('cli/go.sum', 'server/pnpm-lock.yaml', 'app/pubspec.lock') }}
       - name: 端到端流程
         run: |
           (cd server && pnpm install --frozen-lockfile)

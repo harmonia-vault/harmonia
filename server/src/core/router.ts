@@ -21,7 +21,8 @@ export interface Backend {
   directory: DirectoryApi;
   /** 把请求转交给账号；wipe=true 时清空该账号（注册竞争失败时使用）。 */
   account(accountId: string): { fetch(req: Request): Promise<Response>; wipe(): Promise<void> };
-  config: { allowRegistration: boolean; requireVerification: boolean; version: string };
+  /** relaxedLimits 仅用于本地端到端测试：跳过以邮箱为入口的接口按网络的每分钟次数限制（docs/protocol.md 3.8）。 */
+  config: { allowRegistration: boolean; requireVerification: boolean; version: string; relaxedLimits?: boolean };
   /** 入口总量限制（每个网络每分钟 300 次），在进入 Durable Object 之前执行；没有配置时跳过。 */
   entryLimit?(key: string): Promise<boolean>;
 }
@@ -96,7 +97,7 @@ export async function route(req: Request, backend: Backend, clientIp: string): P
     }
 
     if (EMAIL_ROUTES.has(path)) {
-      const wait = await directory.limit(path, clientIp, LIMITS[path] ?? 20, 60_000);
+      const wait = config.relaxedLimits ? 0 : await directory.limit(path, clientIp, LIMITS[path] ?? 20, 60_000);
       if (wait) throw rateLimited("操作太频繁，请稍后再试。", wait);
       const body = req.method === "GET" ? null : await req.text();
       let parsed: Record<string, unknown> = {};

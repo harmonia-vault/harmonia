@@ -37,6 +37,8 @@ export interface Deps {
   waiters: PairingWaiters;
   mailer: Mailer;
   now(): number;
+  /** 仅本地端到端测试：跳过按网络的每分钟次数限制和邮件重发间隔（docs/protocol.md 3.8）。 */
+  relaxedLimits?: boolean;
   /** 接受一条推送连接（仅 Durable Object 环境提供）。 */
   acceptSocket?(device: Device): Response;
 }
@@ -202,6 +204,7 @@ export const requesterNet = (c: Context, deps: Deps) => networkId(networkSecret(
 
 /** 按网络的固定窗口限流（每分钟）。 */
 export async function rateLimit(c: Context, deps: Deps, bucket: string, max: number) {
+  if (deps.relaxedLimits) return;
   const key = `${bucket}:${await requesterNet(c, deps)}`;
   const now = deps.now();
   const row = one<{ count: number; window_start: number }>(deps.sql, `SELECT * FROM rate_limits WHERE key = ?`, key);
