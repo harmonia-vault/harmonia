@@ -7,7 +7,7 @@ Harmonia 是一个自托管的环境变量同步工具：在手机上集中管�
 
 - **端到端加密**：变量在手机或电脑上加密后才上传，服务端只保存密文。
 - **手机负责授权**：新电脑扫码配对，由手机决定它能访问哪些环境、只读还是读写、多久到期；随时撤销。
-- **终端中使用**：安装 Shell 集成后自动加载变量；也可以用 `harmonia exec` 只给某个程序注入。
+- **终端中使用**：用 `harmonia exec` 运行程序，变量只交给这一个程序，不在磁盘上留明文。
 - **AI 助手一句话部署**：把一句提示词发给 Claude Code、Codex 这类 AI 助手，它在电脑上装好命令行并接入，你只需在手机上批准，见[在电脑上接入](#3-在电脑上接入)。
 - **实时同步**：手机上改一次，几秒内同步到在线的电脑。
 - **自托管**：服务端部署在你自己的 Cloudflare 账号上，开源（MIT）。
@@ -51,10 +51,10 @@ Harmonia 没有上架 App Store。Releases 里的 `harmonia-<版本>.ipa` 没有
 **推荐让 AI 助手来做。** 把下面这句话发给 Claude Code、Codex 这类能运行命令的 AI 助手，macOS、Linux、Windows 都用这一句（换成你的服务器地址）。在电脑浏览器里打开服务器地址，首页“接入电脑”一步也有这句话，地址已经填好，点“复制”即可：
 
 ```text
-Harmonia（和弦，https://你的服务器地址）是用户部署的环境变量同步服务，开源、自托管：用户在手机 App 上管理 API Key 等环境变量，端到端加密后同步到用户授权的电脑，你可以用它的命令行取用这些变量，不需要用户把 Key 贴进对话。请在这台电脑上安装 Harmonia 命令行：macOS、Linux 运行 curl -fsSL https://github.com/harmonia-vault/harmonia/releases/download/update-feed/install.sh | HARMONIA_YES=0 sh；Windows 在 PowerShell 中运行 $env:HARMONIA_YES = '0'; irm https://github.com/harmonia-vault/harmonia/releases/download/update-feed/install.ps1 | iex。装好后运行 harmonia skill，按输出的说明接入服务器 https://你的服务器地址（邮箱和配对码向用户询问），并询问用户是否开启 Shell 集成和后台服务。
+Harmonia（和弦，https://你的服务器地址）是用户部署的环境变量同步服务，开源、自托管：用户在手机 App 上管理 API Key 等环境变量，端到端加密后同步到用户授权的电脑，你可以用它的命令行取用这些变量，不需要用户把 Key 贴进对话。请在这台电脑上安装 Harmonia 命令行：macOS、Linux 运行 curl -fsSL https://github.com/harmonia-vault/harmonia/releases/download/update-feed/install.sh | HARMONIA_YES=0 sh；Windows 在 PowerShell 中运行 $env:HARMONIA_YES = '0'; irm https://github.com/harmonia-vault/harmonia/releases/download/update-feed/install.ps1 | iex。装好后运行 harmonia skill，按输出的说明接入服务器 https://你的服务器地址（邮箱和配对码向用户询问），并询问用户是否开启后台服务。
 ```
 
-- `HARMONIA_YES=0` 让安装脚本不再询问，只装命令行，Shell 集成和后台服务都先不装。AI 助手装好后会向你解释这两项的作用、不开启时怎么用，由你决定是否开启（之后也可以自己运行 `harmonia shell install`、`harmonia service install`）。设置 `HARMONIA_YES=1` 则不询问、两项直接装上。
+- `HARMONIA_YES=0` 让安装脚本不再询问，只装命令行，后台服务先不装。AI 助手装好后会向你解释后台服务的作用、不开启时怎么用，由你决定是否开启（之后也可以自己运行 `harmonia service install`）。设置 `HARMONIA_YES=1` 则不询问、直接装上后台服务。
 - `harmonia skill` 输出给 AI 助手的使用说明：怎样接入、用 `harmonia exec` 使用变量、不把变量值打印出来、哪些命令要你同意才运行。`harmonia skill install` 保存一个技能入口文件，让 AI 助手每次使用前运行 `harmonia skill` 读取当时的说明，程序升级后不会过期；写到 `~/.claude/skills` 和 `~/.agents/skills`（对应的工具目录存在时），或用 `--dir` 指定的目录。
 - 接入时 AI 助手会向你要邮箱和配对码（在 App 的“设备 → 添加设备 → 生成配对码”中获取），并把核对码告诉你，由你在手机上批准。
 - 程序升级（包括后台自动升级）后，AI 助手下次运行 `harmonia skill` 就拿到新版本的说明。
@@ -81,19 +81,26 @@ irm https://github.com/harmonia-vault/harmonia/releases/download/update-feed/ins
 harmonia login https://你的服务器地址
 ```
 
-安装过程中会询问是否安装 Shell 集成和后台服务，直接回车即安装。Shell 集成支持 Bash 5.1 及以上、Zsh 5.0 及以上；已有终端按安装提示加载一次，新终端自动启用。跳过的话，之后可以运行 `harmonia shell install` 和 `harmonia service install`。
+安装过程中会询问是否安装后台服务，直接回车即安装；跳过的话，之后可以运行 `harmonia service install`。
 
 命令会询问邮箱和配对码，不需要密码。配对码可以留空：终端会显示二维码，在 App 中打开“设备 → 添加设备”扫码（或手输终端里的核对码），选择这台电脑可以访问的环境和权限，批准。也可以先在 App 的“添加设备”里点“生成配对码”，把 8 位配对码填进去，这样手机在前台时会直接弹出批准页；批准前同样要核对核对码。授权的环境默认已启用。
 
-之后在手机上修改变量，同步完成后，电脑终端按一次空回车即可使用新值；直接执行的第一条命令可能仍使用旧值。在 App 的“设备详情”里可以开关某个环境、拖动调整顺序。
+接入后用 `harmonia exec -- <命令>` 运行需要变量的程序，例如 `harmonia exec -- npm run dev`：它先同步一次，再把变量只交给这条命令。在 App 的“设备详情”里可以开关某个环境、拖动调整顺序。
+
+<details>
+<summary>Shell 集成（不推荐）</summary>
+
+`harmonia shell install` 让你打开的每个终端都自动带上全部变量，手机上修改后按一次空回车即可使用新值。代价是变量对这个用户运行的任何程序都可见，本机还会留一份明文变量文件 `~/.harmonia/env.sh`；多数情况下用 `harmonia exec` 就够了，所以安装时不会开启它。支持 Bash 5.1 及以上、Zsh 5.0 及以上；`harmonia shell uninstall` 关闭并删除变量文件。
+
+</details>
 
 ### Windows
 
 Windows 10（1809 及以上）、Windows 11 都可以用，系统自带的 Windows PowerShell 和 PowerShell 7 都能运行安装命令。程序装在 `%LOCALAPPDATA%\Programs\Harmonia`，安装后新开一个终端即可使用 `harmonia`。
 
-Windows 上没有 Shell 集成，变量写入的是系统的**用户环境变量**（“系统属性 → 环境变量”里的用户变量）：
+和其他系统一样，推荐用 `harmonia exec -- <命令>` 运行需要变量的程序。Windows 上与 Shell 集成对应的是把变量写入**用户环境变量**（“系统属性 → 环境变量”里的用户变量），同样不推荐，安装时不会开启：
 
-- 安装时会询问是否开启，之后用 `harmonia shell install`、`harmonia shell uninstall` 开关。
+- 用 `harmonia shell install`、`harmonia shell uninstall` 开关。
 - 开启后，**新启动**的程序都能读到变量，包括 cmd、PowerShell 和图形界面程序。已经打开的终端和程序不会变，变量同步后要新开终端；想在当前终端马上用到最新值，用 `harmonia exec -- <命令>`。
 - 已有的同名用户变量会先记下原值，变量删除、环境停用、退出登录或卸载之后恢复。
 - `Path`、`TEMP` 这类系统自身使用的变量默认不写入，`harmonia status` 会列出。确实需要时，在 App 里这台电脑的“设备详情”中打开“写入系统变量”，或运行 `harmonia shell system-vars on`。
@@ -158,7 +165,7 @@ harmonia manager
 
 ## 在 AI Agent 和常驻服务中使用
 
-shell 启动文件只对终端生效。systemd、launchd、cron 启动的程序不会读取它，请用 `harmonia exec` 启动（不再支持在服务配置里引用 `~/.harmonia/env.sh`：没有开启 Shell 集成时这个文件不存在）：
+AI Agent、systemd、launchd、cron 启动的程序同样用 `harmonia exec` 启动（不支持在服务配置里引用 `~/.harmonia/env.sh`：没有开启 Shell 集成时这个文件不存在）：
 
 Windows 上开启“写入用户环境变量”后，登录之后新启动的程序都能直接读到变量；需要保证拿到最新值的程序，同样可以用 `harmonia exec` 启动。
 
@@ -191,7 +198,7 @@ ExecStart=/home/me/.local/bin/harmonia exec -- /usr/bin/node /srv/agent/index.js
 
 **不保证的：**
 
-- 变量下发到设备后，风险由使用者承担：同一用户的任何进程（包括 AI Agent）都能读到注入的变量、开启 Shell 集成时的 `~/.harmonia/env.sh`，以及本机的设备密钥。没有开启 Shell 集成时不生成 `env.sh`，本机只保存密文缓存；`harmonia shell uninstall` 会删除它。撤销收不回已经复制或泄露的值，必要时请到服务商处更换密钥。
+- 变量下发到设备后，风险由使用者承担：同一用户的任何进程（包括 AI Agent）都能读到注入的变量、开启 Shell 集成时的 `~/.harmonia/env.sh`，以及本机的设备密钥。没有开启 Shell 集成时不生成 `env.sh`，变量只以密文缓存保存（用 `harmonia override` 设置的本机覆盖值除外，它是明文）；`harmonia shell uninstall` 会删除 `env.sh`。撤销收不回已经复制或泄露的值，必要时请到服务商处更换密钥。
 - 手机被他人拿到并解开锁屏不在防护范围内，请用另一台管理设备或恢复码移除它。
 - 服务端被攻破时，可能拒绝服务、回滚数据，或假装执行撤销。
 - 服务端能看到变量名、环境名、设备名和访问时间。

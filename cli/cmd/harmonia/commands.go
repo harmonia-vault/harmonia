@@ -92,9 +92,9 @@ func cmdLogin(ctx context.Context, args []string) error {
 	} else {
 		fmt.Printf("\n已接入账号，这台设备可以访问 %d 个环境，授权的环境默认已启用。\n", n)
 	}
-	next := [][]string{{"harmonia env list", "查看环境和变量来源"}}
-	if !shellInstalledAny(a) {
-		next = append(next, []string{"harmonia shell install", shellInstallHint})
+	next := [][]string{
+		{"harmonia env list", "查看环境和变量来源"},
+		{"harmonia exec -- <命令>", "带上变量运行命令，变量只交给这一个程序"},
 	}
 	if s := service.Check(); s.Supported && !s.Installed {
 		next = append(next, []string{"harmonia service install", "安装后台服务，实时同步"})
@@ -142,9 +142,6 @@ func cmdEnv(ctx context.Context, args []string) error {
 			return err
 		}
 		fmt.Printf("已启用环境“%s”。\n", env.Name)
-		if !shellInstalledAny(a) {
-			fmt.Println(shellOffNotice)
-		}
 	case "deactivate":
 		env, err := a.Deactivate(ctx, f.args[1])
 		if err != nil {

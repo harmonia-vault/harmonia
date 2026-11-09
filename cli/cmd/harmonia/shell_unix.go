@@ -18,14 +18,14 @@ import (
 // 各处提到这项功能时用的文字。
 const (
 	shellLabel       = "Shell 集成"
-	shellInstallHint = "在终端中自动加载和更新变量"
-	shellOffNotice   = "提示：运行 harmonia shell install 启用终端变量。"
+	shellCost        = "开启后，你打开的每个终端都带着全部变量，这个用户运行的任何程序都能读到；本机还会留一份明文变量文件。多数情况下用 harmonia exec -- <命令> 只把变量交给要用的程序就够了。"
+	shellOnNote      = "Shell 集成已开启：变量对这个用户的所有程序可见，本机留有明文变量文件。不需要时运行 harmonia shell uninstall 关闭，改用 harmonia exec -- <命令>。"
 	logoutNotice     = "已启用 Shell 集成的终端会在下一次命令提示符出现时清理变量。"
 	uninstallSummary = "退出账号、移除后台服务和 shell 集成，并删除 harmonia"
 )
 
 var shellHelp = [][2]string{
-	{"shell install [--shell zsh|bash] [--yes]", "在 shell 启动文件中加载变量；默认按当前 shell，--yes 不再确认"},
+	{"shell install [--shell zsh|bash] [--yes]", "让每个终端自动带上变量（变量对所有程序可见，一般用 exec 即可）；默认按当前 shell，--yes 不再确认"},
 	{"shell uninstall [--shell zsh|bash]", "移除 shell 启动文件中的加载设置；默认移除全部，都移除后删除本机的变量文件"},
 }
 
@@ -65,9 +65,9 @@ func shellSummary(a *app.App) string {
 		return "已开启，但启动文件里没有加载设置（例如启动文件是符号链接），请手动添加；运行 harmonia shell install 查看要添加的内容"
 	}
 	if len(on) == 0 {
-		return "未安装（运行 harmonia shell install）"
+		return "未开启"
 	}
-	return "已安装：" + strings.Join(on, "、")
+	return "已开启：" + strings.Join(on, "、")
 }
 
 func cmdShell(ctx context.Context, args []string) error {
@@ -104,13 +104,17 @@ func cmdShell(ctx context.Context, args []string) error {
 		printShellReady(d.EnvFile())
 		return nil
 	}
+	if !f.bools["yes"] {
+		fmt.Println(shellCost)
+		fmt.Println()
+	}
 	fmt.Println("将更新以下文件中的 Harmonia 变量加载设置（支持 Bash 5.1+、Zsh 5.0+）：")
 	for _, t := range targets {
 		fmt.Println("  " + t.Path)
 	}
 	fmt.Print("\n" + shell.SourceLine(d.EnvFile()) + "\n")
-	if !f.bools["yes"] && !confirmYes("安装 Shell 集成？") {
-		fmt.Println("已取消。需要时重新运行 harmonia shell install。")
+	if !f.bools["yes"] && !confirm("仍要开启 Shell 集成？") {
+		fmt.Println("没有开启。用 harmonia exec -- <命令> 运行需要变量的程序。")
 		return nil
 	}
 	// 先写入集成脚本（它是“已开启”的标记），再写出变量文件。
@@ -191,5 +195,11 @@ func removeIntegration(a *app.App) error {
 	return shell.RemoveFiles(a.Dir.EnvFile())
 }
 
-// shellNotes 是 harmonia status 中补充说明的内容；Shell 集成没有需要说明的。
-func shellNotes(*app.App) []string { return nil }
+// shellNotes 是 harmonia status 中补充说明的内容：开启时提醒变量对所有程序可见。
+// 以 shell.sh 为准：只有它存在时才会写出明文变量文件。
+func shellNotes(a *app.App) []string {
+	if !app.ShellEnabled(a.Dir) {
+		return nil
+	}
+	return []string{"", shellOnNote}
+}

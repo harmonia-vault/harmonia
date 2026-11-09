@@ -3,8 +3,8 @@
 #   curl -fsSL https://github.com/harmonia-vault/harmonia/releases/download/update-feed/install.sh | sh
 #   没有 curl 时：wget -qO- <同一个地址> | sh
 #   安装测试版：在 sh 前加上 HARMONIA_CHANNEL=beta
-#   不询问、直接安装 shell 集成和后台服务：在 sh 前加上 HARMONIA_YES=1
-#   不询问、两项都不装（供 AI 助手使用，装好后由它询问用户）：在 sh 前加上 HARMONIA_YES=0
+#   不询问、直接安装后台服务：在 sh 前加上 HARMONIA_YES=1
+#   不询问、不装后台服务（供 AI 助手使用，装好后由它询问用户）：在 sh 前加上 HARMONIA_YES=0
 set -eu
 
 FEED="${HARMONIA_FEED:-https://github.com/harmonia-vault/harmonia/releases/download/update-feed}"
@@ -108,26 +108,18 @@ case "${user_shell##*/}" in
   sh) configure_path "$HOME/.profile" ;;
   *) printf '未自动配置 %s，请将 %s 加入该终端的 PATH。\n' "${user_shell##*/}" "$DEST" ;;
 esac
-# HARMONIA_YES=1 时不询问，直接安装 shell 集成和后台服务；HARMONIA_YES=0 时不询问，两项都不装；
+# HARMONIA_YES=1 时不询问，直接安装后台服务；HARMONIA_YES=0 时不询问，不装；
 # 否则有终端可以交互时询问，直接回车即安装；没有终端时只提示命令。
+# Shell 集成会让变量对这个用户的所有程序可见，安装脚本不开启它（docs/rewrite-plan.md 5.8）。
+service_intro="后台服务：开机自动运行，保持与服务器的连接，变量和授权的变化几秒内同步到本机。"
 if [ "${HARMONIA_YES:-}" = 1 ]; then
   echo
-  echo "[1/2] Shell 集成：在终端中自动加载和更新变量。"
-  echo
-  "$DEST/harmonia" shell install --yes </dev/null || echo "Shell 集成没有安装成功，可以稍后运行 harmonia shell install 重试。"
-  echo
-  echo "[2/2] 后台服务：开机自动运行，保持与服务器的连接，变量有变化时实时写入本机。"
+  echo "$service_intro"
   echo
   "$DEST/harmonia" service install </dev/null || echo "后台服务没有安装成功，可以稍后运行 harmonia service install 重试。"
-  echo
 elif [ "${HARMONIA_YES:-}" != 0 ] && (exec </dev/tty) 2>/dev/null; then
   echo
-  echo "[1/2] Shell 集成：在终端中自动加载和更新变量。"
-  echo
-  "$DEST/harmonia" shell install </dev/tty || true
-  echo
-  echo "[2/2] 后台服务：开机自动运行，保持与服务器的连接，变量有变化时实时写入本机。"
-  echo
+  echo "$service_intro"
   printf "是否安装后台服务？（Y/n）"
   ans=""
   read -r ans </dev/tty || true
@@ -135,10 +127,11 @@ elif [ "${HARMONIA_YES:-}" != 0 ] && (exec </dev/tty) 2>/dev/null; then
     n|N|no|NO|No) echo "已跳过。之后可以运行 harmonia service install。" ;;
     *) "$DEST/harmonia" service install </dev/tty || echo "后台服务没有安装成功，可以稍后运行 harmonia service install 重试。" ;;
   esac
-  echo
 else
-  echo "提示：运行 harmonia shell install 启用终端变量，运行 harmonia service install 安装后台服务。"
+  echo "提示：运行 harmonia service install 安装后台服务，变量和授权的变化会几秒内同步到本机。"
 fi
+echo
+echo "接入后用 harmonia exec -- <命令> 运行程序，变量只交给这一个程序。"
 case ":$PATH:" in
   *":$DEST:"*) ;;
   *)
