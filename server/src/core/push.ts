@@ -1,4 +1,4 @@
-// 后台通知：登记推送句柄，有新请求时经推送中继通知不在前台的管理设备（docs/protocol.md 3.10）。
+// 系统通知：登记推送句柄，有新请求时经推送中继通知管理设备（docs/protocol.md 3.10）。
 import type { Hono } from "hono";
 import { readJson, requireDevice, type Deps } from "./context";
 import { one } from "./db";
@@ -54,17 +54,16 @@ export function relayClient(base: string, fetcher: typeof fetch = fetch) {
 }
 
 /**
- * 新的批准请求或配对请求出现时调用：发给登记了句柄、不需要轮换恢复码的管理设备，
- * 跳过此刻连着推送连接的设备（它在前台，会直接弹出批准页）。
+ * 新的批准请求或配对请求出现时调用：发给登记了句柄、不需要轮换恢复码的有效管理设备。
+ * 不按事件连接判断前后台；App 在前台时自行隐藏通知横幅。
  */
-export function notifyInBackground(deps: Deps, type: NotifyType) {
+export function sendRequestNotifications(deps: Deps, type: NotifyType) {
   const push = deps.push;
   if (!push?.enabled) return;
   const targets = deps.sql.all<{ id: string; push_handle: string }>(
     `SELECT id, push_handle FROM devices WHERE kind = 'manager' AND status = 'active' AND rotation_required = 0 AND push_handle IS NOT NULL`,
   );
   for (const t of targets) {
-    if (deps.notifier.connected(t.id)) continue;
     push.defer(
       push.notify(t.push_handle, type).then((r) => {
         if (r === "gone") deps.sql.run(`UPDATE devices SET push_handle = NULL WHERE id = ? AND push_handle = ?`, t.id, t.push_handle);

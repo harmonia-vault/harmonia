@@ -65,7 +65,7 @@ describe("推送句柄", () => {
 });
 
 describe("什么时候发", () => {
-  it("新的批准请求连上等待连接时通知管理设备", async () => {
+  it.each([false, true])("新的批准请求连上等待连接时通知管理设备，包括推送连接在线时（在线：%s）", async (online) => {
     const { s, a } = await setup();
     const env = await a.createEnv(s, [a.phone.id]);
     await s.ok("PUT", `/api/v1/vaults/${env}/variables/TOKEN`, {
@@ -75,12 +75,14 @@ describe("什么时候发", () => {
     });
     const cli = await pairClient(s, a, [{ environmentId: env, role: "ro", localDecrypt: false }], []);
     s.relay.sent = [];
+    if (online) s.online.add(a.phone.id);
     await approvalRequest(s, cli, env);
     expect(s.relay.sent).toEqual([{ handle: HANDLE, type: "approval" }]);
   });
 
-  it("用配对码发起的配对请求通知，匿名请求不通知", async () => {
+  it.each([false, true])("用配对码发起的配对请求通知，匿名请求不通知，包括推送连接在线时（在线：%s）", async (online) => {
     const { s, a } = await setup();
+    if (online) s.online.add(a.phone.id);
     const anon = await requestPairing(s, a);
     await waitApproval(s, a, anon.json);
     await s.flush();
@@ -92,19 +94,14 @@ describe("什么时候发", () => {
     expect(s.relay.sent).toEqual([{ handle: HANDLE, type: "pairing" }]);
   });
 
-  it("跳过此刻连着推送连接的设备、需要轮换恢复码的设备，以及关闭了后台通知的服务器", async () => {
+  it("跳过需要轮换恢复码的设备，以及关闭了后台通知的服务器", async () => {
     const { s, a } = await setup();
-    const codes = [await a.pairingCode(s), await a.pairingCode(s), await a.pairingCode(s), await a.pairingCode(s)];
+    const codes = [await a.pairingCode(s), await a.pairingCode(s), await a.pairingCode(s)];
     const code = async () => {
       const r = await requestPairing(s, a, { code: codes.pop()! });
       await waitApproval(s, a, r.json);
       await s.flush();
     };
-    s.online.add(a.phone.id);
-    await code();
-    expect(s.relay.sent).toEqual([]);
-    s.online.clear();
-
     s.deps(a.accountId).sql.run(`UPDATE devices SET rotation_required = 1 WHERE id = ?`, a.phone.id);
     await code();
     expect(s.relay.sent).toEqual([]);

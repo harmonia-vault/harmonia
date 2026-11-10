@@ -20,7 +20,7 @@ import { checkPairingCode, consumePairingCode, createPairingCode } from "./pairi
 import { insertEnvelopes, parseEnvelopes, requireAllVaults, verifyCert } from "./keys";
 import { reconcileEnvelopes, touchVisibility } from "./access";
 import { network } from "./net";
-import { notifyInBackground } from "./push";
+import { sendRequestNotifications } from "./push";
 import { parseGrants, writeGrants } from "./grants";
 import { APPROVAL_KEY, approvalLeft, checkApprovalWaiters } from "./approvals";
 import { ApiError, bad, bin, conflict, id, label, notFound, randomB64, rateLimited } from "./util";
@@ -233,7 +233,7 @@ export function pairingRoutes(app: Hono, deps: Deps) {
     if (deps.waiters.waiting(p.id)) throw conflict("这个配对请求已经在另一处等待批准。");
     const res = deps.waiters.accept(p.id);
     notifyManagers(deps, p);
-    if (p.authorized === 1) notifyInBackground(deps, "pairing");
+    if (p.authorized === 1) sendRequestNotifications(deps, "pairing");
     return res;
   });
 
