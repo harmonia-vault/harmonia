@@ -6,7 +6,7 @@ import { one } from "./db";
 import { readJson, requireDevice, type Deps, type Device } from "./context";
 import { grantedEnvs, vaultNames, type GrantedEnv } from "./access";
 import { expand } from "./refs";
-import { notifyInBackground } from "./push";
+import { sendRequestNotifications } from "./push";
 import {
   approvalGrantMsg,
   approvalRequestMsg,
@@ -327,7 +327,7 @@ export function approvalRoutes(app: Hono, deps: Deps) {
     if (waiting(deps, a.id)) throw conflict("这个请求已经在另一处等待批准。");
     const res = deps.waiters.accept(APPROVAL_KEY + a.id);
     deps.notifier.send("managers", { type: "approval" });
-    notifyInBackground(deps, "approval");
+    sendRequestNotifications(deps, "approval");
     return res;
   });
 
