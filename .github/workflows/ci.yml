@@ -17,8 +17,9 @@ jobs:
     outputs:
       cli: ${{ steps.filter.outputs.cli == 'true' || steps.filter.outputs.ci == 'true' }}
       server: ${{ steps.filter.outputs.server == 'true' || steps.filter.outputs.ci == 'true' }}
+      relay: ${{ steps.filter.outputs.relay == 'true' || steps.filter.outputs.ci == 'true' }}
       app: ${{ steps.filter.outputs.app == 'true' || steps.filter.outputs.ci == 'true' }}
-      e2e: ${{ steps.filter.outputs.cli == 'true' || steps.filter.outputs.server == 'true' || steps.filter.outputs.app == 'true' || steps.filter.outputs.e2e == 'true' || steps.filter.outputs.ci == 'true' }}
+      e2e: ${{ steps.filter.outputs.cli == 'true' || steps.filter.outputs.server == 'true' || steps.filter.outputs.relay == 'true' || steps.filter.outputs.app == 'true' || steps.filter.outputs.e2e == 'true' || steps.filter.outputs.ci == 'true' }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v4
@@ -28,6 +29,7 @@ jobs:
             ci: ['.github/workflows/ci.yml', 'mise.toml']
             cli: ['cli/**']
             server: ['server/**']
+            relay: ['relay/**']
             app: ['app/**']
             e2e: ['e2e/**']
 
@@ -98,6 +100,28 @@ jobs:
           pnpm typecheck
           pnpm test
 
+  relay:
+    needs: changes
+    if: needs.changes.outputs.relay == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v5
+        with:
+          install_args: node pnpm
+          cache_key_prefix: mise-relay
+      - uses: actions/cache@v4
+        with:
+          path: ~/.local/share/pnpm/store
+          key: pnpm-${{ runner.os }}-${{ hashFiles('relay/pnpm-lock.yaml') }}
+      - name: 测试
+        working-directory: relay
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm typecheck
+          pnpm test
+          pnpm exec wrangler deploy --dry-run --outdir /tmp/relay-dry-run
+
   app:
     needs: changes
     if: needs.changes.outputs.app == 'true'
@@ -157,9 +181,10 @@ jobs:
             ~/.cache/go-build
             ~/.local/share/pnpm/store
             ~/.pub-cache
-          key: e2e-${{ runner.os }}-${{ hashFiles('cli/go.sum', 'server/pnpm-lock.yaml', 'app/pubspec.lock') }}
+          key: e2e-${{ runner.os }}-${{ hashFiles('cli/go.sum', 'server/pnpm-lock.yaml', 'relay/pnpm-lock.yaml', 'app/pubspec.lock') }}
       - name: 端到端流程
         run: |
           (cd server && pnpm install --frozen-lockfile)
+          (cd relay && pnpm install --frozen-lockfile)
           (cd app && flutter pub get)
           bash e2e/run.sh

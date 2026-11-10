@@ -6,6 +6,7 @@ import type { Deps, PushMessage, PushTarget, WaiterMessage, Waiters } from "../s
 import { migrate, wipe, type Param, type Sql } from "../src/core/db";
 import { Directory } from "../src/core/directory";
 import { route, type Backend } from "../src/core/router";
+import type { NotifyResult, NotifyType } from "../src/core/push";
 import { authMsg, b64, canonical, deviceCertMsg, envelopeMsg, recoveryAuthMsg, rootRecoveryMsg } from "../src/core/util";
 
 export function nodeSql(): Sql {
@@ -67,7 +68,14 @@ export class TestServer {
   pushes: Sent[] = [];
   /** 模拟保持着推送连接的设备。 */
   online = new Set<string>();
-  config = { allowRegistration: false, requireVerification: true, version: "0.1.0", relaxedLimits: false };
+  config = { allowRegistration: false, requireVerification: true, version: "0.1.0", relaxedLimits: false, push: true };
+  /** 模拟推送中继：记录发出的通知和删除的句柄；result 是中继的答复。 */
+  relay = { sent: [] as { handle: string; type: NotifyType }[], removed: [] as string[], result: "ok" as NotifyResult, tasks: [] as Promise<unknown>[] };
+
+  /** 等待响应之后才发出的通知完成。 */
+  async flush() {
+    while (this.relay.tasks.length) await Promise.all(this.relay.tasks.splice(0));
+  }
   /** 模拟入口总量限制；返回 false 表示超限。 */
   entryLimit?: (key: string) => Promise<boolean>;
   mailAvailable = true;
@@ -100,6 +108,17 @@ export class TestServer {
           connected: (deviceId) => this.online.has(deviceId),
         },
         waiters: new FakeWaiters(() => this.clock),
+        push: {
+          get enabled() {
+            return server.config.push;
+          },
+          notify: async (handle, type) => {
+            this.relay.sent.push({ handle, type });
+            return this.relay.result;
+          },
+          remove: async (handle) => void this.relay.removed.push(handle),
+          defer: (task) => void this.relay.tasks.push(task),
+        },
         mailer: {
           get available() {
             return server.mailAvailable;

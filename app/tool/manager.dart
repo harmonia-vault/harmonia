@@ -5,8 +5,10 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:harmonia/core/account.dart';
+import 'package:harmonia/core/api.dart';
 import 'package:harmonia/core/crypto.dart';
 import 'package:harmonia/core/models.dart';
+import 'package:harmonia/core/push.dart';
 import 'package:harmonia/core/store.dart';
 import 'package:harmonia/core/vault.dart';
 
@@ -248,6 +250,14 @@ Future<void> main(List<String> argv) async {
       final code = crypto.random(16);
       await v.rotateRecovery(code);
       print(formatRecoveryCode(code));
+    case 'push-register':
+      // 后台通知的登记（设计文档 18.4）：用给定的假推送令牌向中继登记，把句柄交给实例。
+      final relay = RelayClient(ApiClient(opt('relay')));
+      final token = opt('token');
+      final v = await loaded();
+      final push = PushRegistrar(device: _FixedPushDevice(token), relay: relay, store: store, platform: 'android');
+      await push.load();
+      print((await push.sync(VaultPushInstance(v, account), force: true)).name);
     case 'sync':
       await loaded();
       print('seq=${vault.cache.seq}');
@@ -256,4 +266,20 @@ Future<void> main(List<String> argv) async {
       exit(2);
   }
   exit(0);
+}
+
+/// 无界面脚本没有系统通知：权限视为已允许，令牌由参数给出。
+class _FixedPushDevice implements PushDevice {
+  _FixedPushDevice(this.value);
+  final String value;
+  @override
+  Future<PushPermission> permission() async => PushPermission.granted;
+  @override
+  Future<bool> requestPermission() async => true;
+  @override
+  Future<PushToken?> token() async => PushToken(value);
+  @override
+  Future<void> openSettings() async {}
+  @override
+  Future<bool> takeOpened() async => false;
 }

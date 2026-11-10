@@ -1,45 +1,12 @@
 #!/usr/bin/env bash
 # 端到端流程测试：本地 workerd 服务端 + 真实 harmonia CLI + 无界面管理设备（app/lib/core）。
 # 覆盖：注册验证（含重新注册未初始化的账号）、首次初始化、匿名查询、电脑配对（扫码方式与配对码方式、取消等待、配对码输错）、
-# exec、实时推送、写入、本地覆盖、权限变更、撤销、恢复与轮换、多管理设备、电脑管理登录（本机管理页面的接口）。账号没有密码。
+# exec、实时推送、写入、本地覆盖、权限变更、撤销、恢复与轮换、多管理设备、电脑管理登录（本机管理页面的接口）、
+# 后台通知（本地推送中继，不连接 APNs、FCM）。账号没有密码。
 set -euo pipefail
 
-ROOT=$(cd "$(dirname "$0")/.." && pwd)
-TMP="$ROOT/e2e/.tmp"
-PORT=8799
-SERVER="http://localhost:$PORT"
-EMAIL="e2e-$RANDOM@example.com"
-
-rm -rf "$TMP" && mkdir -p "$TMP"
-step() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
-fail() { printf '\033[31m失败：%s\033[0m\n' "$*"; exit 1; }
-expect_eq() { [ "$1" == "$2" ] || fail "$3：期望 [$2]，实际 [$1]"; }
-# expect_has 输出 模式 说明：先拿到完整输出再匹配，避免 grep -q 提前退出让管道失败。
-expect_has() { grep -qE "$2" <<<"$1" || fail "$3：$1"; }
-
-cleanup() {
-  [ -n "${DAEMON_PID:-}" ] && kill "$DAEMON_PID" 2>/dev/null || true
-  [ -n "${MGR_PID:-}" ] && kill "$MGR_PID" 2>/dev/null || true
-  [ -n "${SERVER_PID:-}" ] && kill "$SERVER_PID" 2>/dev/null || true
-  pkill -f "wrangler dev.*$PORT" 2>/dev/null || true
-}
-trap cleanup EXIT
-
-step "构建 CLI、无界面管理脚本与启动本地服务端"
-(cd "$ROOT/cli" && go build -o "$TMP/harmonia" ./cmd/harmonia)
-# 管理脚本要调用几十次，先编译好，免得每次 dart run 都重新检查和编译。
-(cd "$ROOT/app" && dart build cli --target tool/manager.dart --output "$TMP/manager" --verbosity error)
-(cd "$ROOT/server" && npx wrangler dev --local --port $PORT --persist-to "$TMP/wrangler" \
-  --var DEV_MAIL_LOG:true --var ALLOW_REGISTRATION:true --var REQUIRE_EMAIL_VERIFICATION:true --var DEV_RELAXED_LIMITS:true \
-  >"$TMP/server.log" 2>&1) &
-SERVER_PID=$!
-disown $SERVER_PID
-for _ in $(seq 1 60); do curl -sf "$SERVER/api/v1/instance" >/dev/null && break; sleep 1; done
-curl -sf "$SERVER/api/v1/instance" >/dev/null || fail "服务端没有启动，见 $TMP/server.log"
-
-manager() { (cd "$ROOT/app" && "$TMP/manager/bundle/bin/manager" --home "$TMP/$1" "${@:2}"); }
-mail_code() { grep -a "to=$EMAIL purpose=$1" "$TMP/server.log" | tail -1 | sed 's/.*code=//'; }
-cli() { HARMONIA_HOME="$TMP/cli" "$TMP/harmonia" "$@"; }
+# shellcheck source=e2e/setup.sh
+source "$(dirname "$0")/setup.sh"
 
 step "J1 注册、验证邮箱、首次初始化（没有密码）"
 expect_eq "$(manager phone lookup --server "$SERVER" --email "$EMAIL")" "not-registered" "注册前查询"
@@ -58,6 +25,8 @@ RECOVERY=$(manager phone setup --name "主手机")
 expect_eq "$(manager other lookup --server "$SERVER" --email "$EMAIL")" "initialized" "初始化后查询"
 DUP=$(manager other register --server "$SERVER" --email "$EMAIL" 2>&1 || true)
 [[ "$DUP" == *"这个邮箱已经注册并完成了设置"* ]] || fail "已初始化的邮箱重新注册应当被拒绝，实际：$DUP"
+expect_eq "$(manager phone push-register --relay "$RELAY" --token e2e-push-token)" "ok" "手机登记后台通知"
+
 manager phone env-create OpenAI >/dev/null
 manager phone env-create Other >/dev/null
 manager phone var-set OpenAI OPENAI_API_KEY "sk-first 'quoted' \$(no)" >/dev/null
@@ -86,6 +55,7 @@ UNKNOWN=$(HARMONIA_HOME="$TMP/cli-wrong" "$TMP/harmonia" login "$SERVER" --email
 [[ "$UNKNOWN" == *"这个邮箱还没有注册"* ]] || fail "未注册的邮箱提示不对：$UNKNOWN"
 
 step "J3 用配对码发起后终端失去响应（心跳中断），请求自动作废"
+grep -aq "type=pairing" "$TMP/relay.log" && fail "匿名配对请求不应发后台通知"
 PCODE=$(manager phone pairing-code)
 HARMONIA_HOME="$TMP/cli-stall" "$TMP/harmonia" login "$SERVER" --email "$EMAIL" --code "$PCODE" --name "e2e-stall" \
   </dev/null >/dev/null 2>"$TMP/stall.err" &
@@ -99,6 +69,7 @@ done
 [ -n "$CODE" ] || { cat "$TMP/stall.err"; fail "没有看到配对核对码"; }
 grep -q "已用配对码发起请求" "$TMP/stall.err" || fail "用配对码发起时终端应当提示管理设备会弹出批准页"
 expect_eq "$(manager phone pending | grep e2e-stall | cut -f2)" "authorized" "用配对码发起的请求进入待批准列表"
+expect_push pairing "用配对码发起的配对请求"
 if HARMONIA_HOME="$TMP/cli-reuse" "$TMP/harmonia" login "$SERVER" --email "$EMAIL" --code "$PCODE" --name "e2e-reuse" \
   </dev/null >/dev/null 2>&1; then fail "配对码只能用一次"; fi
 kill -STOP $STALL_PID
@@ -276,7 +247,9 @@ no_ask() {
 PRINT_TOKEN=(sh -c 'printf %s "$LLM_TOKEN"')
 
 ask cli exec --env Mix -- "${PRINT_TOKEN[@]}"
-manager phone approval-reject "$(approval_code)" >/dev/null
+CODE=$(approval_code)
+expect_push approval "新的批准请求"
+manager phone approval-reject "$CODE" >/dev/null
 rc=0; wait $AP || rc=$?
 expect_eq "$rc" "125" "被拒绝时 exec 的退出码"
 grep -q "手机上拒绝了这次请求" "$TMP/ap.err" || fail "没有说明被拒绝：$(cat "$TMP/ap.err")"

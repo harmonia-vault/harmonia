@@ -22,7 +22,7 @@ export interface Backend {
   /** 把请求转交给账号；wipe=true 时清空该账号（注册竞争失败时使用）。 */
   account(accountId: string): { fetch(req: Request): Promise<Response>; wipe(): Promise<void> };
   /** relaxedLimits 仅用于本地端到端测试：跳过以邮箱为入口的接口按网络的每分钟次数限制（docs/protocol.md 3.8）。 */
-  config: { allowRegistration: boolean; requireVerification: boolean; version: string; relaxedLimits?: boolean };
+  config: { allowRegistration: boolean; requireVerification: boolean; version: string; relaxedLimits?: boolean; push?: boolean };
   /** 入口总量限制（每个网络每分钟 300 次），在进入 Durable Object 之前执行；没有配置时跳过。 */
   entryLimit?(key: string): Promise<boolean>;
 }
@@ -93,6 +93,7 @@ export async function route(req: Request, backend: Backend, clientIp: string): P
           first: !firstCompleted,
           emailVerification: config.requireVerification,
         },
+        push: config.push ?? false,
       });
     }
 

@@ -10,11 +10,13 @@ import '../core/approval_choice.dart';
 import '../core/api.dart';
 import '../core/crypto.dart';
 import '../core/models.dart';
+import '../core/push.dart';
 import '../core/store.dart';
 import '../core/vault.dart';
 import 'identity.dart';
 import 'updater.dart' show UpdateChannel;
 
+part 'notifications.dart';
 part 'onboarding.dart';
 
 enum Stage {
@@ -75,9 +77,12 @@ class AppController extends ChangeNotifier {
     required this.identity,
     required this.account,
     required this.vault,
+    required this.push,
     required Future<void> Function() prepareGlass,
+    PushInstance? pushInstance,
     bool defaultLiquidGlass = false,
-  }) : appearance = AppearanceSettings(files, prepareGlass: prepareGlass, defaultLiquidGlass: defaultLiquidGlass);
+  }) : _pushInstanceOverride = pushInstance,
+       appearance = AppearanceSettings(files, prepareGlass: prepareGlass, defaultLiquidGlass: defaultLiquidGlass);
 
   final HCrypto crypto;
   final LocalStore secure;
@@ -89,6 +94,10 @@ class AppController extends ChangeNotifier {
   final Identity identity;
   final AccountService account;
   final Vault vault;
+
+  /// 后台通知的登记（设计文档 18.4）。
+  final PushRegistrar push;
+  final PushInstance? _pushInstanceOverride;
   final AppearanceSettings appearance;
   String? appearanceError;
 
@@ -147,6 +156,9 @@ class AppController extends ChangeNotifier {
   /// 用配对码发起的请求：只有它们出现在待批准列表、角标和自动弹出的批准页中。
   /// 匿名请求只能扫码或手输核对码取到（协议 3.2）。
   List<PairingRequest> get authorizedPairings => pairings.where((p) => p.authorized).toList();
+
+  /// 点开通知进来时请求已经处理或过期；界面提示一次后清除。
+  bool staleNotification = false;
 
   /// 电脑发来的、等待批准的请求（设计文档 17.4）。
   List<ApprovalRequest> approvals = [];
@@ -217,6 +229,7 @@ class AppController extends ChangeNotifier {
       appearanceError = '外观设置未能加载，请重新设置。';
     }
     await _dropLeftovers();
+    await _loadPush();
     final raw = await files.read(_prefsKey);
     if (raw != null) prefs = Prefs.fromJson((jsonDecode(raw) as Map).cast<String, dynamic>());
     await _dropOldFormat();
@@ -288,6 +301,7 @@ class AppController extends ChangeNotifier {
   /// 忘记 PIN：清除本机数据和本机密钥，回到输入邮箱页。
   Future<void> forgetDevice() async {
     _stopPush();
+    _forgetPush();
     await identity.keyring.wipe();
     await vault.wipe();
     notice = '已清除本机数据，请重新接入。\n这台手机原来的设备记录，请在管理设备上移除。';
@@ -361,7 +375,7 @@ class AppController extends ChangeNotifier {
   // ---- 已接入后的同步与推送 ----
 
   void _onUnlocked() {
-    unawaited(syncNow());
+    unawaited(_syncThenNotifications());
     _startPush();
   }
 
@@ -405,6 +419,7 @@ class AppController extends ChangeNotifier {
 
   Future<void> _handleRevoked() async {
     _stopPush();
+    _forgetPush();
     await identity.keyring.wipe();
     await vault.wipe();
     notice = '这台手机已从账号中移除，本机数据已清除。';
@@ -470,6 +485,7 @@ class AppController extends ChangeNotifier {
 
   Future<bool> logout({bool confirmLast = false}) async {
     _stopPush();
+    _forgetPush();
     final online = await vault.logout(confirmLast: confirmLast);
     await identity.keyring.wipe();
     notice = online ? null : '暂时无法连接服务器，本机数据已清除。\n请在管理设备上移除这台手机。';

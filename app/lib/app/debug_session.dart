@@ -4,34 +4,42 @@ import 'dart:typed_data';
 import '../core/account.dart';
 import '../core/crypto.dart';
 import '../core/debug_account.dart';
+import '../core/debug_push.dart';
 import '../core/debug_vault.dart';
+import '../core/push.dart';
 import '../core/store.dart';
 import 'controller.dart';
 import 'debug_identity.dart';
 
 class DebugSession {
-  DebugSession._(this.c, this.vault, this.account);
+  DebugSession._(this.c, this.vault, this.account, this.pushDevice, this.pushInstance);
   final AppController c;
   final DebugVault vault;
   final DebugAccount account;
+  final DebugPushDevice pushDevice;
+  final DebugPushInstance pushInstance;
 
   static Future<DebugSession> create({required Future<void> Function() prepareGlass}) async {
     final crypto = await HCrypto.init();
     final vault = DebugVault(crypto);
     final account = DebugAccount(crypto, vault);
+    final pushDevice = DebugPushDevice();
+    final pushInstance = DebugPushInstance();
     final c = AppController(
       crypto: crypto,
       secure: vault.secure,
       files: MemoryStore(),
       account: account,
       vault: vault,
+      push: PushRegistrar(device: pushDevice, relay: DebugPushRelay(), store: MemoryStore(), platform: 'ios'),
+      pushInstance: pushInstance,
       identity: DebugIdentity(crypto),
       deviceName: '示例手机',
       platform: 'ios',
       prepareGlass: prepareGlass,
     );
     vault.onSimulatedChange = c.refresh;
-    final session = DebugSession._(c, vault, account);
+    final session = DebugSession._(c, vault, account, pushDevice, pushInstance);
     session.reset();
     return session;
   }
@@ -49,6 +57,7 @@ class DebugSession {
     c.pairings = [...vault.requests];
     prepareAccount();
     c.instance = InstanceInfo('https://debug.invalid', '0.0.0', true, false, true);
+    _resetPush(DebugPushScenario.ok);
     c.pendingEmail = 'demo@example.invalid';
     c.verifyFlow = 'debug-verification';
     c.setupDraft = account.prepareSetup();
@@ -65,6 +74,30 @@ class DebugSession {
       '示例手机',
     );
     c.refresh();
+  }
+
+  /// 切换“后台通知”的模拟状态：系统权限、推送令牌和实例开关都只在内存里。
+  Future<void> setPush(DebugPushScenario scenario, {bool enabled = true}) async {
+    _resetPush(scenario, enabled: enabled);
+    await c.push.sync(pushInstance, force: true);
+    c.refresh();
+  }
+
+  void _resetPush(DebugPushScenario scenario, {bool enabled = true}) {
+    pushDevice
+      ..perm = switch (scenario) {
+        DebugPushScenario.needsPermission => PushPermission.notDetermined,
+        DebugPushScenario.systemOff => PushPermission.denied,
+        _ => PushPermission.granted,
+      }
+      ..hasToken = scenario != DebugPushScenario.unavailable
+      ..opened = false;
+    pushInstance.allows = scenario != DebugPushScenario.serverOff;
+    c.push.state = PushState()
+      ..enabled = enabled
+      ..asked = scenario != DebugPushScenario.needsPermission;
+    c.push.status = PushStatus.checking;
+    c.staleNotification = false;
   }
 
   void prepareAccount({bool initialized = true}) {

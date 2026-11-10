@@ -9,6 +9,7 @@ import '../app/updater.dart';
 import '../core/crypto.dart';
 import '../core/debug_account.dart';
 import '../core/debug_approvals.dart';
+import '../core/debug_push.dart';
 import '../core/vault.dart' show ApprovalRequest;
 import 'about.dart';
 import 'ai_prompt.dart';
@@ -114,6 +115,37 @@ Map<String, List<DebugPageEntry>> debugPages() => {
     DebugPageEntry('批准写入变量：新增和删除、值默认遮住', (s) => _approval(s, debugApproval(write: true))),
     DebugPageEntry('批准请求已失效（电脑已取消或超时）', (s) => _approval(s, debugApproval(), expire: true)),
     DebugPageEntry('设备详情：正在生效的授权与结束', (s) => _devicePage(s, 'debug-mac')),
+  ],
+  '后台通知': [
+    DebugPageEntry('设置：后台通知正常', (s) => SettingsTab(c: s.c), prepare: (s) => s.setPush(DebugPushScenario.ok)),
+    DebugPageEntry(
+      '设置：后台通知已关闭，打开开关重新登记',
+      (s) => SettingsTab(c: s.c),
+      prepare: (s) => s.setPush(DebugPushScenario.ok, enabled: false),
+    ),
+    DebugPageEntry(
+      '设置：还没有允许通知，点“允许通知”请求权限',
+      (s) => SettingsTab(c: s.c),
+      prepare: (s) => s.setPush(DebugPushScenario.needsPermission),
+    ),
+    DebugPageEntry(
+      '设置：系统权限已关闭与打开系统设置',
+      (s) => SettingsTab(c: s.c),
+      prepare: (s) => s.setPush(DebugPushScenario.systemOff),
+    ),
+    DebugPageEntry(
+      '设置：这台手机收不到后台通知',
+      (s) => SettingsTab(c: s.c),
+      prepare: (s) => s.setPush(DebugPushScenario.unavailable),
+    ),
+    DebugPageEntry('设置：服务器关闭了后台通知', (s) => SettingsTab(c: s.c), prepare: (s) => s.setPush(DebugPushScenario.serverOff)),
+    DebugPageEntry(
+      '点开通知时请求已处理或已过期',
+      (s) => DebugOverlay(
+        background: HomePage(c: s.c),
+        show: (c) async => toast(c, staleNotificationText),
+      ),
+    ),
   ],
   '账号接入': [
     DebugPageEntry('连接服务器', (s) => ConnectPage(c: s.c), stage: Stage.connect),

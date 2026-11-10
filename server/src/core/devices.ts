@@ -5,6 +5,7 @@ import { readJson, requireDevice, requireInitialized, type Deps, type Device } f
 import { parseEnvelopes } from "./keys";
 import { reconcileEnvelopes, touchVisibility } from "./access";
 import { parseGrants, writeActivation, writeGrants } from "./grants";
+import { dropHandle } from "./push";
 import { ApiError, bad, conflict, forbidden, id, label, notFound } from "./util";
 
 function target(sql: Sql, deviceId: string): Device {
@@ -19,6 +20,7 @@ function activeManagerCount(sql: Sql): number {
 
 export function revokeDevice(deps: Deps, deviceId: string) {
   const { sql } = deps;
+  dropHandle(deps, deviceId);
   sql.transaction(() => {
     sql.run(`UPDATE devices SET status = 'revoked', root_sealed = NULL WHERE id = ?`, deviceId);
     sql.run(`DELETE FROM grants WHERE device_id = ?`, deviceId);

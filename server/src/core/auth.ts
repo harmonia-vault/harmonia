@@ -17,6 +17,7 @@ import {
 } from "./context";
 import { checkCode, sendCode } from "./email";
 import { verifyCert } from "./keys";
+import { dropHandle } from "./push";
 import {
   ApiError,
   authMsg,
@@ -119,6 +120,7 @@ export function authRoutes(app: Hono, deps: Deps) {
     for (const d of sql.all<{ id: string }>(`SELECT id FROM devices`)) {
       deps.notifier.send({ device: d.id }, { type: "revoked" });
       deps.notifier.disconnect(d.id);
+      dropHandle(deps, d.id);
     }
     wipe(sql);
     return c.json({ ok: true });

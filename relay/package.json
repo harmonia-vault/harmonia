@@ -1,0 +1,24 @@
+{
+  "name": "harmonia-relay",
+  "version": "0.13.1",
+  "private": true,
+  "type": "module",
+  "description": "Harmonia（和弦）推送中继：替各个实例给手机发系统通知，只由发布者部署",
+  "scripts": {
+    "dev": "wrangler dev --local --ip 0.0.0.0 --port 8788 --local-upstream localhost:8788 --var DEV_FAKE_SENDER:true",
+    "deploy": "wrangler deploy",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "packageManager": "pnpm@11.5.2",
+  "dependencies": {
+    "hono": "^4.13.13"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261005.1",
+    "@types/node": "^26.6.4",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3",
+    "wrangler": "^4.147.0"
+  }
+}

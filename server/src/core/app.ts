@@ -9,6 +9,7 @@ import { vaultRoutes } from "./vaults";
 import { environmentRoutes } from "./environments";
 import { deviceRoutes } from "./devices";
 import { recoveryRoutes } from "./recovery";
+import { pushRoutes } from "./push";
 import { ApiError } from "./util";
 
 export function errorResponse(e: unknown): Response {
@@ -28,6 +29,7 @@ export function createAccountApp(deps: Deps): Hono {
   syncRoutes(app, deps);
   vaultRoutes(app, deps);
   environmentRoutes(app, deps);
+  pushRoutes(app, deps);
   deviceRoutes(app, deps);
   recoveryRoutes(app, deps);
   approvalRoutes(app, deps);
