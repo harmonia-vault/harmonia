@@ -217,7 +217,7 @@ DEK  = 32 字节随机数，设置管理口令时生成
 
 | 方法与路径 | 说明 |
 | --- | --- |
-| `GET /instance` | `{product:"harmonia", version, protocol:1, registration:{open, first, emailVerification}}`。`open` 表示现在可以注册（开放注册，或者还没有任何账号）；`first` 表示还没有任何账号完成注册，客户端据此提示“创建第一个账号” |
+| `GET /instance` | `{product:"harmonia", version, protocol:1, registration:{open, first, emailVerification}, push}`。`push`（布尔，2026-11-09 增加）表示这台服务器是否开启后台通知（3.10）。`open` 表示现在可以注册（开放注册，或者还没有任何账号）；`first` 表示还没有任何账号完成注册，客户端据此提示“创建第一个账号” |
 | `POST /register` | `{email}` → 需要验证邮箱时 `{accountId, verificationRequired:true, flow}`，否则 `{accountId, verificationRequired:false, token, expiresAt}`（注册会话）。邮箱已注册且账号已初始化时返回 `conflict`；已注册但未初始化时按新注册处理（原来的注册会话作废）；注册未开放时返回 `forbidden` |
 | `POST /register/verify` | `{email, flow, code}` → `{accountId, token, expiresAt}`（注册会话） |
 | `POST /register/resend` | `{email}` → `{flow}` |
@@ -259,6 +259,8 @@ DEK  = 32 字节随机数，设置管理口令时生成
 | `POST /devices/{id}/update` | 管理设备 | 无请求体 → `{}`。让这台设备的后台服务现在检查更新并升级（设计文档 5.11），服务端向它推送 `{"type":"update"}`。只能用于 `kind` 为 `client` 的设备，否则返回 `invalid_request`；这台设备当前没有推送连接时返回 `device_offline` |
 | `POST /devices/{id}/revoke` | 管理设备 | 撤销。不能撤销最后一台管理设备 |
 | `POST /devices/self/revoke` | device | 本机退出。最后一台管理设备需要带上 `{confirmLast:true}` |
+| `PUT /devices/self/push` | device（管理设备） | `{handle}` → `{}`：登记或替换这台设备的推送句柄，见 3.10（2026-11-09） |
+| `DELETE /devices/self/push` | device（管理设备） | 无请求体 → `{}`：删除这台设备的推送句柄，没有时也返回 `{}` |
 | `POST /recovery/session` | 请求头 `X-Harmonia-Account` | `{nonce, signature}` → `{token, expiresAt}` |
 | `GET /recovery/material` | recovery | `{rootPub, generation, rootEnvelope:{sealed, sig}, vaults:[{id, name, keyVersion}], envelopes:[{vaultId, keyVersion, sealed, sig}]}` |
 | `POST /recovery/enroll` | recovery | `{device:{id, name, platform, signPub, boxPub, cert}, rootSealed, envelopes:[...]}`；新设备成为 `rotationRequired=true` 的管理设备，恢复会话随即作废 |
@@ -367,6 +369,8 @@ DEK  = 32 字节随机数，设置管理口令时生成
 - `{"type":"update"}`：只推送给被 `POST /devices/{id}/update` 指定的设备，表示现在检查更新并升级。不带版本号，客户端按自己的更新渠道检查，只安装签名有效且比当前版本新的安装包
 
 客户端每 30 秒发送一次文本 `ping`，服务端自动回复 `pong`。
+
+App 不在前台时没有这条连接，新请求另经推送中继发系统通知，见 3.10。
 
 #### 3.5.1 配对等待连接
 
@@ -514,6 +518,30 @@ DEK  = 32 字节随机数，设置管理口令时生成
 
 **拒绝：`POST /approvals/{id}/reject`**，服务端向发起方推送 `rejected`。
 
+### 3.10 后台通知（2026-11-09）
+
+App 不在前台时，服务端经推送中继（第 5 节）给管理设备发系统通知。设计见设计文档第 18 节。
+
+**句柄**
+
+- 32 字节随机数的 b64（43 个字符），由中继生成，App 通过 `PUT /devices/self/push` 交给服务端，每台设备最多一个，新的替换旧的。
+- 句柄本身就是凭证：持有它就能让中继给那台手机发通知。服务端把它保存在 `devices.push_handle`，不出现在 `/sync`、`/devices` 等任何响应中。
+- 格式不对时返回 `invalid_request`；这台服务器关闭了后台通知时返回 `forbidden`，`message` 为“这台服务器关闭了后台通知”。
+- 设备被撤销、本机退出时，服务端删除句柄，并尽力向中继调用 `DELETE /registration`。
+
+**什么时候发**
+
+| 事件 | 时机 | `type` |
+| --- | --- | --- |
+| 批准请求 | 新的批准请求的等待连接建立时（3.9） | `approval` |
+| 配对请求 | `authorized` 为 true 的配对请求的等待连接建立时（3.5.1）；匿名请求不发 | `pairing` |
+
+- 发给：登记了句柄、`rotationRequired` 为 false 的管理设备，跳过此刻有 `/events` 连接的设备。
+- 请求被批准、拒绝、取消、过期时不发，也不撤回已发的通知。
+- 服务端在响应之后（`waitUntil`）对每台设备调用中继的 `POST /notify`，超时 10 秒，失败不重试。中继返回 `not_found` 时删除这个句柄；其他错误忽略。
+- 部署变量 `PUSH_NOTIFICATIONS` 为 `false` 时不接受句柄、不联系中继，已保存的句柄不再使用；`GET /instance` 的 `push` 为 false。默认开启。
+- 中继地址是服务端代码中的常量，和 App 中的一致。只用于本地开发的部署变量 `DEV_PUSH_RELAY_URL` 可以把它换成本地中继的地址，部署时不设置。
+
 ## 4. 规则摘要
 
 - **权限**：客户端设备按环境授权，ro 只读，rw 可以修改环境中 `writable` 引用带来的变量（2026-10-14 去掉 admin：客户端设备不能改名或删除环境）。管理设备拥有全部权限，并且是唯一能新建、改名、删除变量库和环境，批准设备、修改授权、处理批准请求、撤销设备、轮换恢复码的角色。
@@ -525,3 +553,49 @@ DEK  = 32 字节随机数，设置管理口令时生成
 - **撤销**：服务器删除该设备的授权、封装和会话，推送 `revoked`；客户端收到 `revoked` 推送或 `device_revoked` 错误后，清除本地全部数据。
 - **限流与风控**：按网络和来源分开计数，不锁定账号，见 3.8。
 - **配对**：知道邮箱就能创建匿名配对请求，但只有扫码或手输核对码的管理设备能取到它；配对码只让请求出现在管理设备上，不代替指纹核对。
+- **后台通知**（2026-11-09）：只是提醒，内容固定、不带任何数据；收不到不影响任何流程（3.10、第 5 节）。
+
+## 5. 推送中继接口（2026-11-09）
+
+推送中继是发布者部署的独立服务（代码在 `relay/`），持有 APNs 和 FCM 的凭据，替各个实例给手机发系统通知。设计见设计文档 18.5。
+
+- 基础路径为 `https://harmonia-push.zzz.sd/api/v1`，只允许 HTTPS。这个地址是 App 和服务端代码中的常量，不能更换（设计文档 18.5）。请求、响应和错误格式同第 3 节，错误码沿用 3.7。
+- 带句柄的请求在请求头 `Authorization: Bearer <句柄>` 中给出句柄，不放进路径或请求体。
+- 中继只保存句柄的 SHA-256，不保存请求方 IP。
+- **兼容**：各个实例和 App 不会同时升级，却共用同一个中继，所以本节的接口只做增量修改，已有的接口、字段和行为不改不删（设计文档 12.10，AGENTS.md 第 4 条的例外）。
+
+### 5.1 端点
+
+| 方法与路径 | 调用方 | 说明 |
+| --- | --- | --- |
+| `POST /registrations` | App | `{platform, token, apnsEnvironment?}` → `{handle}`。`platform` 为 `ios` 或 `android`；`token` 是 APNs 设备令牌（十六进制）或 FCM 注册令牌，最长 4096 个字符；`platform` 为 `ios` 时必须带 `apnsEnvironment`（`production` 或 `sandbox`）。每次调用都生成新句柄 |
+| `PUT /registration` | App | `{token, apnsEnvironment?}` → `{}`：确认登记，更新令牌和最近确认时间，句柄不变。句柄不存在时返回 `not_found`，App 重新登记 |
+| `DELETE /registration` | App 或实例 | 无请求体 → `{}`；句柄不存在时也返回 `{}` |
+| `POST /notify` | 实例 | `{type}` → `{}`，`type` 为 `approval` 或 `pairing`。句柄不存在、或推送令牌已被 APNs / FCM 判定失效时返回 `not_found`（同时删除这条登记）；超出限额返回 `rate_limited`；APNs / FCM 暂时不可用返回 `internal` |
+
+### 5.2 通知内容
+
+由中继按 `type` 生成，实例不能指定文字：
+
+| `type` | 标题 | 正文 | 有效期 |
+| --- | --- | --- | --- |
+| `approval` | Harmonia | 有一个待批准的请求，打开 App 查看 | 120 秒 |
+| `pairing` | Harmonia | 有设备请求接入，打开 App 查看 | 300 秒 |
+
+- APNs：`apns-push-type: alert`、`apns-priority: 10`、`apns-expiration` 为当前时间加有效期、`apns-collapse-id` 为 `type`、`apns-topic` 为 App 的 bundle ID；载荷只有 `{"aps":{"alert":{"title","body"},"sound":"default"}}`，不带自定义字段。按登记时的 `apnsEnvironment` 选择正式或测试环境。
+- FCM（HTTP v1）：`notification` 为标题和正文；`android.priority` 为 `HIGH`，`android.ttl` 为有效期，`android.collapse_key` 和 `android.notification.tag` 为 `type`，`android.notification.channel_id` 为 `approvals`；不带 `data`。
+- 判定令牌失效、删除登记的答复：APNs 的 `BadDeviceToken`、`Unregistered`、`DeviceTokenNotForTopic`；FCM 的 `UNREGISTERED`。
+
+### 5.3 限流
+
+- **合并**：同一个句柄、同一种 `type`，10 秒内最多发出一条。窗口内再来的 `POST /notify` 不发送，照常返回 `{}`：手机上同一类通知本来只显示一条。
+- **每个句柄**：每天最多发出 1000 条（合并掉的不计），超出返回 `rate_limited`。只作兜底，正常使用碰不到。
+- **全局**：每分钟合计最多发出的条数，默认 1000，由中继的部署变量 `NOTIFY_GLOBAL_PER_MINUTE` 调整；超出返回 `rate_limited`。所有实例共用这份额度。
+- **登记**：`POST /registrations` 每个网络每分钟 20 次、每天 200 次；网络的定义和 HMAC 保存方式同 3.8。
+- 以上都按句柄（也就是每台手机）或手机所在的网络计算，与实例无关：一个实例上有多少用户都互不影响。`POST /notify` 不按来源网络限流：实例运行在 Cloudflare 上，出口 IP 是共用的。
+- 超出时返回 `rate_limited` 和 `retryAfter`，这次通知丢弃，不排队。
+
+### 5.4 清理与本地开发
+
+- 最近一次登记或确认（`POST /registrations`、`PUT /registration`）已超过 90 天的登记删除。
+- 只用于本地开发的变量 `DEV_FAKE_SENDER=true`：不连接 APNs、FCM，把要发的通知写进日志，其余行为不变。部署时不设置。

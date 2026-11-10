@@ -1,0 +1,36 @@
+name: Deploy relay
+
+# 部署推送中继（relay/，设计文档 18.5）到发布者的 Cloudflare 账号。
+# 正式版本标签（不含“-”）自动部署；也可以在 Actions 页面手动运行。中继没有自己的版本号，部署的就是标签对应的代码。
+# GitHub 只需要 CLOUDFLARE_API_TOKEN 和 CLOUDFLARE_ACCOUNT_ID；APNs、FCM 的凭据只放在 Cloudflare 的 Worker Secrets 里。
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-relay
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || !contains(github.ref_name, '-')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v5
+        with:
+          install_args: node pnpm
+          cache_key_prefix: mise-deploy-relay
+      - name: 测试
+        working-directory: relay
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm typecheck
+          pnpm test
+      - name: 部署
+        working-directory: relay
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: pnpm run deploy

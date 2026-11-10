@@ -12,9 +12,11 @@ import 'app/controller.dart';
 import 'app/identity.dart';
 import 'app/licenses.dart';
 import 'app/platform.dart';
+import 'app/push_device.dart';
 import 'app/updater.dart';
 import 'core/crypto.dart';
 import 'core/account.dart';
+import 'core/push.dart';
 import 'core/vault.dart';
 import 'ui/approval.dart';
 import 'ui/app_scope.dart';
@@ -58,6 +60,7 @@ Future<void> main() async {
     files: files,
     account: AccountService(crypto, platform: hostPlatform),
     vault: Vault(crypto, secure, files),
+    push: PushRegistrar(device: HostPushDevice(), relay: RelayClient(), store: files, platform: hostPlatform),
     deviceName: await hostDeviceName(),
     platform: hostPlatform,
     identity: identity,
@@ -108,6 +111,7 @@ class _HarmoniaAppState extends State<HarmoniaApp> with WidgetsBindingObserver {
     }
     _popupPairing();
     _popupApproval();
+    _staleNotification();
     setState(() {});
   }
 
@@ -143,6 +147,15 @@ class _HarmoniaAppState extends State<HarmoniaApp> with WidgetsBindingObserver {
       ),
     );
     _reviewing = false;
+  }
+
+  /// 点开通知进来，请求已经处理或过期（设计文档 18.4）。
+  void _staleNotification() {
+    final c = widget.c;
+    final ctx = _navigator.currentContext;
+    if (!c.staleNotification || ctx == null || c.stage != Stage.home) return;
+    c.staleNotification = false;
+    toast(ctx, staleNotificationText);
   }
 
   @override

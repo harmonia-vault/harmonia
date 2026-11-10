@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../app/controller.dart';
 import '../core/appearance.dart';
+import '../core/push.dart';
 import '../app/updater.dart';
 import '../core/api.dart' show appVersion;
 import 'about.dart';
@@ -28,6 +29,7 @@ class _SettingsTabState extends State<SettingsTab> {
   bool _bioAvailable = false;
   bool _bioEnabled = false;
   bool _changingAppearance = false;
+  bool _changingPush = false;
 
   AppController get c => widget.c;
 
@@ -111,6 +113,19 @@ class _SettingsTabState extends State<SettingsTab> {
     if (!await confirmIdentity(context, '验证身份以退出登录')) return;
     if (!mounted) return;
     await runBusy(context, () => c.logout(confirmLast: last));
+  }
+
+  Future<void> _togglePush(bool enabled) => _pushAction(() => c.setPushEnabled(enabled));
+
+  Future<void> _pushAction(Future<void> Function() fn) async {
+    setState(() => _changingPush = true);
+    try {
+      await fn();
+    } catch (e) {
+      if (mounted) toast(context, '$e');
+    } finally {
+      if (mounted) setState(() => _changingPush = false);
+    }
   }
 
   Future<void> _toggleGlass(bool enabled) async {
@@ -239,6 +254,39 @@ class _SettingsTabState extends State<SettingsTab> {
             ],
           ),
         ),
+        const SectionTitle('通知'),
+        Card(
+          child: Column(
+            children: [
+              AppSwitchTile(
+                icon: const Icon(Icons.notifications_outlined),
+                title: const Text('后台通知'),
+                subtitle: Text(pushStatusText(c.pushStatus)),
+                value: c.pushEnabled,
+                onChanged: _changingPush ? null : _togglePush,
+              ),
+              if (c.pushStatus == PushStatus.needsPermission) ...[
+                const Divider(),
+                ListTile(
+                  leading: const Icon(Icons.notifications_active_outlined),
+                  title: const Text('允许通知'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: _changingPush ? null : () => _pushAction(c.requestPushPermission),
+                ),
+              ],
+              if (c.pushStatus == PushStatus.systemOff) ...[
+                const Divider(),
+                ListTile(
+                  leading: const Icon(Icons.settings_outlined),
+                  title: const Text('打开系统设置'),
+                  subtitle: const Text('允许 Harmonia 发送通知后回到这里'),
+                  trailing: const Icon(Icons.open_in_new),
+                  onTap: c.openNotificationSettings,
+                ),
+              ],
+            ],
+          ),
+        ),
         const SectionTitle('安全'),
         Card(
           child: Column(
@@ -330,3 +378,14 @@ class _SettingsTabState extends State<SettingsTab> {
     );
   }
 }
+
+/// “后台通知”开关下方的说明（设计文档 18.4）。
+String pushStatusText(PushStatus s) => switch (s) {
+  PushStatus.checking => '正在检查…',
+  PushStatus.ok => '有新的请求时通知你',
+  PushStatus.off => '已关闭。打开 App 时仍会看到待批准的请求',
+  PushStatus.needsPermission => '还没有允许 Harmonia 发送通知',
+  PushStatus.systemOff => '通知已在系统设置中关闭',
+  PushStatus.unavailable => '这台手机暂时收不到后台通知，打开 App 时会看到待批准的请求',
+  PushStatus.serverOff => '这台服务器关闭了后台通知',
+};

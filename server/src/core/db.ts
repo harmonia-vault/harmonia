@@ -214,6 +214,8 @@ export const MIGRATIONS: string[][] = [
       created_at INTEGER NOT NULL
     )`,
   ],
+  // 后台通知：管理设备登记的推送句柄（docs/protocol.md 3.10）。
+  [`ALTER TABLE devices ADD COLUMN push_handle TEXT`],
 ];
 
 /** 执行迁移；upTo 只给测试用，迁移到指定版本为止。 */

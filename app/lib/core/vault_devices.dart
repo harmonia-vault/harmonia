@@ -14,6 +14,14 @@ mixin VaultDevices {
   Uint8List _verifiedBoxPub(String deviceId, String kind, String signPub, String boxPub, String cert);
   List<Map<String, dynamic>> _sealVaults(Iterable<String> vaultIds, String recipient, Uint8List boxPub);
   Set<String> _localVaults(Iterable<Grant> grants);
+  // ---- 后台通知 ----
+
+  /// 把推送中继给的句柄交给实例（协议 3.10）；替换本机原来的句柄。
+  Future<void> setPushHandle(String handle) =>
+      api!.device('PUT', '/api/v1/devices/self/push', body: {'handle': handle});
+
+  Future<void> clearPushHandle() => api!.device('DELETE', '/api/v1/devices/self/push');
+
   // ---- 配对 ----
 
   Future<List<PairingRequest>> pendingPairings() async {

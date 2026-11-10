@@ -7,6 +7,7 @@ import android.content.ClipboardManager
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.PersistableBundle
@@ -23,7 +24,7 @@ import java.io.File
 
 // FlutterFragmentActivity 是 BiometricPrompt 的要求。平台通道提供：设备名、安装更新 APK、
 // 打开网页、HTML 转 PDF、通过系统“保存到”保存文件、敏感内容复制（1 分钟后清空剪贴板）；
-// 本机密钥保护见 LocalKeys。
+// 本机密钥保护见 LocalKeys，后台通知见 PushChannel。
 class MainActivity : FlutterFragmentActivity() {
     private val handler = Handler(Looper.getMainLooper())
     private val clearClipboard = Runnable {
@@ -32,6 +33,7 @@ class MainActivity : FlutterFragmentActivity() {
         else clipboard.setPrimaryClip(ClipData.newPlainText("", ""))
     }
 
+    private val push = PushChannel(this)
     private var pendingSave: Pair<ByteArray, MethodChannel.Result>? = null
     private val saveLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
         val (bytes, result) = pendingSave ?: return@registerForActivityResult
@@ -46,6 +48,17 @@ class MainActivity : FlutterFragmentActivity() {
         }
     }
 
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        push.createChannel()
+        if (savedInstanceState == null) push.onIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        push.onIntent(intent)
+    }
+
     // 换成会向系统报告输入状态的 FlutterView，避免填充弹窗关闭后输入法被收起，见 EditorFlutterFragment。
     override fun createFlutterFragment(): FlutterFragment {
         val args = super.createFlutterFragment().arguments
@@ -56,6 +69,7 @@ class MainActivity : FlutterFragmentActivity() {
         super.configureFlutterEngine(flutterEngine)
         val keys = LocalKeys(this)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "harmonia/keys").setMethodCallHandler(keys::handle)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "harmonia/push").setMethodCallHandler(push::handle)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "harmonia/platform").setMethodCallHandler { call, result ->
             when (call.method) {
                 "deviceName" -> {

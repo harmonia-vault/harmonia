@@ -6,6 +6,7 @@ import { migrate, wipe, type Param, type Sql } from "../core/db";
 import { Directory as DirectoryCore } from "../core/directory";
 import type { Mailer } from "../core/email";
 import { checkWaiters, waiterLeft } from "../core/pairing";
+import { RELAY_URL, relayClient } from "../core/push";
 import { VERSION } from "../core/protocol";
 import { route, type Backend } from "../core/router";
 import { ApiError } from "../core/util";
@@ -23,7 +24,13 @@ export interface Env {
   DEV_MAIL_LOG?: string;
   /** 仅本地端到端测试：跳过按网络的每分钟次数限制和邮件重发间隔（docs/protocol.md 3.8）。部署时不要设置。 */
   DEV_RELAXED_LIMITS?: string;
+  /** 设为 false 时关闭后台通知：不接受推送句柄、不联系推送中继（docs/protocol.md 3.10）。默认开启。 */
+  PUSH_NOTIFICATIONS?: string;
+  /** 仅本地端到端测试：改用本机运行的推送中继。部署时不要设置。 */
+  DEV_PUSH_RELAY_URL?: string;
 }
+
+const pushEnabled = (env: Env) => env.PUSH_NOTIFICATIONS?.trim().toLowerCase() !== "false";
 
 /**
  * Durable Object 之间的调用只带得过错误的文字，带不过状态码和错误码：目录里“邮箱已经注册”
@@ -135,6 +142,11 @@ export class Account extends DurableObject<Env> {
       mailer: mailer(env),
       now: () => Date.now(),
       relaxedLimits: env.DEV_RELAXED_LIMITS === "true",
+      push: {
+        enabled: pushEnabled(env),
+        ...relayClient(env.DEV_PUSH_RELAY_URL || RELAY_URL),
+        defer: (task) => ctx.waitUntil(task),
+      },
       acceptSocket: (d: Device) => {
         const pair = new WebSocketPair();
         ctx.acceptWebSocket(pair[1], ["device", d.id, d.kind]);
@@ -241,6 +253,7 @@ function backend(env: Env): Backend {
       requireVerification: env.REQUIRE_EMAIL_VERIFICATION === "true",
       version: VERSION,
       relaxedLimits: env.DEV_RELAXED_LIMITS === "true",
+      push: pushEnabled(env),
     },
   };
 }

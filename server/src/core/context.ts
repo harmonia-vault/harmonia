@@ -3,6 +3,7 @@ import type { Context } from "hono";
 import { one, type Sql } from "./db";
 import type { Mailer } from "./email";
 import { sweepGuard } from "./guard";
+import type { PushRelay } from "./push";
 import { networkId } from "./net";
 import { ApiError, b64, forbidden, obj, randomB64, rateLimited, sha256, unauthorized } from "./util";
 
@@ -53,6 +54,8 @@ export interface Deps {
   relaxedLimits?: boolean;
   /** 接受一条推送连接（仅 Durable Object 环境提供）。 */
   acceptSocket?(device: Device): Response;
+  /** 经推送中继发后台通知（docs/protocol.md 3.10）；没有时不发。 */
+  push?: PushRelay;
 }
 
 export type Device = {
@@ -72,6 +75,8 @@ export type Device = {
   visibility_seq: number;
   /** 设备最近一次同步时上报的客户端版本，没有上报过时为空。 */
   version: string;
+  /** 后台通知的推送句柄，只用于发通知，不出现在任何响应中。 */
+  push_handle: string | null;
   created_at: number;
   last_seen_at: number;
 };

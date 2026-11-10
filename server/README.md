@@ -37,6 +37,7 @@ Harmonia（和弦）是一个自托管的环境变量同步工具：在手机上
 | `EMAIL_FROM` | 空 | 发件地址，例如 `noreply@example.com`，域名需已在 Email Service 验证。为空时不发送邮件，“重置账号”不可用 |
 | `ALLOW_REGISTRATION` | `false` | 设为 `true` 开放注册。`false` 时只允许注册第一个账号；之后重置过的账号可以用同一邮箱重新注册 |
 | `REQUIRE_EMAIL_VERIFICATION` | `false` | 设为 `true` 时注册需要验证邮箱（需要先配置 `EMAIL_FROM`） |
+| `PUSH_NOTIFICATIONS` | `true` | App 不在前台时，有新的批准请求或配对请求会经 Harmonia 的推送中继给手机发系统通知（通知内容固定，不带任何数据）。设为 `false` 时这台服务器不联系推送中继，手机只在打开 App 时看到请求 |
 
 每个账号的数据相互隔离，存放在各自的 Durable Object 中。
 

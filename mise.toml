@@ -71,6 +71,11 @@ description = "服务端单元测试"
 dir = "server"
 run = "pnpm test"
 
+[tasks.test-relay]
+description = "推送中继单元测试"
+dir = "relay"
+run = "pnpm test"
+
 [tasks.test-app]
 description = "App 核心（纯 Dart）单元测试"
 dir = "app"
@@ -98,7 +103,7 @@ run = "flutter run"
 
 [tasks.test]
 description = "全部单元测试"
-depends = ["test-cli", "test-server", "test-app"]
+depends = ["test-cli", "test-server", "test-relay", "test-app"]
 
 [tasks.e2e]
 description = "端到端流程测试：本地 workerd 服务端 + 真实 CLI + 无界面管理脚本"
@@ -155,6 +160,16 @@ xcodebuild test -quiet -workspace ios/Runner.xcworkspace -scheme Runner -destina
 description = "本地运行服务端（workerd）"
 dir = "server"
 run = "pnpm dev"
+
+[tasks.dev-relay]
+description = "本地运行推送中继（不连接 APNs、FCM，通知写进日志）"
+dir = "relay"
+run = "pnpm dev"
+
+[tasks.deploy-relay]
+description = "发布者手动部署推送中继（正常由 deploy-relay.yml 在打正式标签时部署）"
+dir = "relay"
+run = ["pnpm install --frozen-lockfile", "pnpm test", "pnpm run deploy"]
 
 [tasks.app-icon]
 description = "把 design/icons 的手绘图标导出到 Android 和 iOS 工程"

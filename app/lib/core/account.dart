@@ -7,7 +7,8 @@ import 'crypto.dart';
 import 'vault.dart';
 
 class InstanceInfo {
-  InstanceInfo(this.server, this.version, this.registrationOpen, this.firstAccount, this.emailVerification);
+  InstanceInfo(this.server, this.version, this.registrationOpen, this.firstAccount, this.emailVerification,
+      {this.push = false});
   final String server;
   final String version;
   final bool registrationOpen;
@@ -15,6 +16,9 @@ class InstanceInfo {
   /// 服务器上还没有任何账号完成注册。
   final bool firstAccount;
   final bool emailVerification;
+
+  /// 实例是否接受后台通知的句柄（协议 3.10）。
+  final bool push;
 }
 
 /// 已经确定的账号。注册会话（[token]）只用于首次初始化；接入已初始化的账号不需要会话（协议 3.1）。
@@ -82,7 +86,8 @@ class AccountService {
     final reg = (res['registration'] as Map).cast<String, dynamic>();
     // 还没有升级的服务器不返回 first：按已有账号处理。
     return InstanceInfo(server, res['version'] as String, reg['open'] as bool,
-        reg['first'] as bool? ?? false, reg['emailVerification'] as bool);
+        reg['first'] as bool? ?? false, reg['emailVerification'] as bool,
+        push: res['push'] == true);
   }
 
   /// 匿名查询账号；邮箱还没有注册时返回 null。

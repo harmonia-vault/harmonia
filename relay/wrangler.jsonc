@@ -1,0 +1,18 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "harmonia-relay",
+  "main": "src/workers/index.ts",
+  "compatibility_date": "2026-10-01",
+  // 地址写死在 App 和服务端代码里，不能更换（docs/rewrite-plan.md 18.5）。
+  "routes": [{ "pattern": "harmonia-push.zzz.sd", "custom_domain": true }],
+  "workers_dev": false,
+  "durable_objects": {
+    "bindings": [{ "name": "REGISTRY", "class_name": "Registry" }]
+  },
+  "migrations": [{ "tag": "init", "new_sqlite_classes": ["Registry"] }],
+  // APNs、FCM 的凭据（APNS_KEY、APNS_KEY_ID、APNS_TEAM_ID、APNS_TOPIC、FCM_SERVICE_ACCOUNT）和
+  // NOTIFY_GLOBAL_PER_MINUTE 在 Cloudflare 控制台填写，部署时保留，不进仓库。
+  "keep_vars": true,
+  // 不记录请求日志：中继不保存请求方 IP（docs/protocol.md 第 5 节）。
+  "observability": { "enabled": false }
+}
