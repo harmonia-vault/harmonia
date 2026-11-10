@@ -60,9 +60,9 @@ void main() {
       );
     final cert = b64(crypto.sign(root, deviceCertMsg('pc', 'client', b64(dev.pub), b64(devBox.pub))));
     const items = [
-      EnvItem('LLM_KEY', 'v', 'OPENAI_API_KEY', true),
-      EnvItem('MODEL', 'v', 'MODEL', true),
-      EnvItem('RO', 'v2', 'RO', false),
+      EnvItem('LLM_KEY', 'v', 'OPENAI_API_KEY'),
+      EnvItem('MODEL', 'v', 'MODEL'),
+      EnvItem('RO', 'v2', 'RO'),
     ];
     vault.cache
       ..self = {'kind': 'manager'}
@@ -85,7 +85,6 @@ void main() {
               {
                 'vaultId': 'v',
                 'scope': 'all',
-                'writable': true,
                 'items': [
                   {'name': 'OPENAI_API_KEY', 'as': 'LLM_KEY'},
                 ],
@@ -173,8 +172,11 @@ void main() {
     expect(vault.approvalProblem(request(write([item('env', 'MODEL')], [item('env', 'LLM_KEY')]))), isNull);
     expect(vault.approvalProblem(request(write([item('env', 'NEW_ONE', 'v')]))), isNull);
     expect(vault.approvalProblem(request(write([item('env', 'MODEL', 'v')]))), contains('不能'));
-    expect(vault.approvalProblem(request(write([item('env', 'RO')]))), contains('不允许修改'));
-    expect(vault.approvalProblem(request(write([], [item('env', 'RO')]))), contains('不允许删除'));
+    // 读写授权能改、能删环境里的任何变量；环境里没有的不行。
+    expect(vault.approvalProblem(request(write([item('env', 'RO')]))), isNull);
+    expect(vault.approvalProblem(request(write([], [item('env', 'RO')]))), isNull);
+    expect(vault.approvalProblem(request(write([item('env', 'GHOST')]))), contains('没有 GHOST'));
+    expect(vault.approvalProblem(request(write([], [item('env', 'GHOST')]))), contains('没有 GHOST'));
   });
 
   test('批准读取：只交出请求的变量，加密给临时公钥并由 root 签名', () async {

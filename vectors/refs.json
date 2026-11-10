@@ -6,26 +6,22 @@
         {
           "name": "LLM_KEY",
           "vaultId": "AAAAAAAAAAAAAAAAAAAAAA",
-          "source": "OPENAI_API_KEY",
-          "writable": false
+          "source": "OPENAI_API_KEY"
         },
         {
           "name": "ANTHROPIC_KEY",
           "vaultId": "AAAAAAAAAAAAAAAAAAAAAA",
-          "source": "ANTHROPIC_KEY",
-          "writable": false
+          "source": "ANTHROPIC_KEY"
         },
         {
           "name": "DB_URL",
           "vaultId": "BBBBBBBBBBBBBBBBBBBBBB",
-          "source": "DB_URL",
-          "writable": true
+          "source": "DB_URL"
         },
         {
           "name": "ZED",
           "vaultId": "BBBBBBBBBBBBBBBBBBBBBB",
-          "source": "Z",
-          "writable": true
+          "source": "Z"
         }
       ],
       "name": "勾选只取存在的变量并保持勾选顺序，全部变量按名字排序并应用改名",
@@ -33,7 +29,6 @@
         {
           "vaultId": "AAAAAAAAAAAAAAAAAAAAAA",
           "scope": "pick",
-          "writable": false,
           "items": [
             {
               "name": "OPENAI_API_KEY",
@@ -50,7 +45,6 @@
         {
           "vaultId": "BBBBBBBBBBBBBBBBBBBBBB",
           "scope": "all",
-          "writable": true,
           "items": [
             {
               "name": "Z",
@@ -80,14 +74,12 @@
         {
           "name": "K",
           "vaultId": "AAAAAAAAAAAAAAAAAAAAAA",
-          "source": "K",
-          "writable": false
+          "source": "K"
         },
         {
           "name": "J",
           "vaultId": "BBBBBBBBBBBBBBBBBBBBBB",
-          "source": "J",
-          "writable": false
+          "source": "J"
         }
       ],
       "name": "同名时排在前面的引用优先，其余被遮住",
@@ -95,13 +87,11 @@
         {
           "vaultId": "AAAAAAAAAAAAAAAAAAAAAA",
           "scope": "all",
-          "writable": false,
           "items": []
         },
         {
           "vaultId": "BBBBBBBBBBBBBBBBBBBBBB",
           "scope": "all",
-          "writable": false,
           "items": []
         }
       ],
@@ -109,8 +99,7 @@
         {
           "name": "K",
           "vaultId": "BBBBBBBBBBBBBBBBBBBBBB",
-          "source": "K",
-          "writable": false
+          "source": "K"
         }
       ],
       "vaults": {
@@ -131,14 +120,12 @@
         {
           "name": "J",
           "vaultId": "BBBBBBBBBBBBBBBBBBBBBB",
-          "source": "J",
-          "writable": false
+          "source": "J"
         },
         {
           "name": "K",
           "vaultId": "BBBBBBBBBBBBBBBBBBBBBB",
-          "source": "K",
-          "writable": false
+          "source": "K"
         }
       ],
       "name": "勾选的变量不存在也参与重名检查",
@@ -146,7 +133,6 @@
         {
           "vaultId": "AAAAAAAAAAAAAAAAAAAAAA",
           "scope": "pick",
-          "writable": false,
           "items": [
             {
               "name": "X",
@@ -157,7 +143,6 @@
         {
           "vaultId": "BBBBBBBBBBBBBBBBBBBBBB",
           "scope": "all",
-          "writable": false,
           "items": []
         }
       ],
@@ -178,14 +163,12 @@
         {
           "name": "B",
           "vaultId": "AAAAAAAAAAAAAAAAAAAAAA",
-          "source": "A",
-          "writable": false
+          "source": "A"
         },
         {
           "name": "C",
           "vaultId": "AAAAAAAAAAAAAAAAAAAAAA",
-          "source": "C",
-          "writable": false
+          "source": "C"
         }
       ],
       "name": "同一个变量库里改名撞上另一个变量",
@@ -193,7 +176,6 @@
         {
           "vaultId": "AAAAAAAAAAAAAAAAAAAAAA",
           "scope": "all",
-          "writable": false,
           "items": [
             {
               "name": "A",
@@ -206,8 +188,7 @@
         {
           "name": "B",
           "vaultId": "AAAAAAAAAAAAAAAAAAAAAA",
-          "source": "B",
-          "writable": false
+          "source": "B"
         }
       ],
       "vaults": {
@@ -224,8 +205,7 @@
         {
           "name": "K",
           "vaultId": "AAAAAAAAAAAAAAAAAAAAAA",
-          "source": "K",
-          "writable": true
+          "source": "K"
         }
       ],
       "name": "已删除的变量库不提供变量",
@@ -233,13 +213,11 @@
         {
           "vaultId": "GGGGGGGGGGGGGGGGGGGGGG",
           "scope": "all",
-          "writable": false,
           "items": []
         },
         {
           "vaultId": "AAAAAAAAAAAAAAAAAAAAAA",
           "scope": "pick",
-          "writable": true,
           "items": [
             {
               "name": "K"

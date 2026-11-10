@@ -50,10 +50,9 @@ type Environment struct {
 
 // EnvItem 是环境里的一个变量：Name 是环境里的名字，Source 是变量库里的原名。
 type EnvItem struct {
-	Name     string `json:"name"`
-	VaultID  string `json:"vaultId"`
-	Source   string `json:"source"`
-	Writable bool   `json:"writable"`
+	Name    string `json:"name"`
+	VaultID string `json:"vaultId"`
+	Source  string `json:"source"`
 }
 
 // VaultName 是这台设备的环境引用到的变量库的名字。
@@ -142,11 +141,10 @@ type ManagerEnv struct {
 
 // Ref 是环境对一个变量库的引用（docs/protocol.md 3.2）。Missing 只出现在同步结果里，表示变量库已被删除。
 type Ref struct {
-	VaultID  string    `json:"vaultId"`
-	Scope    string    `json:"scope"`
-	Writable bool      `json:"writable"`
-	Items    []RefItem `json:"items"`
-	Missing  bool      `json:"missing,omitempty"`
+	VaultID string    `json:"vaultId"`
+	Scope   string    `json:"scope"`
+	Items   []RefItem `json:"items"`
+	Missing bool      `json:"missing,omitempty"`
 }
 
 // RefItem 是引用里的一个变量：Name 是变量库里的原名，As 是在环境里的新名字（空表示不改名）。

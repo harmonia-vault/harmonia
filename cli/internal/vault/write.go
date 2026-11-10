@@ -114,7 +114,7 @@ func creatableHint(c *state.Cache, nowMs int64) string {
 		}
 	}
 	if len(names) == 0 {
-		return "这台设备现在不能新增变量：需要在管理设备上为它授予读写权限，并让环境以“全部变量、可以修改”的方式引用一个变量库"
+		return "这台设备现在不能新增变量：需要在管理设备上为它授予读写权限，并让环境以“全部变量”的方式引用一个变量库"
 	}
 	return "可以新增变量的变量库：“" + strings.Join(names, "”“") + "”，写成 harmonia var set <变量库> <变量名>"
 }
@@ -148,13 +148,9 @@ func WriteDest(c *state.Cache, t Target, name string, nowMs int64) (Dest, error)
 			return Dest{}, err
 		}
 		for _, it := range env.Items {
-			if it.Name != name {
-				continue
+			if it.Name == name {
+				return Dest{VaultID: it.VaultID, Source: it.Source, Env: env, Name: name}, nil
 			}
-			if !it.Writable {
-				return Dest{}, fmt.Errorf("环境“%s”里的 %s 来自变量库“%s”，这条引用不允许修改。可以在管理设备上开启“可以修改”", env.Name, name, vaultName(c, it.VaultID))
-			}
-			return Dest{VaultID: it.VaultID, Source: it.Source, Env: env, Name: name}, nil
 		}
 		if t.SameName != nil {
 			return WriteDest(c, Target{VaultID: t.SameName.ID, VaultName: t.SameName.Name}, name, nowMs)
@@ -163,7 +159,7 @@ func WriteDest(c *state.Cache, t Target, name string, nowMs int64) (Dest, error)
 	}
 	for _, e := range writableEnvs(c, nowMs) {
 		for _, it := range e.Items {
-			if it.VaultID == t.VaultID && it.Source == name && it.Writable {
+			if it.VaultID == t.VaultID && it.Source == name {
 				return Dest{VaultID: t.VaultID, Source: name, Env: &e, Name: it.Name}, nil
 			}
 		}
@@ -171,5 +167,5 @@ func WriteDest(c *state.Cache, t Target, name string, nowMs int64) (Dest, error)
 			return Dest{VaultID: t.VaultID, Source: name, Env: &e}, nil
 		}
 	}
-	return Dest{}, fmt.Errorf("这台设备不能修改变量库“%s”里的 %s：需要在管理设备上为它授予读写权限，并让引用这个变量库的环境允许修改。%s", t.VaultName, name, creatableHint(c, nowMs))
+	return Dest{}, fmt.Errorf("这台设备不能修改变量库“%s”里的 %s：需要在管理设备上为引用这个变量的环境授予读写权限。%s", t.VaultName, name, creatableHint(c, nowMs))
 }

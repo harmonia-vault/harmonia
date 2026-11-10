@@ -7,14 +7,13 @@ import { nameDialog } from './dialogs.js';
 import { valueCell } from './vaultview.js';
 
 // stored 去掉详情里只用于显示的字段，得到可以提交的引用。
-export const stored = (refs) => refs.map((r) => ({ vaultId: r.vaultId, scope: r.scope, writable: r.writable, items: r.items }));
+export const stored = (refs) => refs.map((r) => ({ vaultId: r.vaultId, scope: r.scope, items: r.items }));
 
 function refSummary(r) {
   if (r.missing) return '变量库已被删除，这条引用已失效，不再提供变量。编辑环境，删掉它或换成其他变量库。';
   const renamed = r.items.filter((i) => i.as);
   const parts = [r.scope === 'all' ? '全部变量（以后新增的也包含）' : `勾选的 ${r.items.length} 个变量`];
   if (renamed.length) parts.push(`改名 ${renamed.map((i) => `${i.name} → ${i.as}`).join('，')}`);
-  parts.push(r.writable ? '可以修改' : '不允许修改');
   return parts.join(' · ');
 }
 
@@ -88,7 +87,7 @@ export function envView(ctx, envId) {
     const from = it.source === it.name ? vaultName(it.vaultId) : `${vaultName(it.vaultId)} / ${it.source}`;
     return h('tr', {},
       h('td', { class: 'name' }, h('span', { class: 'mono', text: it.name }),
-        h('span', { class: 'note', title: `来自变量库 ${from}`, text: `来自 ${from}${it.writable ? '' : ' · 不允许修改'}` })),
+        h('span', { class: 'note', title: `来自变量库 ${from}`, text: `来自 ${from}` })),
       h('td', { class: 'value' }, valueCell(v, open, shown.get(it.name))),
       h('td', { class: 'ops' }, show, copy,
         iconButton('vault', `打开变量库“${vaultName(it.vaultId)}”`, { onclick: () => ctx.select({ kind: 'vault', id: it.vaultId }) })));

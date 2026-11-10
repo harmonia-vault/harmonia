@@ -50,17 +50,17 @@ Future<void> main(List<String> argv) async {
     return Grant(envId(p[0]), p[1], 0, localDecrypt: !p.contains('nolocal'));
   }
 
-  // 引用写成 变量库:all|pick[:rw][:原名=新名,原名...]，例如 共享:pick:OPENAI_API_KEY=LLM_KEY。
+  // 引用写成 变量库:all|pick[:原名=新名,原名...]，例如 共享:pick:OPENAI_API_KEY=LLM_KEY。
   EnvRef ref(String spec) {
     final p = spec.split(':');
     final items = <RefItem>[];
-    for (final part in p.skip(2).where((x) => x != 'rw' && x.isNotEmpty)) {
+    for (final part in p.skip(2).where((x) => x.isNotEmpty)) {
       for (final it in part.split(',')) {
         final kv = it.split('=');
         items.add(RefItem(kv[0], kv.length > 1 ? kv[1] : null));
       }
     }
-    return EnvRef(vaultId(p[0]), p[1], writable: p.contains('rw'), items: items);
+    return EnvRef(vaultId(p[0]), p[1], items: items);
   }
 
   // 变量：先按变量库找，找不到再按环境（用环境里的名字）。
@@ -106,7 +106,7 @@ Future<void> main(List<String> argv) async {
       // 新建变量库和引用它全部变量、可以修改的同名环境，测试里常用的一步准备。
       final v = await loaded();
       final id = await v.createVault(args[0]);
-      print(await v.createEnvironment(args[0], [EnvRef(id, 'all', writable: true)]));
+      print(await v.createEnvironment(args[0], [EnvRef(id, 'all')]));
     case 'vault-create':
       // 只建变量库。
       print(await (await loaded()).createVault(args[0]));

@@ -17,10 +17,9 @@ class RefItem {
 
 /// 环境对一个变量库的引用。[scope] 是 all（全部变量）或 pick（勾选的变量）；[missing] 表示变量库已被删除。
 class EnvRef {
-  const EnvRef(this.vaultId, this.scope, {this.writable = false, this.items = const [], this.missing = false});
+  const EnvRef(this.vaultId, this.scope, {this.items = const [], this.missing = false});
   final String vaultId;
   final String scope;
-  final bool writable;
   final List<RefItem> items;
   final bool missing;
 
@@ -29,7 +28,6 @@ class EnvRef {
   factory EnvRef.fromJson(Map<String, dynamic> j) => EnvRef(
     j['vaultId'] as String,
     j['scope'] as String,
-    writable: j['writable'] as bool? ?? false,
     items: ((j['items'] as List?) ?? []).map((i) => RefItem.fromJson((i as Map).cast<String, dynamic>())).toList(),
     missing: j['missing'] as bool? ?? false,
   );
@@ -38,7 +36,6 @@ class EnvRef {
   Map<String, dynamic> toJson() => {
     'vaultId': vaultId,
     'scope': scope,
-    'writable': writable,
     'items': items.map((i) => i.toJson()).toList(),
   };
 
@@ -53,30 +50,25 @@ class EnvRef {
 
 /// 展开后的一项：[name] 是环境里的名字，[source] 是变量库里的原名。
 class EnvItem {
-  const EnvItem(this.name, this.vaultId, this.source, this.writable);
+  const EnvItem(this.name, this.vaultId, this.source);
   final String name;
   final String vaultId;
   final String source;
-  final bool writable;
 
   factory EnvItem.fromJson(Map<String, dynamic> j) =>
-      EnvItem(j['name'] as String, j['vaultId'] as String, j['source'] as String, j['writable'] as bool? ?? false);
+      EnvItem(j['name'] as String, j['vaultId'] as String, j['source'] as String);
 
-  Map<String, dynamic> toJson() => {'name': name, 'vaultId': vaultId, 'source': source, 'writable': writable};
+  Map<String, dynamic> toJson() => {'name': name, 'vaultId': vaultId, 'source': source};
 
   @override
   bool operator ==(Object other) =>
-      other is EnvItem &&
-      other.name == name &&
-      other.vaultId == vaultId &&
-      other.source == source &&
-      other.writable == writable;
+      other is EnvItem && other.name == name && other.vaultId == vaultId && other.source == source;
 
   @override
-  int get hashCode => Object.hash(name, vaultId, source, writable);
+  int get hashCode => Object.hash(name, vaultId, source);
 
   @override
-  String toString() => '$name($vaultId/$source${writable ? ', 可修改' : ''})';
+  String toString() => '$name($vaultId/$source)';
 }
 
 /// 变量库里现存的变量名；不存在的变量库返回空。
@@ -94,7 +86,7 @@ List<String> _sorted(Iterable<String> names) => names.toSet().toList()..sort();
     final existing = names(r.vaultId).toSet();
     final sources = r.all ? _sorted(existing) : r.items.map((i) => i.name).where(existing.contains);
     for (final source in sources) {
-      final item = EnvItem(r.nameOf(source), r.vaultId, source, r.writable);
+      final item = EnvItem(r.nameOf(source), r.vaultId, source);
       if (seen.add(item.name)) {
         items.add(item);
       } else {
@@ -118,4 +110,45 @@ List<String> duplicateNames(List<EnvRef> refs, VaultNames names) {
     }
   }
   return dup;
+}
+
+/// 环境页的变量面板改名（设计文档 19.4）：把来自 [vaultId] 的 [source] 在环境里的名字改为 [as]，
+/// null 表示用回原名。返回新的引用列表，其余引用不变。
+List<EnvRef> renameInRefs(List<EnvRef> refs, String vaultId, String source, String? as) => [
+  for (final r in refs)
+    if (r.vaultId != vaultId)
+      r
+    else
+      EnvRef(
+        r.vaultId,
+        r.scope,
+        missing: r.missing,
+        items: r.all
+            // 全部变量范围下只记改了名的变量。
+            ? [
+                for (final i in r.items)
+                  if (i.name != source) i,
+                if (as != null) RefItem(source, as),
+              ]
+            : [for (final i in r.items) i.name == source ? RefItem(source, as) : i],
+      ),
+];
+
+/// 从环境里移除来自 [vaultId] 的 [source]：只对勾选范围的引用有效；来自全部变量的引用返回 null，
+/// 要单独移除需先在编辑引用里改为勾选（设计文档 19.4）。
+List<EnvRef>? removeFromRefs(List<EnvRef> refs, String vaultId, String source) {
+  final ref = refs.where((r) => r.vaultId == vaultId).firstOrNull;
+  if (ref == null || ref.all) return null;
+  return [
+    for (final r in refs)
+      r.vaultId == vaultId
+          ? EnvRef(r.vaultId, r.scope, missing: r.missing, items: [for (final i in r.items) if (i.name != source) i])
+          : r,
+  ];
+}
+
+/// 环境名是否和 [others] 里的某个重复：去掉首尾空白后不区分大小写比较（设计文档 19.2）。
+bool envNameTaken(Iterable<String> others, String name) {
+  final key = name.trim().toLowerCase();
+  return others.any((n) => n.trim().toLowerCase() == key);
 }

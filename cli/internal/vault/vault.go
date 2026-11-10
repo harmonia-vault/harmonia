@@ -74,14 +74,12 @@ func Apply(c *state.Cache, s *api.Sync, since int64, rootPub string, deviceID st
 	return nil
 }
 
-// Find 按名称（不区分大小写）或 ID 查找可访问的环境。
-func Find(c *state.Cache, nameOrID string) (*api.Environment, error) {
+// Find 按名称（不区分大小写）查找可访问的环境；环境名不能重复（设计文档 19.2）。
+func Find(c *state.Cache, name string) (*api.Environment, error) {
+	name = strings.TrimSpace(name)
 	var match []api.Environment
 	for _, e := range c.Environments {
-		if e.ID == nameOrID {
-			return &e, nil
-		}
-		if strings.EqualFold(e.Name, nameOrID) {
+		if strings.EqualFold(e.Name, name) {
 			match = append(match, e)
 		}
 	}
@@ -89,22 +87,22 @@ func Find(c *state.Cache, nameOrID string) (*api.Environment, error) {
 	case 1:
 		return &match[0], nil
 	case 0:
-		return nil, notFound(c, nameOrID)
+		return nil, notFound(c, name)
 	default:
-		return nil, fmt.Errorf("有多个名为“%s”的环境，请改用环境 ID", nameOrID)
+		return nil, fmt.Errorf("有多个名为“%s”的环境，请在管理设备上给其中一个改名", name)
 	}
 }
 
 // notFound 说明环境为什么找不到：列出这台设备能访问的环境，并说明没被授权时怎么办。
-func notFound(c *state.Cache, nameOrID string) error {
+func notFound(c *state.Cache, name string) error {
 	if len(c.Environments) == 0 {
-		return fmt.Errorf("找不到环境“%s”：这台设备还没有任何环境的访问权限。请在管理设备上为这台设备授权", nameOrID)
+		return fmt.Errorf("找不到环境“%s”：这台设备还没有任何环境的访问权限。请在管理设备上为这台设备授权", name)
 	}
 	var names []string
 	for _, e := range Ordered(c) {
 		names = append(names, "“"+e.Name+"”")
 	}
-	return fmt.Errorf("找不到环境“%s”。这台设备能访问的环境：%s。名字没写错的话，需要在管理设备上为这台设备授权这个环境", nameOrID, strings.Join(names, "、"))
+	return fmt.Errorf("找不到环境“%s”。这台设备能访问的环境：%s。名字没写错的话，需要在管理设备上为这台设备授权这个环境", name, strings.Join(names, "、"))
 }
 
 // Expired 判断授权是否已到期（离线时同样生效）。
@@ -160,9 +158,9 @@ func (e *ErrNeedApproval) Error() string {
 // Entries 解密一个环境的全部变量（值和备注），键是环境里的名字。解不开的变量不放进结果，
 // 名称按顺序列在 broken 里，它们仍然可以删除或重新写入。
 func Entries(c *state.Cache, k *state.DeviceKeys, envID string) (map[string]hc.Entry, []string, error) {
-	env := byID(c, envID)
+	env := ByID(c, envID)
 	if env == nil {
-		return nil, nil, fmt.Errorf("环境 %s 已不可访问（授权可能已被撤销）", envID)
+		return nil, nil, errors.New("这个环境已不可访问，授权可能已被撤销。运行 harmonia sync 后再试")
 	}
 	if !env.LocalDecrypt {
 		return nil, nil, &ErrNeedApproval{Env: env.Name}
@@ -202,7 +200,9 @@ func Values(c *state.Cache, k *state.DeviceKeys, envID string) (map[string]strin
 	return out, broken, nil
 }
 
-func byID(c *state.Cache, envID string) *api.Environment {
+// ByID 按内部 ID 查找环境，用于本机保存的记录（本机覆盖、批准结果）；找不到时返回 nil。
+// 用户输入的环境一律用 Find 按名称查找（设计文档 19.2）。
+func ByID(c *state.Cache, envID string) *api.Environment {
 	for i := range c.Environments {
 		if c.Environments[i].ID == envID {
 			return &c.Environments[i]
@@ -267,7 +267,7 @@ func sources(c *state.Cache, k *state.DeviceKeys, ids []string, ov state.Overrid
 	problems := map[string]string{}
 	var out []source
 	for _, id := range ids {
-		env := byID(c, id)
+		env := ByID(c, id)
 		if env == nil {
 			problems[id] = fmt.Sprintf("环境 %s 已不可访问（授权可能已被撤销）", id)
 			continue

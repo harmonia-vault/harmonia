@@ -99,7 +99,7 @@ func newSession(t *testing.T) *Session {
 		}
 	}
 	s.info.Environments = []api.ManagerEnv{
-		{ID: "ea", Name: "只有 a", Refs: []api.Ref{{VaultID: "a", Scope: "all", Writable: true}}},
+		{ID: "ea", Name: "只有 a", Refs: []api.Ref{{VaultID: "a", Scope: "all"}}},
 		{ID: "mix", Name: "混合", Refs: []api.Ref{
 			{VaultID: "a", Scope: "pick", Items: []api.RefItem{{Name: "ONLY_A", As: "RENAMED"}}},
 			{VaultID: "b", Scope: "all"},

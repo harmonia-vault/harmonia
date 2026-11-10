@@ -37,7 +37,7 @@ type Requester struct {
 
 var (
 	ErrRejected = errors.New("手机上拒绝了这次请求")
-	ErrExpired  = errors.New("2 分钟内没有在手机上批准，请重新运行。需要无人值守运行时，可以在手机上为这台电脑的这个环境开启“允许本机解密”")
+	ErrExpired  = errors.New("2 分钟内没有在手机上批准，请重新运行。需要无人值守运行时，可以在手机上这台电脑这个环境的授权里展开“高级”，开启“无人值守使用”")
 	ErrLost     = errors.New("等待批准时与服务器的连接断开了，请检查网络后重新运行")
 	ErrCanceled = errors.New("已取消等待手机批准")
 	errBadGrant = errors.New("手机返回的批准结果无法验证，已丢弃。请确认服务器地址是否正确，然后重新运行")

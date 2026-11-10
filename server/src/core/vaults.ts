@@ -42,7 +42,7 @@ function requireWritable(deps: Deps, d: Device, vaultId: string, names: string[]
   const v = requireVault(deps, vaultId);
   for (const name of names) {
     if (!canWrite(deps.sql, d, vaultId, name, deps.now())) {
-      throw forbidden(`这台设备不能修改 ${name}：需要在管理设备上为它所在的环境授予读写权限，并允许修改这个变量库的引用。`);
+      throw forbidden(`这台设备不能修改 ${name}：需要在管理设备上为它所在的环境授予读写权限。`);
     }
   }
   return v;

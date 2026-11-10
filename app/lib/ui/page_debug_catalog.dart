@@ -20,6 +20,7 @@ import 'devices.dart';
 import 'device_review.dart';
 import 'env_editor.dart';
 import 'env_page.dart';
+import 'env_var_sheet.dart';
 import 'environments.dart';
 import 'feedback_debug.dart';
 import 'glass.dart';
@@ -59,10 +60,12 @@ Map<String, List<DebugPageEntry>> debugPages() => {
     DebugPageEntry('设备列表、添加设备菜单与行尾间距', (s) => s.vault.paired ? DevicesTab(c: s.c) : SignInPage(c: s.c)),
     DebugPageEntry('设置、白色滑块与输入弹窗', (s) => s.vault.paired ? SettingsTab(c: s.c) : SignInPage(c: s.c)),
     DebugPageEntry('关于、连点版本号与开源许可', (s) => AboutPage(c: s.c)),
-    DebugPageEntry('环境详情：来自哪个变量库、可访问的电脑、环境 ID 与菜单', (s) => _environment(s)),
+    DebugPageEntry('环境详情：来自哪个变量库、可访问的电脑与菜单', (s) => _environment(s)),
     DebugPageEntry('环境详情：同名变量被遮住、引用的变量库已删除', (s) => _environment(s, problems: true)),
+    DebugPageEntry('环境变量面板：选中的变量（已改名），可以改名、移除、编辑值和备注', (s) => _envVariable(s, 'debug-env-2', 'LLM_KEY')),
+    DebugPageEntry('环境变量面板：来自“全部变量”，不能单独移除的提示', (s) => _envVariable(s, 'debug-env-1', null)),
     DebugPageEntry('新建环境：添加变量库、勾选与改名、实时预览', (s) => EnvEditorPage(c: s.c)),
-    DebugPageEntry('编辑引用：顺序、可以修改、重名时不能保存', (s) {
+    DebugPageEntry('编辑引用：顺序、选择变量库和变量、重名时不能保存', (s) {
       final id = _problemEnv(s);
       return id == null ? _none('环境') : EnvEditorPage(c: s.c, envId: id);
     }),
@@ -76,16 +79,23 @@ Map<String, List<DebugPageEntry>> debugPages() => {
       '无法解密的变量（删除或重新填写）',
       (s) => _vault(s, (id) => VariableEditPage(c: s.c, vaultId: id, name: s.vault.brokenVariables(id).firstOrNull)),
     ),
-    DebugPageEntry('设备详情：已授权的环境、本机解密标记、激活开关与拖动排序', (s) => _devicePage(s, 'debug-computer')),
+    DebugPageEntry('设备详情：已授权的环境、无人值守标记、激活开关与拖动排序', (s) => _devicePage(s, 'debug-computer')),
     DebugPageEntry(
-      '环境授权面板：改权限和有效期、开启本机解密的确认、取消授权',
+      '环境授权面板：需手机批准，“高级”默认收起；展开后开启无人值守的确认与期限',
       (s) => DebugOverlay(
         background: _devicePage(s, 'debug-computer'),
         show: (c) => editDeviceGrant(c, s.c, 'debug-computer', 'debug-env-4'),
       ),
     ),
     DebugPageEntry(
-      '添加环境：只列还没授权的，默认只读、长期有效',
+      '环境授权面板：已开启无人值守，“高级”默认展开、期限与取消授权',
+      (s) => DebugOverlay(
+        background: _devicePage(s, 'debug-computer'),
+        show: (c) => editDeviceGrant(c, s.c, 'debug-computer', 'debug-env-1'),
+      ),
+    ),
+    DebugPageEntry(
+      '添加环境：只列还没授权的，默认只读、需手机批准',
       (s) => DebugOverlay(
         background: _devicePage(s, 'debug-computer'),
         show: (c) => addDeviceGrant(c, s.c, 'debug-computer'),
@@ -110,7 +120,7 @@ Map<String, List<DebugPageEntry>> debugPages() => {
         s.c.approvals = await s.vault.pendingApprovals();
       },
     ),
-    DebugPageEntry('批准使用变量：请求码、命令、按环境列出、有效时长与范围', (s) => _approval(s, debugApproval())),
+    DebugPageEntry('批准使用变量：请求码、命令、按环境列出、多久内不再询问与范围', (s) => _approval(s, debugApproval())),
     DebugPageEntry('批准使用变量：Windows 电脑只能授权给所有程序', (s) => _approval(s, debugApproval(deviceId: 'debug-computer'))),
     DebugPageEntry('批准写入变量：新增和删除、值默认遮住', (s) => _approval(s, debugApproval(write: true))),
     DebugPageEntry('批准请求已失效（电脑已取消或超时）', (s) => _approval(s, debugApproval(), expire: true)),
@@ -319,6 +329,17 @@ String? _problemEnv(DebugSession s) =>
 Widget _environment(DebugSession s, {bool problems = false}) {
   final id = problems ? _problemEnv(s) : s.vault.environments.firstOrNull?.id;
   return id == null ? _none('环境') : EnvironmentPage(c: s.c, envId: id);
+}
+
+/// 环境详情页上打开变量面板；[name] 为 null 时取第一个变量。
+Widget _envVariable(DebugSession s, String envId, String? name) {
+  final env = s.vault.environments.where((e) => e.id == envId).firstOrNull;
+  final item = env?.items.where((i) => name == null || i.name == name).firstOrNull;
+  if (env == null || item == null) return _none('环境');
+  return DebugOverlay(
+    background: EnvironmentPage(c: s.c, envId: envId),
+    show: (c) => showEnvVariableSheet(c, c: s.c, envId: envId, item: item, entry: s.vault.envEntries(envId)[item.name]),
+  );
 }
 
 Widget _vault(DebugSession s, Widget Function(String id) page) {

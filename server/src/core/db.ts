@@ -216,6 +216,17 @@ export const MIGRATIONS: string[][] = [
   ],
   // 后台通知：管理设备登记的推送句柄（docs/protocol.md 3.10）。
   [`ALTER TABLE devices ADD COLUMN push_handle TEXT`],
+  // 去掉引用上的 writable；环境名不能重复，已有的重名环境按创建先后在后面加“ 2”“ 3”（设计文档第 19 节）。
+  // 递增 head_seq，让各设备同步到新的名字。
+  [
+    `UPDATE environments SET refs = (SELECT json_group_array(json(json_remove(value, '$.writable'))) FROM json_each(environments.refs))`,
+    `CREATE TABLE env_renumber AS
+     SELECT id, ROW_NUMBER() OVER (PARTITION BY lower(trim(name)) ORDER BY created_at, id) AS n FROM environments`,
+    `UPDATE environments SET name = name || ' ' || (SELECT n FROM env_renumber r WHERE r.id = environments.id)
+     WHERE id IN (SELECT id FROM env_renumber WHERE n > 1)`,
+    `DROP TABLE env_renumber`,
+    `UPDATE meta SET value = value + 1 WHERE key = 'head_seq'`,
+  ],
 ];
 
 /** 执行迁移；upTo 只给测试用，迁移到指定版本为止。 */

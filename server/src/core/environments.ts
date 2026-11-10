@@ -20,9 +20,16 @@ function checkRefs(sql: Sql, refs: Ref[], previous: Ref[]) {
   if (dup.length) throw conflict(`环境里有重名的变量：${dup.join("、")}。请给其中一个改名，或取消勾选。`);
 }
 
+/** 环境名不能重复：去掉首尾空白后不区分大小写比较（设计文档 19.2）。 */
+function checkName(sql: Sql, name: string, envId: string) {
+  const key = name.toLowerCase();
+  const taken = sql.all<{ name: string }>(`SELECT name FROM environments WHERE id != ?`, envId).some((e) => e.name.trim().toLowerCase() === key);
+  if (taken) throw conflict(`已经有名为“${name}”的环境，请换一个名字。`);
+}
+
 function storedRefs(refs: Ref[]): string {
   return JSON.stringify(
-    refs.map((r) => ({ vaultId: r.vaultId, scope: r.scope, writable: r.writable, items: r.items.map((i) => (i.as ? { name: i.name, as: i.as } : { name: i.name })) })),
+    refs.map((r) => ({ vaultId: r.vaultId, scope: r.scope, items: r.items.map((i) => (i.as ? { name: i.name, as: i.as } : { name: i.name })) })),
   );
 }
 
@@ -44,6 +51,7 @@ export function environmentRoutes(app: Hono, deps: Deps) {
     if (arr(body.envelopes ?? [], "封装列表").length) throw bad("新环境还没有授权给任何设备，不需要封装。");
     sql.transaction(() => {
       if (one(sql, `SELECT 1 FROM environments WHERE id = ?`, envId)) throw conflict("环境已存在。");
+      checkName(sql, name, envId);
       checkRefs(sql, refs, []);
       sql.run(`INSERT INTO environments (id, name, refs, created_at) VALUES (?, ?, ?, ?)`, envId, name, storedRefs(refs), deps.now());
       bump(sql);
@@ -69,6 +77,7 @@ export function environmentRoutes(app: Hono, deps: Deps) {
     for (const [recipient, list] of byRecipient) provided.set(recipient, await parseEnvelopes(a.root_pub, recipient, list));
     sql.transaction(() => {
       const env = requireEnv(envId);
+      checkName(sql, name, envId);
       checkRefs(sql, refs, parseStoredRefs(env.refs));
       const devices = devicesWithEnv(sql, envId);
       if ([...provided.keys()].some((r) => !devices.includes(r))) throw bad("封装的接收设备没有被授权这个环境。");

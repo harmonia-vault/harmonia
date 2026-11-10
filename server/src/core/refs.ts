@@ -3,10 +3,10 @@
 import { arr, bad, id, obj, varName } from "./util";
 
 export type RefItem = { name: string; as?: string };
-export type Ref = { vaultId: string; scope: "all" | "pick"; writable: boolean; items: RefItem[] };
+export type Ref = { vaultId: string; scope: "all" | "pick"; items: RefItem[] };
 
 /** 展开后的一项：name 是环境里的名字，source 是变量库里的原名。 */
-export type Item = { name: string; vaultId: string; source: string; writable: boolean };
+export type Item = { name: string; vaultId: string; source: string };
 
 const MAX_REFS = 50;
 const MAX_ITEMS = 1000;
@@ -16,7 +16,6 @@ export function parseRefs(raw: unknown): Ref[] {
     const o = obj(v, "引用");
     const scope = o.scope;
     if (scope !== "all" && scope !== "pick") throw bad("引用的范围只能是 all 或 pick。");
-    if (typeof o.writable !== "boolean") throw bad("引用的 writable 只能是 true 或 false。");
     const items = arr(o.items ?? [], "引用的变量").map((x) => {
       const it = obj(x, "引用的变量");
       const name = varName(it.name);
@@ -28,7 +27,7 @@ export function parseRefs(raw: unknown): Ref[] {
     });
     if (items.length > MAX_ITEMS) throw bad(`一条引用最多列出 ${MAX_ITEMS} 个变量。`);
     if (new Set(items.map((i) => i.name)).size !== items.length) throw bad("同一条引用里有重复的变量。");
-    return { vaultId: id(o.vaultId, "变量库 ID"), scope, writable: o.writable, items } as Ref;
+    return { vaultId: id(o.vaultId, "变量库 ID"), scope, items } as Ref;
   });
   if (refs.length > MAX_REFS) throw bad(`一个环境最多引用 ${MAX_REFS} 个变量库。`);
   if (new Set(refs.map((r) => r.vaultId)).size !== refs.length) throw bad("同一个变量库在环境里只能引用一次。");
@@ -56,7 +55,7 @@ export function expand(refs: Ref[], names: (vaultId: string) => string[]): { ite
     const existing = new Set(names(ref.vaultId));
     const sources = ref.scope === "all" ? [...existing].sort() : ref.items.map((i) => i.name).filter((n) => existing.has(n));
     for (const source of sources) {
-      const item = { name: nameIn(ref, source), vaultId: ref.vaultId, source, writable: ref.writable };
+      const item = { name: nameIn(ref, source), vaultId: ref.vaultId, source };
       if (seen.has(item.name)) shadowed.push(item);
       else {
         seen.add(item.name);

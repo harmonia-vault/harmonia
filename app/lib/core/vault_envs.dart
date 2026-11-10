@@ -6,6 +6,7 @@ mixin VaultEnvironments {
   ApiClient? get api;
   List<DeviceInfo> get devices;
   List<String> variableNames(String vaultId);
+  List<EnvDef> get envDefs;
   SignKey _root();
   Uint8List _verifiedBoxPub(String deviceId, String kind, String signPub, String boxPub, String cert);
   List<Map<String, dynamic>> _sealVaults(Iterable<String> vaultIds, String recipient, Uint8List boxPub);
@@ -22,9 +23,17 @@ mixin VaultEnvironments {
     if (dup.isNotEmpty) throw VaultException('环境里有重名的变量：${dup.join('、')}。请给其中一个改名，或取消勾选。');
   }
 
+  /// 环境名不能和其他环境重复（设计文档 19.2）。服务端同样检查，这里先给出同样的提示，免得白跑一次请求。
+  void checkEnvName(String name, {String? exceptId}) {
+    if (envNameTaken([for (final e in envDefs) if (e.id != exceptId) e.name], name)) {
+      throw VaultException('已经有名为“${name.trim()}”的环境，请换一个名字。');
+    }
+  }
+
   /// 新建环境。新环境还没有授权给任何设备，不需要封装。返回环境 ID。
   Future<String> createEnvironment(String name, List<EnvRef> refs) async {
     _root();
+    checkEnvName(name);
     _checkRefs(refs);
     final id = crypto.newId();
     await api!.device(
@@ -40,6 +49,7 @@ mixin VaultEnvironments {
   /// （先校验设备证书），服务端据此补上新引用的、删掉不再用到的（设计文档 17.2）。
   Future<void> saveEnvironment(String id, String name, List<EnvRef> refs) async {
     _root();
+    checkEnvName(name, exceptId: id);
     _checkRefs(refs);
     final vaultIds = refs.where((r) => !r.missing).map((r) => r.vaultId);
     final envelopes = <Map<String, dynamic>>[];

@@ -31,13 +31,13 @@ func ValidateName(name string) error {
 	return nil
 }
 
-// Env 按名称或 ID 查找可访问的环境。
-func (a *App) Env(nameOrID string) (*api.Environment, error) {
+// Env 按名称查找可访问的环境。
+func (a *App) Env(name string) (*api.Environment, error) {
 	cache, err := a.Dir.Cache()
 	if err != nil {
 		return nil, err
 	}
-	return vault.Find(cache, nameOrID)
+	return vault.Find(cache, name)
 }
 
 // MaxNoteLen 是备注的最大字符数（docs/protocol.md 第 1 节）。
@@ -365,23 +365,12 @@ func (a *App) submitActivation(ctx context.Context, change func([]api.Environmen
 	return a.Sync(ctx)
 }
 
-// SetOverride 为已存在的云端变量设置仅本机生效的值；value=nil 表示移除，
-// 这时也接受已无法访问的环境的 ID。
-func (a *App) SetOverride(envNameOrID, name string, value *string) (*api.Environment, error) {
-	env, err := a.Env(envNameOrID)
+// SetOverride 为已存在的云端变量设置仅本机生效的值；value=nil 表示移除。
+// 已无法访问的环境留下的覆盖值在同步时自动删除（pruneOverridesLocked）。
+func (a *App) SetOverride(envName, name string, value *string) (*api.Environment, error) {
+	env, err := a.Env(envName)
 	if err != nil {
-		if value != nil {
-			return nil, err
-		}
-		// 环境已无法访问（例如授权被撤销）时，仍可以按环境 ID 移除留下的覆盖值。
-		ov, oerr := a.Dir.Overrides()
-		if oerr != nil {
-			return nil, oerr
-		}
-		if _, ok := ov[envNameOrID][name]; !ok {
-			return nil, err
-		}
-		env = &api.Environment{ID: envNameOrID, Name: envNameOrID}
+		return nil, err
 	}
 	if !vault.HasItem(env, name) && value != nil {
 		return nil, fmt.Errorf("环境“%s”中没有变量 %s。本机覆盖只能用于云端已有的变量", env.Name, name)

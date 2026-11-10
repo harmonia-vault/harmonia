@@ -137,9 +137,9 @@ func statusProblems(a *app.App) []string {
 	}
 	sort.Strings(ids)
 	for _, id := range ids {
-		env, err := vault.Find(cache, id)
-		if err != nil {
-			out = append(out, fmt.Sprintf("本机覆盖值所在的环境 %s 已无法访问，覆盖值不生效：用 harmonia override rm %s <变量名> 移除", id, id))
+		env := vault.ByID(cache, id)
+		if env == nil {
+			out = append(out, "有本机覆盖值所在的环境已无法访问，覆盖值不生效：运行 harmonia sync 会自动删除它们")
 			continue
 		}
 		var gone []string
@@ -169,7 +169,7 @@ func printEnvs(a *app.App) error {
 		return nil
 	}
 	fmt.Println("环境（同名变量由排在前面的环境提供）")
-	rows := [][]string{{"", "名称", "权限", "变量", "变量库", "有效期", "状态", "健康", "ID"}}
+	rows := [][]string{{"", "名称", "权限", "变量", "变量库", "有效期", "状态", "健康"}}
 	for i, e := range vault.Ordered(cache) {
 		state := "未启用"
 		if e.Active {
@@ -177,7 +177,7 @@ func printEnvs(a *app.App) error {
 		}
 		health, _ := envHealth(a, cache, e)
 		rows = append(rows, []string{
-			fmt.Sprint(i + 1), e.Name, roleNames[e.Role], fmt.Sprint(len(e.Items)), strings.Join(envVaults(cache, e), "、"), expiry(e.ExpiresAt), state, health, e.ID,
+			fmt.Sprint(i + 1), e.Name, roleNames[e.Role], fmt.Sprint(len(e.Items)), strings.Join(envVaults(cache, e), "、"), expiry(e.ExpiresAt), state, health,
 		})
 	}
 	printTable(os.Stdout, "  ", rows)
@@ -348,7 +348,7 @@ func printOverrides(a *app.App, ov state.Overrides) error {
 	}
 	for id, m := range ov {
 		if !seen[id] && len(m) > 0 {
-			groups = append(groups, group{fmt.Sprintf("已无法访问的环境 %s（覆盖值不生效，可以用 harmonia override rm %s <变量名> 移除）", id, id), m})
+			groups = append(groups, group{"已无法访问的环境（覆盖值不生效，运行 harmonia sync 会自动删除）", m})
 		}
 	}
 	for i, g := range groups {
@@ -427,7 +427,7 @@ func printAuthorizations(ctx context.Context, a *app.App) {
 		var names []string
 		for _, it := range x.Items {
 			label := it.Name
-			if env, err := vault.Find(cache, it.EnvironmentID); err == nil {
+			if env := vault.ByID(cache, it.EnvironmentID); env != nil {
 				label = env.Name + ":" + it.Name
 			}
 			names = append(names, label)

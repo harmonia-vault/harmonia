@@ -135,18 +135,18 @@ function checkDetail(deps: Deps, d: Device, detail: Detail) {
       continue;
     }
     if (it.vaultId) {
-      const creatable = e.refs.some((r) => r.vaultId === it.vaultId && r.scope === "all" && r.writable);
+      const creatable = e.refs.some((r) => r.vaultId === it.vaultId && r.scope === "all");
       if (!creatable || !one(deps.sql, `SELECT 1 FROM vaults WHERE id = ?`, it.vaultId)) {
         throw forbidden(`不能通过环境“${e.name}”在这个变量库里新增变量。`);
       }
       if (existing || names(it.vaultId).includes(it.name)) throw bad(`${it.name} 已经存在，请改为修改。`);
-    } else if (!existing?.writable) {
-      throw forbidden(`环境“${e.name}”里的 ${it.name} 不允许修改。`);
+    } else if (!existing) {
+      throw bad(`环境“${e.name}”里没有 ${it.name}。`);
     }
   }
   for (const it of detail.delete) {
     const e = env(it);
-    if (!itemIn(e, it.name)?.writable) throw forbidden(`环境“${e.name}”里的 ${it.name} 不允许删除。`);
+    if (!itemIn(e, it.name)) throw bad(`环境“${e.name}”里没有 ${it.name}。`);
   }
 }
 

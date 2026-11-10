@@ -92,7 +92,7 @@ function snapshot(deps: Deps, d: Device, since: number): Record<string, unknown>
           position: e.position,
           items,
           shadowed,
-          createVaults: e.refs.filter((r) => r.scope === "all" && r.writable && vaultById.has(r.vaultId)).map((r) => r.vaultId),
+          createVaults: e.refs.filter((r) => r.scope === "all" && vaultById.has(r.vaultId)).map((r) => r.vaultId),
         };
       }),
       vaultNames: allVaults.filter((v) => referenced.has(v.id)).map((v) => ({ id: v.id, name: v.name })),
