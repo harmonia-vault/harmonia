@@ -1,4 +1,4 @@
-// 新建环境、编辑环境引用：选变量库、全部或勾选的变量、改名、是否可以修改、引用顺序，下方实时预览最终名字。
+// 新建环境、编辑环境引用：选变量库、全部或勾选的变量、改名、引用顺序，下方实时预览最终名字。
 import 'package:flutter/material.dart';
 
 import '../app/controller.dart';
@@ -13,17 +13,15 @@ import 'widgets.dart';
 
 /// 编辑中的一条引用。勾选范围下 [items] 是勾选的变量（按勾选顺序）；全部变量范围下只记改了名的变量。
 class _Draft {
-  _Draft(this.vaultId) : scope = 'all', writable = false, items = [], missing = false;
+  _Draft(this.vaultId) : scope = 'all', items = [], missing = false;
   _Draft.of(EnvRef r)
     : vaultId = r.vaultId,
       scope = r.scope,
-      writable = r.writable,
       items = [...r.items],
       missing = r.missing;
 
   final String vaultId;
   String scope;
-  bool writable;
   final List<RefItem> items;
   final bool missing;
 
@@ -46,10 +44,46 @@ class _Draft {
   EnvRef toRef() => EnvRef(
     vaultId,
     scope,
-    writable: writable,
     items: all ? items.where((i) => i.as != null).toList() : items,
     missing: missing,
   );
+}
+
+/// 询问变量库里的 [source] 在环境里的名字。返回 null 表示取消，空字符串表示用回原名。
+Future<String?> askAlias(BuildContext context, String source, String? current) async {
+  final ctl = TextEditingController(text: current ?? '');
+  final form = GlobalKey<FormState>();
+  final result = await showAppDialog<String>(
+    context: context,
+    useRootNavigator: false,
+    builder: (ctx) {
+      void submit() {
+        if (form.currentState!.validate()) Navigator.pop(ctx, ctl.text.trim());
+      }
+
+      return AppAlertDialog(
+        title: Text('$source 在环境里的名字'),
+        content: Form(
+          key: form,
+          child: TextFormField(
+            controller: ctl,
+            autofocus: true,
+            autocorrect: false,
+            textCapitalization: TextCapitalization.characters,
+            style: const TextStyle(fontFamily: 'monospace'),
+            decoration: InputDecoration(labelText: '新名字', hintText: source, helperText: '留空表示用原名'),
+            validator: (v) => (v ?? '').trim().isEmpty ? null : validateVarName(v),
+            onFieldSubmitted: (_) => submit(),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+          FilledButton(onPressed: submit, child: const Text('确定')),
+        ],
+      );
+    },
+  );
+  return result == source ? '' : result;
 }
 
 class EnvEditorPage extends StatefulWidget {
@@ -97,40 +131,9 @@ class _EnvEditorPageState extends State<EnvEditorPage> {
   }
 
   Future<void> _rename(_Draft r, String source) async {
-    final ctl = TextEditingController(text: r.alias(source) ?? '');
-    final form = GlobalKey<FormState>();
-    final result = await showAppDialog<String>(
-      context: context,
-      useRootNavigator: false,
-      builder: (ctx) {
-        void submit() {
-          if (form.currentState!.validate()) Navigator.pop(ctx, ctl.text.trim());
-        }
-
-        return AppAlertDialog(
-          title: Text('$source 在环境里的名字'),
-          content: Form(
-            key: form,
-            child: TextFormField(
-              controller: ctl,
-              autofocus: true,
-              autocorrect: false,
-              textCapitalization: TextCapitalization.characters,
-              style: const TextStyle(fontFamily: 'monospace'),
-              decoration: InputDecoration(labelText: '新名字', hintText: source, helperText: '留空表示用原名'),
-              validator: (v) => (v ?? '').trim().isEmpty ? null : validateVarName(v),
-              onFieldSubmitted: (_) => submit(),
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
-            FilledButton(onPressed: submit, child: const Text('确定')),
-          ],
-        );
-      },
-    );
+    final result = await askAlias(context, source, r.alias(source));
     if (result == null) return;
-    setState(() => r.setAlias(source, result.isEmpty || result == source ? null : result));
+    setState(() => r.setAlias(source, result.isEmpty ? null : result));
   }
 
   void _toggle(_Draft r, String name, bool on) => setState(() {
@@ -264,12 +267,6 @@ class _EnvEditorPageState extends State<EnvEditorPage> {
               tidy(r.all ? '包含这个变量库现在和以后新增的全部变量。' : '只包含勾选的变量，以后新增的不会自动加入。'),
               style: TextStyle(color: p.mute, fontSize: 13),
             ),
-            AppSwitchTile(
-              title: const Text('可以修改'),
-              subtitle: Text(tidy('开启后，有读写权限的电脑可以通过这个环境修改变量库里的变量。'), style: const TextStyle(fontSize: 13)),
-              value: r.writable,
-              onChanged: (v) => setState(() => r.writable = v),
-            ),
             if (existing.isEmpty && gone.isEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: Space.sm),
@@ -351,7 +348,6 @@ class _EnvEditorPageState extends State<EnvEditorPage> {
                         [
                           '来自 ${c.vault.vaultName(it.vaultId) ?? ''}',
                           if (it.name != it.source) '原名 ${it.source}',
-                          if (it.writable) '可以修改',
                         ].join(' · '),
                       ),
                     ),

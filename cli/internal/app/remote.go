@@ -72,7 +72,7 @@ func (a *App) Resolve(ctx context.Context, items []string, command []string) (ma
 func (a *App) remote(ctx context.Context, cache *state.Cache, picks []vault.Pick, ov state.Overrides, command []string) (vault.Remote, error) {
 	out := vault.Remote{}
 	for _, p := range picks {
-		if env, err := vault.Find(cache, p.EnvID); err == nil && !env.LocalDecrypt && !vault.Expired(*env, nowMs()) {
+		if env := vault.ByID(cache, p.EnvID); env != nil && !env.LocalDecrypt && !vault.Expired(*env, nowMs()) {
 			out[env.ID] = map[string]string{}
 		}
 	}

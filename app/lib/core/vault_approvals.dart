@@ -117,16 +117,16 @@ mixin VaultApprovals {
         if (existing == null) return '环境里没有 ${it.name}。$tampered';
       } else if (it.vaultId != null) {
         final creatable =
-            envDef(it.envId)?.refs.any((r) => r.vaultId == it.vaultId && r.all && r.writable && !r.missing) ?? false;
+            envDef(it.envId)?.refs.any((r) => r.vaultId == it.vaultId && r.all && !r.missing) ?? false;
         if (!creatable || existing != null || variableNames(it.vaultId!).contains(it.name)) {
           return '不能在这个变量库里新增 ${it.name}。$tampered';
         }
-      } else if (existing == null || !existing.writable) {
-        return '${it.name} 不允许修改。$tampered';
+      } else if (existing == null) {
+        return '环境里没有 ${it.name}。$tampered';
       }
     }
     for (final it in a.deletes) {
-      if (_item(it.envId, it.name)?.writable != true) return '${it.name} 不允许删除。$tampered';
+      if (_item(it.envId, it.name) == null) return '环境里没有 ${it.name}。$tampered';
     }
     return null;
   }

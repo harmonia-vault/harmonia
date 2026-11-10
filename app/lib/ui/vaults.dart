@@ -143,7 +143,7 @@ class _VariableListState extends State<VariableList> {
   }
 }
 
-/// 复制 ID 的一行和用法说明，环境页与变量库页共用。
+/// 变量库页底部复制变量库 ID 的一行和用法说明。
 List<Widget> idSection(BuildContext context, {required String label, required String id, required String usage}) {
   void copy() {
     if (!AppScope.isSimulated(context)) Clipboard.setData(ClipboardData(text: id));

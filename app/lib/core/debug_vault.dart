@@ -143,11 +143,11 @@ class DebugVault extends Vault with DebugApprovals {
         <String, dynamic>{'id': id, 'name': name, 'keyVersion': '1'},
     ];
     _defs.addAll([
-      EnvDef('debug-env-1', '开发环境', [const EnvRef('debug-vault-1', 'all', writable: true)]),
+      EnvDef('debug-env-1', '开发环境', [const EnvRef('debug-vault-1', 'all')]),
       EnvDef('debug-env-2', '自动化工具', [
         const EnvRef('debug-vault-2', 'pick', items: [RefItem('OPENAI_API_KEY', 'LLM_KEY'), RefItem('MODEL')]),
       ]),
-      EnvDef('debug-env-3', '个人服务', [const EnvRef('debug-vault-3', 'all', writable: true)]),
+      EnvDef('debug-env-3', '个人服务', [const EnvRef('debug-vault-3', 'all')]),
       // 名字冲突（被遮住的 MODEL）和已失效的引用。
       EnvDef('debug-env-4', '合并示例', [
         const EnvRef('debug-vault-2', 'all'),
@@ -166,6 +166,8 @@ class DebugVault extends Vault with DebugApprovals {
         'MODEL': CachedVariable('demo-model', 1),
         'OPENAI_API_KEY': CachedVariable('demo-openai-not-a-secret', 1),
       },
+      // 批准写入的示例请求要删除它。
+      'debug-vault-3': {'OLD_SERVICE_URL': CachedVariable('https://old.example.invalid', 1)},
       'debug-vault-4': {'MODEL': CachedVariable('demo-backup-model', 1)},
     };
     _rebuild();
@@ -327,6 +329,7 @@ class DebugVault extends Vault with DebugApprovals {
   @override
   Future<String> createEnvironment(String name, List<EnvRef> refs) async {
     check();
+    checkEnvName(name);
     final dup = duplicateNames(refs, variableNames);
     if (dup.isNotEmpty) throw VaultException('环境里有重名的变量：${dup.join('、')}。请给其中一个改名，或取消勾选。');
     final id = 'debug-env-${++_nextId}';
@@ -338,6 +341,7 @@ class DebugVault extends Vault with DebugApprovals {
   @override
   Future<void> saveEnvironment(String id, String name, List<EnvRef> refs) async {
     check();
+    checkEnvName(name, exceptId: id);
     final dup = duplicateNames(refs, variableNames);
     if (dup.isNotEmpty) throw VaultException('环境里有重名的变量：${dup.join('、')}。请给其中一个改名，或取消勾选。');
     _defs[_defIndex(id)] = EnvDef(id, name.trim(), refs);

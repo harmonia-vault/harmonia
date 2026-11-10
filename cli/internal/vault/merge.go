@@ -33,7 +33,7 @@ type Pick struct {
 	Var   string
 }
 
-// ParsePick 解析 --env 的一项：整串是环境名称或 ID 时取整个环境；否则按最后一个“:”
+// ParsePick 解析 --env 的一项：整串是环境名称时取整个环境；否则按最后一个“:”
 // 拆成环境和变量名（变量名不含“:”），只取这个变量。
 func ParsePick(c *state.Cache, item string) (Pick, error) {
 	env, err := Find(c, item)
@@ -79,7 +79,7 @@ func Needed(c *state.Cache, picks []Pick, ov state.Overrides, nowMs int64) []api
 		out = append(out, api.ApprovalItem{EnvironmentID: env.ID, Name: name})
 	}
 	for _, p := range picks {
-		env := byID(c, p.EnvID)
+		env := ByID(c, p.EnvID)
 		if env == nil || env.LocalDecrypt || Expired(*env, nowMs) {
 			continue
 		}
@@ -179,7 +179,7 @@ type Conflict struct {
 func Conflicts(c *state.Cache, ids []string, nowMs int64) []Conflict {
 	by := map[string][]string{}
 	for _, id := range ids {
-		env := byID(c, id)
+		env := ByID(c, id)
 		if env == nil || Expired(*env, nowMs) {
 			continue
 		}

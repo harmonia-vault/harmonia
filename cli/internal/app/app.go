@@ -92,6 +92,9 @@ func (a *App) Sync(ctx context.Context) error {
 	if err := a.Dir.SaveCache(cache); err != nil {
 		return err
 	}
+	if err := a.pruneOverridesLocked(cache); err != nil {
+		return err
+	}
 	cfg, err := a.Dir.Config()
 	if err != nil {
 		return err
@@ -107,6 +110,26 @@ func (a *App) Sync(ctx context.Context) error {
 	}
 	_, err = a.writeEnvLocked(cache)
 	return err
+}
+
+// pruneOverridesLocked 删除已无法访问的环境（授权被撤销或环境被删除）留下的本机覆盖（设计文档 19.2）。
+// 授权到期的环境仍在缓存里，覆盖值保留。
+func (a *App) pruneOverridesLocked(cache *state.Cache) error {
+	ov, err := a.Dir.Overrides()
+	if err != nil {
+		return err
+	}
+	changed := false
+	for id := range ov {
+		if vault.ByID(cache, id) == nil {
+			delete(ov, id)
+			changed = true
+		}
+	}
+	if !changed {
+		return nil
+	}
+	return a.Dir.SaveOverrides(ov)
 }
 
 // HandleRevoked 在任意请求返回“设备已移除”时清除本机数据。

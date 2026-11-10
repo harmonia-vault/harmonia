@@ -16,7 +16,7 @@ async function setup(localDecrypt = false, role = "rw") {
   const a = await TestAccount.create(s);
   const vault = await a.createVault(s, [a.phone.id], "共享");
   for (const n of ["TOKEN", "MODEL"]) await put(s, a.phone.token, vault, n);
-  const env = await a.createEnvironment(s, [{ vaultId: vault, scope: "all", writable: true, items: [] }], "生产");
+  const env = await a.createEnvironment(s, [{ vaultId: vault, scope: "all", items: [] }], "生产");
   const cli = await pairClient(s, a, [{ environmentId: env, role, localDecrypt }], localDecrypt ? [vault] : []);
   return { s, a, vault, env, cli };
 }
@@ -119,13 +119,13 @@ describe("批准解密", () => {
     expect(w.results.get(APPROVAL_KEY + three.id)).toBe("expired");
   });
 
-  it("写入请求：修改可以修改的变量、在可以新增的变量库里新增，只读授权和重复的名字被拒绝", async () => {
+  it("写入请求：修改环境里的变量、在可以新增的变量库里新增，只读授权、不存在的变量和重复的名字被拒绝", async () => {
     const { s, a, vault, env, cli } = await setup();
     const write = (items: Item[], del?: Item[]) => request(s, cli, { kind: "write", items, del });
     expect((await write([{ environmentId: env, name: "TOKEN" }], [{ environmentId: env, name: "MODEL" }])).r.status).toBe(200);
     expect((await write([{ environmentId: env, name: "NEW_ONE", vaultId: vault }])).r.status).toBe(200);
     expect((await write([{ environmentId: env, name: "TOKEN", vaultId: vault }])).r.json.message).toContain("已经存在");
-    expect((await write([{ environmentId: env, name: "NEW_TWO" }])).r.status).toBe(403);
+    expect((await write([{ environmentId: env, name: "NEW_TWO" }])).r.status).toBe(400);
     expect((await request(s, cli, { kind: "write", items: [{ environmentId: env, name: "TOKEN" }], payload: "{}" })).r.status).toBe(400);
     const ro = await setup(false, "ro");
     const r = await request(ro.s, ro.cli, { kind: "write", items: [{ environmentId: ro.env, name: "TOKEN" }] });
@@ -176,7 +176,7 @@ describe("正在生效的授权", () => {
     const refs = await approved();
     await refs.s.ok("PUT", `/api/v1/environments/${refs.env}`, {
       token: refs.a.phone.token,
-      body: { name: "生产", refs: [{ vaultId: refs.vault, scope: "pick", writable: false, items: [{ name: "TOKEN" }] }], envelopes: [] },
+      body: { name: "生产", refs: [{ vaultId: refs.vault, scope: "pick", items: [{ name: "TOKEN" }] }], envelopes: [] },
     });
     expect(ended(refs.s, refs.id)).toBe(true);
 

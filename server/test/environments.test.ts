@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { migrate, MIGRATIONS } from "../src/core/db";
+import { migrate, MIGRATIONS, one } from "../src/core/db";
 import { b64 } from "../src/core/util";
 import { newId, nodeSql, pairClient, rand, TestAccount, TestServer } from "./helpers";
 
@@ -23,8 +23,8 @@ async function setup() {
   const env = await a.createEnvironment(
     s,
     [
-      { vaultId: shared, scope: "pick", writable: false, items: [{ name: "OPENAI_API_KEY", as: "LLM_KEY" }] },
-      { vaultId: blog, scope: "all", writable: true, items: [] },
+      { vaultId: shared, scope: "pick", items: [{ name: "OPENAI_API_KEY", as: "LLM_KEY" }] },
+      { vaultId: blog, scope: "all", items: [] },
     ],
     "博客",
   );
@@ -39,8 +39,8 @@ describe("两层结构", () => {
     expect(r.full).toBe(true);
     const e = r.environments[0];
     expect(e.items).toEqual([
-      { name: "LLM_KEY", vaultId: shared, source: "OPENAI_API_KEY", writable: false },
-      { name: "DB_URL", vaultId: blog, source: "DB_URL", writable: true },
+      { name: "LLM_KEY", vaultId: shared, source: "OPENAI_API_KEY" },
+      { name: "DB_URL", vaultId: blog, source: "DB_URL" },
     ]);
     expect(e.createVaults).toEqual([blog]);
     expect(r.vaultNames).toEqual([
@@ -49,13 +49,15 @@ describe("两层结构", () => {
     ]);
     // OTHER 没有被引用，不下发密文。
     expect(r.variables.map((v: { name: string }) => v.name).sort()).toEqual(["DB_URL", "OPENAI_API_KEY"]);
-    // 不可修改的引用不能写；可以修改的全部变量引用能改也能新增。
-    expect((await put(s, cli.token, shared, "OPENAI_API_KEY")).status).toBe(403);
+    // 读写授权能改环境里的变量；部分引用之外的变量不能改，也不能在部分引用的变量库里新增；全部变量的引用能新增。
+    expect((await put(s, cli.token, shared, "OPENAI_API_KEY")).status).toBe(200);
+    expect((await put(s, cli.token, shared, "OTHER")).status).toBe(403);
+    expect((await put(s, cli.token, shared, "NEW_SHARED")).status).toBe(403);
     expect((await put(s, cli.token, blog, "DB_URL")).status).toBe(200);
     expect((await put(s, cli.token, blog, "NEW_ONE")).status).toBe(200);
     const inc = await sync(s, cli.token, r.seq);
     expect(inc.full).toBe(false);
-    expect(inc.variables.map((v: { name: string }) => v.name).sort()).toEqual(["DB_URL", "NEW_ONE"]);
+    expect(inc.variables.map((v: { name: string }) => v.name).sort()).toEqual(["DB_URL", "NEW_ONE", "OPENAI_API_KEY"]);
   });
 
   it("保存环境时最终名字不能重复", async () => {
@@ -66,8 +68,8 @@ describe("两层结构", () => {
         id: newId(),
         name: "冲突",
         refs: [
-          { vaultId: shared, scope: "pick", writable: false, items: [{ name: "OTHER", as: "DB_URL" }] },
-          { vaultId: blog, scope: "all", writable: false, items: [] },
+          { vaultId: shared, scope: "pick", items: [{ name: "OTHER", as: "DB_URL" }] },
+          { vaultId: blog, scope: "all", items: [] },
         ],
       },
     });
@@ -75,9 +77,23 @@ describe("两层结构", () => {
     expect(r.json.message).toContain("DB_URL");
     const missing = await s.call("POST", "/api/v1/environments", {
       token: a.phone.token,
-      body: { id: newId(), name: "x", refs: [{ vaultId: newId(), scope: "all", writable: false, items: [] }] },
+      body: { id: newId(), name: "x", refs: [{ vaultId: newId(), scope: "all", items: [] }] },
     });
     expect(missing.status).toBe(400);
+  });
+
+  it("环境名不能重复：不区分大小写，改名时排除自己", async () => {
+    const { s, a, blog, env } = await setup();
+    const refs = [{ vaultId: blog, scope: "all", items: [] }];
+    const create = (name: string) => s.call("POST", "/api/v1/environments", { token: a.phone.token, body: { id: newId(), name, refs } });
+    const rename = (id: string, name: string) => s.call("PUT", `/api/v1/environments/${id}`, { token: a.phone.token, body: { name, refs, envelopes: [] } });
+    const dup = await create(" 博客 ");
+    expect([dup.status, dup.json.error]).toEqual([409, "conflict"]);
+    expect(dup.json.message).toContain("换一个名字");
+    expect((await create("Staging")).status).toBe(200);
+    expect((await create("staging")).status).toBe(409);
+    expect((await rename(env, "STAGING")).status).toBe(409);
+    expect((await rename(env, "博客")).status).toBe(200);
   });
 
   it("没有开启本机解密时不给封装、不下发密文，也不能直接写入", async () => {
@@ -117,8 +133,8 @@ describe("两层结构", () => {
     const third = await a.createVault(s, [a.phone.id], "第三个");
     expect((await put(s, a.phone.token, third, "T")).status).toBe(200);
     const refs = [
-      { vaultId: blog, scope: "all", writable: true, items: [] },
-      { vaultId: third, scope: "all", writable: false, items: [] },
+      { vaultId: blog, scope: "all", items: [] },
+      { vaultId: third, scope: "all", items: [] },
     ];
     const noEnvelope = await s.call("PUT", `/api/v1/environments/${env}`, { token: a.phone.token, body: { name: "博客", refs } });
     expect(noEnvelope.status).toBe(400);
@@ -155,6 +171,21 @@ describe("两层结构", () => {
 });
 
 describe("升级转换", () => {
+  it("去掉引用的 writable，重名的环境按创建先后加序号", () => {
+    const sql = nodeSql();
+    migrate(sql, MIGRATIONS.findIndex((m) => m.some((q) => q.includes("push_handle"))) + 1);
+    const ref = `[{"vaultId":"V1","scope":"pick","writable":false,"items":[{"name":"K","as":"L"}]}]`;
+    sql.run(`INSERT INTO environments (id, name, refs, created_at) VALUES ('E1', '生产', ?, 1), ('E2', '生产', '[]', 2), ('E3', ' 生产', '[]', 3), ('E4', 'Dev', '[]', 4), ('E5', 'dev', '[]', 5)`, ref);
+    const before = one<{ value: number }>(sql, `SELECT value FROM meta WHERE key = 'head_seq'`)!.value;
+    migrate(sql);
+    const envs = sql.all<{ id: string; name: string; refs: string }>(`SELECT id, name, refs FROM environments ORDER BY id`);
+    expect(envs.map((e) => e.name)).toEqual(["生产", "生产 2", " 生产 3", "Dev", "dev 2"]);
+    expect(JSON.parse(envs[0]!.refs)).toEqual([{ vaultId: "V1", scope: "pick", items: [{ name: "K", as: "L" }] }]);
+    expect(JSON.parse(envs[1]!.refs)).toEqual([]);
+    expect(one<{ value: number }>(sql, `SELECT value FROM meta WHERE key = 'head_seq'`)!.value).toBe(before + 1);
+  });
+
+
   it("原来的环境变成同 ID 的变量库和引用全部变量的环境，授权开启本机解密", () => {
     const sql = nodeSql();
     migrate(sql, MIGRATIONS.findIndex((m) => m.some((q) => q.includes("RENAME TO vaults"))));
@@ -168,7 +199,7 @@ describe("升级转换", () => {
     expect(sql.all(`SELECT id, name, key_version FROM vaults`)).toEqual([{ id: "E1", name: "OpenAI", key_version: 1 }]);
     const envs = sql.all<{ id: string; name: string; refs: string }>(`SELECT id, name, refs FROM environments`);
     expect(envs.map((e) => [e.id, e.name, JSON.parse(e.refs)])).toEqual([
-      ["E1", "OpenAI", [{ vaultId: "E1", scope: "all", writable: true, items: [] }]],
+      ["E1", "OpenAI", [{ vaultId: "E1", scope: "all", items: [] }]],
     ]);
     expect(sql.all(`SELECT environment_id, role, local_decrypt, active FROM grants`)).toEqual([
       { environment_id: "E1", role: "rw", local_decrypt: 1, active: 0 },

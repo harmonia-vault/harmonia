@@ -114,7 +114,7 @@ func writeRefs(out string) {
 	cases := []tc{
 		{"勾选只取存在的变量并保持勾选顺序，全部变量按名字排序并应用改名", []api.Ref{
 			{VaultID: a, Scope: "pick", Items: []api.RefItem{{Name: "OPENAI_API_KEY", As: "LLM_KEY"}, {Name: "MISSING"}, {Name: "ANTHROPIC_KEY"}}},
-			{VaultID: b, Scope: "all", Writable: true, Items: []api.RefItem{{Name: "Z", As: "ZED"}}},
+			{VaultID: b, Scope: "all", Items: []api.RefItem{{Name: "Z", As: "ZED"}}},
 		}, map[string][]string{a: {"OPENAI_API_KEY", "OTHER", "ANTHROPIC_KEY"}, b: {"Z", "DB_URL"}}},
 		{"同名时排在前面的引用优先，其余被遮住", []api.Ref{
 			{VaultID: a, Scope: "all"}, {VaultID: b, Scope: "all"},
@@ -126,7 +126,7 @@ func writeRefs(out string) {
 			{VaultID: a, Scope: "all", Items: []api.RefItem{{Name: "A", As: "B"}}},
 		}, map[string][]string{a: {"A", "B", "C"}}},
 		{"已删除的变量库不提供变量", []api.Ref{
-			{VaultID: gone, Scope: "all"}, {VaultID: a, Scope: "pick", Writable: true, Items: []api.RefItem{{Name: "K"}}},
+			{VaultID: gone, Scope: "all"}, {VaultID: a, Scope: "pick", Items: []api.RefItem{{Name: "K"}}},
 		}, map[string][]string{a: {"K", "L"}}},
 	}
 	var list []map[string]any

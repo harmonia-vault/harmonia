@@ -23,7 +23,7 @@ type vaultServer struct {
 	name    string
 	envs    []api.Environment
 	rename  map[string]string // 变量库里的原名 → 环境里的名字
-	locked  bool              // 为 true 时引用不允许修改
+	locked  bool              // 为 true 时环境没有“全部变量”的引用，不能新增变量
 	envKey  []byte
 	sealed  api.Envelope
 	vars    map[string]string // 变量名 → 密文
@@ -50,7 +50,7 @@ func (s *vaultServer) handler(w http.ResponseWriter, r *http.Request) {
 			if s.rename[n] != "" {
 				name = s.rename[n]
 			}
-			items = append(items, api.EnvItem{Name: name, VaultID: "E", Source: n, Writable: !s.locked})
+			items = append(items, api.EnvItem{Name: name, VaultID: "E", Source: n})
 		}
 		envelopes := []api.Envelope{}
 		envs := slices.Clone(s.envs)
@@ -331,7 +331,11 @@ func TestWriteThroughEnvironmentAndVault(t *testing.T) {
 		t.Fatal("应删除变量库里的原变量 A")
 	}
 	fs.locked = true
-	if r := set1(t, a, "NEW_KEY", VarChange{Value: &value}); r.Status != Failed || !strings.Contains(r.Err.Error(), "不允许修改") {
-		t.Fatalf("引用不允许修改时应拒绝：%+v", r)
+	res, err = a.SetVariables(ctx, "共享", false, map[string]VarChange{"ANOTHER": {Value: &value}}, false)
+	if err == nil && (len(res) != 1 || res[0].Status != Failed || !strings.Contains(res[0].Err.Error(), "不能修改")) {
+		t.Fatalf("没有“全部变量”的引用时应拒绝新增：%+v", res)
+	}
+	if r := set1(t, a, "NEW_KEY", VarChange{Value: &value}); r.Status != Written {
+		t.Fatalf("读写授权能改环境里已有的变量：%+v", r)
 	}
 }

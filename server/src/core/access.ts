@@ -84,11 +84,11 @@ export function allowedLocally(refs: Map<string, Ref[]> | null, vaultId: string,
   return (refs.get(vaultId) ?? []).some((r) => covers(r, name));
 }
 
-/** 客户端设备能否写入（或删除）某变量库里的某个变量：需要读写、本机解密的授权，且有一条可以修改的引用覆盖它。 */
+/** 客户端设备能否写入（或删除）某变量库里的某个变量：需要读写、本机解密的授权，且它的环境有一条引用覆盖这个变量。 */
 export function canWrite(sql: Sql, d: Device, vaultId: string, name: string, now: number): boolean {
   if (d.kind === "manager") return true;
   return grantedEnvs(sql, d, now).some(
-    (e) => e.role === "rw" && e.local_decrypt === 1 && e.refs.some((r) => r.vaultId === vaultId && r.writable && covers(r, name)),
+    (e) => e.role === "rw" && e.local_decrypt === 1 && e.refs.some((r) => r.vaultId === vaultId && covers(r, name)),
   );
 }
 

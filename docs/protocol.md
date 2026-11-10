@@ -250,8 +250,8 @@ DEK  = 32 字节随机数，设置管理口令时生成
 | `PUT /vaults/{id}/variables/{name}` | 管理设备，或有写权限的设备（见下） | `{value, keyVersion}`，`value` 是值和备注一起加密的密文（第 2 节），只改备注也整体重写。请求头带 `Idempotency-Key` |
 | `DELETE /vaults/{id}/variables/{name}` | 同上 | 请求头带 `Idempotency-Key` |
 | `PATCH /vaults/{id}/variables` | 同上 | 批量写入（2026-10-15 增加）：`{keyVersion, set:[{name, value}], delete:[name]}`。`set` 与 `delete` 合计 1 到 100 项，同一个变量名只能出现一次；`value` 的格式同单个写入，`keyVersion` 对整批生效。整个请求在一个事务中完成：任意一项不合法、权限不足或 `keyVersion` 不是变量库当前的密钥版本时整体拒绝，什么都不写；成功后整批共用一个新的 `seq`，返回 `{seq}`，只推送一次 `changed`。删除不存在的变量不报错。请求头带 `Idempotency-Key`，请求体最大约 2 MB。导入、复制、多选删除和手机批准的写入用它，免得逐个调用撞上 3.8 的入口限流 |
-| `POST /environments` | device（管理设备） | `{id, name, refs, envelopes}`，`refs` 的格式见下；最终名字有重复时返回 `conflict`，`message` 指出重复的名字。`envelopes` 新建时为空 |
-| `PUT /environments/{id}` | device（管理设备） | `{name, refs, envelopes:[{recipient, vaultId, keyVersion, sealed, sig}]}`，整体替换。新引用的变量库必须为每台对这个环境开启了 `localDecrypt` 且还没有这个变量库封装的设备附带封装，缺少时返回 `conflict`；不再被某台设备任何 `localDecrypt` 授权用到的变量库，服务端删除给它的封装。引用改变后推送 `changed` |
+| `POST /environments` | device（管理设备） | `{id, name, refs, envelopes}`，`refs` 的格式见下；最终名字有重复时返回 `conflict`，`message` 指出重复的名字。环境名与已有环境相同（去掉首尾空白后不区分大小写比较，2026-11-10）时同样返回 `conflict`。`envelopes` 新建时为空 |
+| `PUT /environments/{id}` | device（管理设备） | `{name, refs, envelopes:[{recipient, vaultId, keyVersion, sealed, sig}]}`，整体替换，环境名的检查同上。新引用的变量库必须为每台对这个环境开启了 `localDecrypt` 且还没有这个变量库封装的设备附带封装，缺少时返回 `conflict`；不再被某台设备任何 `localDecrypt` 授权用到的变量库，服务端删除给它的封装。引用改变后推送 `changed` |
 | `DELETE /environments/{id}` | device（管理设备） | 删除环境和对它的全部授权（同样清理不再用到的封装），变量库不受影响 |
 | `PUT /devices/{id}/grants` | 管理设备 | `{grants:[{environmentId, role, expiresAt, localDecrypt}], envelopes:[{vaultId, keyVersion, sealed, sig}]}`，整体替换。`localDecrypt` 为 true 的授权，它引用到的每个变量库都必须有给这台设备的封装（已有的不用重复附带），否则返回 `conflict`；不再用到的封装由服务端删除。已有授权保留激活状态和顺序，新授权默认激活并排在最后 |
 | `PUT /devices/{id}/activation` | 管理设备；或设备本身，此时 `{id}` 为 `self` | `{envs:[{environmentId, active}]}`，按顺序从前到后排列（排在前面的覆盖后面的同名变量），必须包含该设备全部未到期的授权环境（可以带上已到期的），不能有未授权的环境，否则返回 `conflict`；没有列出的已到期授权保持原有相对顺序，排在后面。只修改激活状态和顺序 |
@@ -278,13 +278,14 @@ DEK  = 32 字节随机数，设置管理口令时生成
 **引用的格式**（2026-11-09）：
 
 ```json
-{"vaultId": "...", "scope": "all | pick", "writable": false, "items": [{"name": "OPENAI_API_KEY", "as": "LLM_KEY"}]}
+{"vaultId": "...", "scope": "all | pick", "items": [{"name": "OPENAI_API_KEY", "as": "LLM_KEY"}]}
 ```
 
 - `scope` 为 `pick` 时，`items` 列出勾选的变量，`as` 可选，是在环境里的名字；为 `all` 时包含变量库的全部变量，`items` 只列出要改名的那几个（`as` 必填）。`items` 里的 `name` 不需要在变量库中已经存在（变量可能稍后才写入），不存在的不提供变量。
 - 同一个 `vaultId` 在一个环境中只能出现一次，`refs` 最多 50 条。
 - **最终名字**：按 `refs` 的顺序展开，每个变量取 `as`（没有时取原名）。保存时只检查当时的最终名字；以后 `all` 引用的变量库新增了重复的名字，排在前面的引用优先，3.4 的 `items` 里只保留优先的那个，另在 `shadowed` 中列出被遮住的。
-- **写权限**：客户端设备写入或删除 `/vaults/{id}/variables/{name}` 时，必须有一项未到期、`role` 为 `rw`、`localDecrypt` 为 true 的授权，其环境中有一条 `writable` 为 true 的引用覆盖这个变量：`pick` 时 `name` 在 `items` 中，`all` 时任何变量都算（包括新增）。没有开启 `localDecrypt` 的设备通过 3.9 的写入请求由管理设备代为写入。
+- 2026-11-10 去掉引用的 `writable` 字段（设计文档第 19 节），写权限只看授权的 `role`。
+- **写权限**：客户端设备写入或删除 `/vaults/{id}/variables/{name}` 时，必须有一项未到期、`role` 为 `rw`、`localDecrypt` 为 true 的授权，其环境中有一条引用覆盖这个变量：`pick` 时 `name` 在 `items` 中，`all` 时任何变量都算（包括新增）。没有开启 `localDecrypt` 的设备通过 3.9 的写入请求由管理设备代为写入。
 
 #### 3.2.1 首次初始化
 
@@ -326,7 +327,7 @@ DEK  = 32 字节随机数，设置管理口令时生成
   "self": {"id": "...", "kind": "client", "name": "...", "rotationRequired": false, "systemVars": false, "autoUpdate": false},
   "environments": [{
     "id": "...", "name": "...", "role": "rw", "expiresAt": 0, "localDecrypt": false, "active": true, "position": 0,
-    "items": [{"name": "LLM_KEY", "vaultId": "...", "source": "OPENAI_API_KEY", "writable": false}],
+    "items": [{"name": "LLM_KEY", "vaultId": "...", "source": "OPENAI_API_KEY"}],
     "shadowed": [{"name": "DB_URL", "vaultId": "...", "source": "DB_URL"}],
     "createVaults": ["..."]
   }],
@@ -339,14 +340,14 @@ DEK  = 32 字节随机数，设置管理口令时生成
     "rootSealed": "...",
     "recovery": {"generation": "1", "boxPub": "..."},
     "vaults": [{"id": "...", "name": "...", "keyVersion": "1"}],
-    "environments": [{"id": "...", "name": "...", "refs": [{"vaultId": "...", "scope": "all", "writable": true, "items": [], "missing": false}]}],
+    "environments": [{"id": "...", "name": "...", "refs": [{"vaultId": "...", "scope": "all", "items": [], "missing": false}]}],
     "devices": [{"id": "...", "name": "...", "platform": "...", "kind": "...", "signPub": "...", "boxPub": "...", "cert": "...", "createdAt": 0, "lastSeenAt": 0, "version": "0.4.5", "systemVars": false, "autoUpdate": false, "grants": [{"environmentId": "...", "role": "...", "expiresAt": 0, "localDecrypt": false, "active": true, "position": 0}]}]
   }
 }
 ```
 
 - `environments`、`vaults`、`envelopes` 和 `managers` 每次都返回**完整列表**。客户端据此清除不在列表中的环境和变量库。
-- `environments` 是这台设备被授权的环境（管理设备为全部环境）。`items` 是服务端按 3.2 的引用规则展开的最终名字：`source` 是变量库里的原名，`writable` 表示这个变量所在的引用可以修改；只列出变量库里当前存在的变量。`shadowed` 是被前面的引用遮住的同名变量。`createVaults` 是环境里 `scope` 为 `all` 且 `writable` 的引用所指的变量库，`role` 为 `rw` 时可以在其中新增变量。
+- `environments` 是这台设备被授权的环境（管理设备为全部环境）。`items` 是服务端按 3.2 的引用规则展开的最终名字：`source` 是变量库里的原名；只列出变量库里当前存在的变量。`shadowed` 是被前面的引用遮住的同名变量。`createVaults` 是环境里 `scope` 为 `all` 的引用所指的变量库，`role` 为 `rw` 时可以在其中新增变量。
 - `vaultNames` 是这台设备的环境所引用的全部变量库的 ID 和名字，供客户端显示来源、按名字指定写入的变量库（设计文档 17.2）；不含其中的变量。
 - `vaults`、`envelopes`、`variables` 只涉及这台设备可以在本机解密的变量库：被某项未到期、`localDecrypt` 为 true 的授权引用到的变量库（管理设备为全部）。`variables` 只返回其中被这些授权的 `items` 覆盖的变量（管理设备为全部），并且只返回增量：满足 `seq > N` 的变化（包括删除墓碑）。设备能看到的变量范围在 N 之后变过（授权、`localDecrypt` 或环境的引用变化，变量库被删除）时，`full` 为 true，`variables` 改为返回范围内现存的全部变量，客户端用它整体替换缓存；`since=0` 时 `full` 恒为 true。没有开启 `localDecrypt` 的授权只在 `environments` 里出现变量名，不下发密文。
 - `managers` 是全部活跃管理设备的公钥和证书，客户端设备用它们加密 3.9 的写入内容，使用前先用钉住的 `rootPub` 验证证书。
@@ -491,7 +492,7 @@ App 不在前台时没有这条连接，新请求另经推送中继发系统通�
 - `command`、`cwd` 各最长 1000 个字符，只用于在管理设备上显示，客户端负责截断。`detail` 最长 64 KiB，`payload` 最长约 2 MB。
 - 写入请求的 `payload` 解析后是 `{"sealed":[{"managerId", "sealed"}]}`：为 3.4 `managers` 中的每一台各加密一份，`sealed = crypto_box_seal(管理设备 boxPub, 写入内容)`。写入内容是 UTF-8 JSON：`{"requestId": "...", "set": [{"environmentId", "name", "vaultId", "plain": <2.6 的明文对象>}]}`，`vaultId` 与 `detail` 中的一致（新增变量时）或省略（修改已有变量时）。电脑上读不到原来的值，所以修改已有变量时 `plain` 可以只带要改的字段（例如只改 `note`），管理设备把它合并到原来的明文上再加密；新增变量时 `plain` 必须带 `value`。
 - **请求码** = `CrockfordBase32(SHA-256(detail)[0:3])` 的前 4 个字符。客户端和管理设备都由 `detail` 自己算出并显示，供用户核对。
-- 服务端检查：签名（用设备的 `signPub`）、`deviceId` 是当前会话的设备、`createdAt` 与服务器时间相差不超过 5 分钟、`id` 没有用过；`items` 和 `delete` 中的每一项所在的环境都授权给了这台设备、没有到期、`localDecrypt` 为 false，名字在 3.4 的 `items` 中；写入请求还要求 `role` 为 `rw`：修改的名字是 `writable` 的变量；新增的变量带 `vaultId`（设计文档 17.2：新增变量必须指定变量库，`environmentId` 是提供写权限的那个环境），它必须在这个环境的 `createVaults` 中，名字不能和变量库或环境里已有的名字重复；删除的名字是 `writable` 的变量。不满足时返回 `forbidden` 或 `invalid_request`。
+- 服务端检查：签名（用设备的 `signPub`）、`deviceId` 是当前会话的设备、`createdAt` 与服务器时间相差不超过 5 分钟、`id` 没有用过；`items` 和 `delete` 中的每一项所在的环境都授权给了这台设备、没有到期、`localDecrypt` 为 false，名字在 3.4 的 `items` 中；写入请求还要求 `role` 为 `rw`：新增的变量带 `vaultId`（设计文档 17.2：新增变量必须指定变量库，`environmentId` 是提供写权限的那个环境），它必须在这个环境的 `createVaults` 中，名字不能和变量库或环境里已有的名字重复。不满足时返回 `forbidden` 或 `invalid_request`。
 - 成功返回 `{expiresAt}`，请求 2 分钟内有效。服务端向管理设备推送 `{"type":"approval"}`。
 
 **等待**：发起后立即连接 `GET /approvals/{id}/events`，规则与 3.5.1 的配对等待连接相同：同时只允许一条连接；没有等待连接的请求不出现在 `GET /approvals` 中，也不能被批准；发起方每 10 秒发送一次 `ping`，25 秒没有收到或连接断开时，仍在等待的请求标记为 `cancelled`，并向管理设备推送 `approval`。处理后服务端推送 `{"type":"approved","result":{...}}`（读取请求带下面的结果，写入请求为 `{}`）、`{"type":"rejected"}` 或 `{"type":"expired"}`，然后关闭连接。连接意外断开时查询一次 `GET /approvals/{id}/status`，批准后的结果保留 2 分钟。
@@ -544,7 +545,7 @@ App 不在前台时，服务端经推送中继（第 5 节）给管理设备发�
 
 ## 4. 规则摘要
 
-- **权限**：客户端设备按环境授权，ro 只读，rw 可以修改环境中 `writable` 引用带来的变量（2026-10-14 去掉 admin：客户端设备不能改名或删除环境）。管理设备拥有全部权限，并且是唯一能新建、改名、删除变量库和环境，批准设备、修改授权、处理批准请求、撤销设备、轮换恢复码的角色。
+- **权限**：客户端设备按环境授权，ro 只读，rw 可以修改、删除环境中的变量，并在 `createVaults` 的变量库里新增变量（2026-10-14 去掉 admin：客户端设备不能改名或删除环境；2026-11-10 去掉引用的 `writable`）。管理设备拥有全部权限，并且是唯一能新建、改名、删除变量库和环境，批准设备、修改授权、处理批准请求、撤销设备、轮换恢复码的角色。
 - **两层**（2026-11-09）：变量存放在变量库中，环境只引用变量库，不能引用环境；设备只能被授权环境。
 - **本机解密与批准**：授权的 `localDecrypt` 为 true 时设备持有库钥，在本机解密；为 false（默认）时设备不持有库钥，每次经管理设备批准取得变量（3.9）。
 - **写入**：同一变量按服务器接受顺序，后写覆盖先写；批量写入整批生效或整批拒绝。客户端不做乐观更新，以同步结果为准。

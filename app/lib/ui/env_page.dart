@@ -1,23 +1,20 @@
-// 环境详情：最终的变量（来自哪个变量库）、同名被遮住和引用失效的提示、引用的变量库、可访问的电脑。
+// 环境详情：最终的变量（来自哪个变量库，点一个弹出变量面板）、同名被遮住和引用失效的提示、引用的变量库、可访问的电脑。
 import 'package:flutter/material.dart';
 
 import '../app/controller.dart';
 import '../core/crypto.dart' show VarEntry;
 import '../core/models.dart';
 import 'env_editor.dart';
+import 'env_var_sheet.dart';
 import 'glass.dart';
 import 'glass_overlays.dart';
 import 'list_row.dart';
 import 'theme.dart';
-import 'variable_edit.dart';
 import 'vaults.dart';
 import 'widgets.dart';
 
-/// 引用的范围说明，例如“全部变量 · 可以修改”。
-String refSummary(EnvRef r) {
-  final scope = r.all ? '全部变量' : '选中 ${r.items.length} 个变量';
-  return r.writable ? '$scope · 可以修改' : scope;
-}
+/// 引用的范围说明，例如“全部变量”。
+String refSummary(EnvRef r) => r.all ? '全部变量' : '选中 ${r.items.length} 个变量';
 
 /// 环境里需要处理的问题：同名变量被遮住、引用的变量库已删除。
 List<String> envProblems(AppController c, String envId) {
@@ -139,11 +136,12 @@ class _EnvironmentPageState extends State<EnvironmentPage> with LeaveWhenGone {
                     name: i.name,
                     entry: broken.contains(i.name) ? null : values[i.name],
                     origin: origin(i),
-                    onTap: () => Navigator.push(
+                    onTap: () => showEnvVariableSheet(
                       context,
-                      MaterialPageRoute(
-                        builder: (_) => VariableEditPage(c: c, vaultId: i.vaultId, name: i.source),
-                      ),
+                      c: c,
+                      envId: env.id,
+                      item: i,
+                      entry: broken.contains(i.name) ? null : values[i.name],
                     ),
                   ),
               ],
@@ -151,7 +149,7 @@ class _EnvironmentPageState extends State<EnvironmentPage> with LeaveWhenGone {
           if (env.items.isNotEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(Space.xs, Space.sm, Space.xs, 0),
-              child: Text(tidy('修改会影响所有用到这个变量库的环境；新增变量请到变量库里添加。'), style: TextStyle(color: p.mute, fontSize: 13)),
+              child: Text(tidy('点一个变量可以改名、移除或修改值。新增变量请到变量库里添加。'), style: TextStyle(color: p.mute, fontSize: 13)),
             ),
           SectionTitle(
             '引用的变量库（${def?.refs.length ?? 0}）',
@@ -198,20 +196,17 @@ class _EnvironmentPageState extends State<EnvironmentPage> with LeaveWhenGone {
                       title: Text(d.name),
                       subtitle: Text(() {
                         final g = d.grants.firstWhere((g) => g.envId == env.id);
-                        final local = g.localDecrypt ? '允许本机解密' : '需手机批准';
-                        return '${roleNames[g.role]} · ${formatExpiry(g.expiresAt)} · $local';
+                        return [
+                          roleNames[g.role],
+                          if (g.localDecrypt || g.expiresAt != 0) formatExpiry(g.expiresAt),
+                          g.localDecrypt ? '无人值守（本机解密）' : '需手机批准',
+                        ].join(' · ');
                       }()),
                     ),
                   ],
                 ],
               ),
             ),
-          ...idSection(
-            context,
-            label: '环境 ID',
-            id: env.id,
-            usage: '命令行里可以用 ID 代替环境名，例如 harmonia exec --env ${env.id} -- 命令。改名后 ID 不变，适合写进脚本。',
-          ),
         ],
       ),
     );

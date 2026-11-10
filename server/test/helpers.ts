@@ -308,7 +308,7 @@ export class TestAccount {
   /** 和升级转换后一样：同 ID、同名的变量库和环境，环境引用全部变量并可以修改。返回这个 ID。 */
   async createEnv(s: TestServer, managers: string[], name = "OpenAI") {
     const id = await this.createVault(s, managers, name);
-    await this.createEnvironment(s, [{ vaultId: id, scope: "all", writable: true, items: [] }], name, id);
+    await this.createEnvironment(s, [{ vaultId: id, scope: "all", items: [] }], name, id);
     return id;
   }
 

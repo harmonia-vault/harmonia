@@ -38,7 +38,7 @@ func (f *fixture) sync(t *testing.T, since int64, envs map[string]map[string]str
 		for _, n := range names {
 			ct, _ := hc.EncryptVar(key, id, 1, n, hc.Entry{Value: vars[n]})
 			s.Variables = append(s.Variables, api.Variable{VaultID: id, Name: n, Value: ct, KeyVersion: "1"})
-			env.Items = append(env.Items, api.EnvItem{Name: n, VaultID: id, Source: n, Writable: true})
+			env.Items = append(env.Items, api.EnvItem{Name: n, VaultID: id, Source: n})
 		}
 		s.Environments = append(s.Environments, env)
 	}
@@ -207,7 +207,7 @@ func TestSelectPicks(t *testing.T) {
 	if p := parse("测试:旧")[0]; p.EnvID != "env-b" || p.Var != "" {
 		t.Fatalf("名称带冒号的环境应整个选中：%+v", p)
 	}
-	got, _, err := Select(f.cache, f.dev, parse("开发", "测试:旧", "生产:API_KEY", "env-c:DB_URL", "env-c:SHARED"), state.Overrides{"env-c": {"API_KEY": "local"}}, nil, 0)
+	got, _, err := Select(f.cache, f.dev, parse("开发", "测试:旧", "生产:API_KEY", "生产:DB_URL", "生产:SHARED"), state.Overrides{"env-c": {"API_KEY": "local"}}, nil, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -255,7 +255,7 @@ func TestBrokenVariableOnlyAffectsItself(t *testing.T) {
 	f := newFixture(t)
 	s := f.sync(t, 0, map[string]map[string]string{"e": {"GOOD": "ok"}},
 		api.Variable{VaultID: "e", Name: "BAD", Value: hc.B64(hc.Random(60)), KeyVersion: "1"})
-	s.Environments[0].Items = append(s.Environments[0].Items, api.EnvItem{Name: "BAD", VaultID: "e", Source: "BAD", Writable: true})
+	s.Environments[0].Items = append(s.Environments[0].Items, api.EnvItem{Name: "BAD", VaultID: "e", Source: "BAD"})
 	if err := Apply(f.cache, s, 0, hc.B64(f.root.Pub), f.dev.ID); err != nil {
 		t.Fatal(err)
 	}

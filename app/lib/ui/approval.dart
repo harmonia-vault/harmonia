@@ -250,9 +250,9 @@ class _ApprovalPageState extends State<ApprovalPage> {
       const SizedBox(height: Space.lg),
       Card(
         child: ListTile(
-          title: const Text('有效时长'),
+          title: const Text('多久内不再询问'),
           trailing: AppSelect<int>(
-            semanticLabel: '有效时长',
+            semanticLabel: '多久内不再询问',
             value: current.minutes,
             options: [
               for (final p in ApprovalDuration.presets) (value: p.minutes, label: p.label),
@@ -285,7 +285,7 @@ const _mono = TextStyle(fontFamily: 'monospace');
 
 TextStyle _muted(BuildContext context) => TextStyle(color: context.palette.mute, fontSize: 13);
 
-/// 自定义有效时长：1 分钟到 30 天。
+/// 自定义“多久内不再询问”：1 分钟到 30 天。
 Future<ApprovalDuration?> askCustomDuration(BuildContext context) async {
   final ctrl = TextEditingController(text: '1');
   var unit = 60;
@@ -295,7 +295,7 @@ Future<ApprovalDuration?> askCustomDuration(BuildContext context) async {
     useRootNavigator: false,
     builder: (ctx) => StatefulBuilder(
       builder: (ctx, set) => AppAlertDialog(
-        title: const Text('自定义有效时长'),
+        title: const Text('自定义时长'),
         content: Row(
           children: [
             Expanded(

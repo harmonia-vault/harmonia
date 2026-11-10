@@ -192,9 +192,7 @@ expect_eq "$(bash -c ". '$TMP/cli/env.sh'; export MINE=kept; HARMONIA_HOME='$TMP
 expect_eq "$(cli exec --env Other,OpenAI:ONLY_OPENAI -- sh -c 'printf "%s %s" "$OPENAI_API_KEY" "$ONLY_OPENAI"' 2>/dev/null)" "from-other only-openai" "--env 环境:变量名 只取这一个变量"
 expect_eq "$(bash -c ". '$TMP/cli/env.sh'; HARMONIA_HOME='$TMP/cli' '$TMP/harmonia' exec --env OpenAI:ONLY_OPENAI -- sh -c 'printf \"%s %s\" \"\${OPENAI_API_KEY-unset}\" \"\$ONLY_OPENAI\"'" 2>/dev/null)" "unset only-openai" "只取一个变量时，终端里同一环境的其他变量也不传给命令"
 cli exec --env OpenAI:NOT_THERE -- true 2>/dev/null && fail "指定的变量不存在时不应运行命令"
-OTHER_ID=$(cli env list | awk '$2 == "Other" { print $NF }')
-[ -n "$OTHER_ID" ] || fail "env list 没有显示环境 ID"
-expect_eq "$(cli exec --env "$OTHER_ID:OPENAI_API_KEY" -- printenv OPENAI_API_KEY 2>/dev/null)" "from-other" "--env 可以用环境 ID"
+expect_eq "$(cli exec --env other:OPENAI_API_KEY -- printenv OPENAI_API_KEY 2>/dev/null)" "from-other" "--env 的环境名不区分大小写"
 # 终端里是旧值时，不加 --env 也以最新值为准（同名变量只传一份）。
 expect_eq "$(bash -c "export OPENAI_API_KEY=stale; HARMONIA_HOME='$TMP/cli' '$TMP/harmonia' exec -- sh -c 'env | grep -c ^OPENAI_API_KEY=; printenv OPENAI_API_KEY'" 2>/dev/null | tr '\n' ' ')" "1 sk-second " "同名变量只传最新值"
 
@@ -202,7 +200,7 @@ step "两层结构：环境引用变量库，按勾选和改名展开，写回�
 manager phone vault-create Shared >/dev/null
 manager phone var-set Shared TOKEN "tok-1" >/dev/null
 manager phone var-set Shared MODEL "gpt" >/dev/null
-manager phone env-define Mix Shared:pick:rw:TOKEN=LLM_TOKEN OpenAI:all >/dev/null
+manager phone env-define Mix Shared:pick:TOKEN=LLM_TOKEN OpenAI:all >/dev/null
 if manager phone env-define Dup OpenAI:all Other:all >/dev/null 2>&1; then fail "两个变量库都有 OPENAI_API_KEY 时不应能保存环境"; fi
 manager phone env-define Dup OpenAI:all Other:all:OPENAI_API_KEY=OTHER_KEY >/dev/null || fail "给重名变量改名后应能保存"
 manager phone env-delete Dup >/dev/null
@@ -212,8 +210,8 @@ expect_eq "$(cli exec --env Mix -- sh -c 'printf "%s %s %s" "$LLM_TOKEN" "${MODE
 cli var list --env Mix | grep -q "LLM_TOKEN.*来自 Shared / TOKEN" || fail "var list 没有显示变量来自哪个变量库：$(cli var list --env Mix)"
 cli var set Mix LLM_TOKEN "tok-2" --yes >/dev/null || fail "通过环境用新名字修改失败"
 expect_eq "$(manager phone var-get Shared TOKEN)" "tok-2" "写回变量库里的原变量"
-if cli var set Mix OPENAI_API_KEY "x" --yes 2>"$TMP/w.err"; then fail "引用不允许修改时不应能写入"; fi
-grep -q "不允许修改" "$TMP/w.err" || fail "不允许修改的提示不清楚：$(cat "$TMP/w.err")"
+if cli var set Other OPENAI_API_KEY "x" --yes 2>"$TMP/w.err"; then fail "只读授权时不应能写入"; fi
+grep -q "只读" "$TMP/w.err" || fail "只读的提示不清楚：$(cat "$TMP/w.err")"
 if cli var set Mix BRAND_NEW "x" 2>"$TMP/w.err"; then fail "环境里没有的变量不应能通过环境新增"; fi
 grep -q "可以新增变量的变量库：“OpenAI”" "$TMP/w.err" || fail "没有列出可以新增变量的变量库：$(cat "$TMP/w.err")"
 cli var set OpenAI BRAND_NEW "x" >/dev/null || fail "名字同时是环境和变量库时应能直接新增"
@@ -390,7 +388,7 @@ for e in OpenAI Other FromPhone2; do printf %s "$ENVS" | grep -q "\"name\":\"$e\
 NEWVAULT=$(mapi /api/vaults/create '{"name":"FromComputer"}' | field id)
 [ -n "$NEWVAULT" ] || fail "电脑没能新建变量库"
 expect_eq "$(mapi /api/envs/list | grep -c '"name":"FromComputer"' || true)" "0" "新建变量库不应同时建环境"
-NEWENV=$(mapi /api/envs/create '{"name":"FromComputer","refs":[{"vaultId":"'$NEWVAULT'","scope":"all","writable":true}]}' | field id)
+NEWENV=$(mapi /api/envs/create '{"name":"FromComputer","refs":[{"vaultId":"'$NEWVAULT'","scope":"all"}]}' | field id)
 [ -n "$NEWENV" ] || fail "电脑没能新建引用新变量库的环境"
 B_ENV='{"env":"'$NEWENV'"}'
 B_VAULT='{"vault":"'$NEWVAULT'"}'

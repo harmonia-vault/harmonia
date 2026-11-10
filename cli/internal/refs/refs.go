@@ -46,7 +46,7 @@ func Expand(refs []api.Ref, names Names) (items, shadowed []api.EnvItem) {
 			}
 		}
 		for _, src := range sources {
-			it := api.EnvItem{Name: nameIn(r, src), VaultID: r.VaultID, Source: src, Writable: r.Writable}
+			it := api.EnvItem{Name: nameIn(r, src), VaultID: r.VaultID, Source: src}
 			if seen[it.Name] {
 				shadowed = append(shadowed, it)
 				continue

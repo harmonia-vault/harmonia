@@ -1,6 +1,6 @@
-// 批准页上的有效时长和授权范围（设计文档 17.4），以及按设备记住上次的选择。
+// 批准页上的“多久内不再询问”和授权范围（设计文档 17.4），以及按设备记住上次的选择。
 
-/// 有效时长：仅这一次、若干分钟，或长期（直到电脑重启或退出登录）。
+/// 多久内不再询问：仅这一次、若干分钟，或长期（直到电脑重启或退出登录）。
 class ApprovalDuration {
   const ApprovalDuration._(this.minutes);
 
@@ -53,7 +53,7 @@ class ApprovalDuration {
   int get hashCode => minutes.hashCode;
 }
 
-/// 一台设备上次的选择：有效时长和授权范围（terminal 或 all）。第一次为“仅这一次”“仅这个终端”。
+/// 一台设备上次的选择：多久内不再询问和授权范围（terminal 或 all）。第一次为“仅这一次”“仅这个终端”。
 class ApprovalChoice {
   const ApprovalChoice(this.duration, this.scope);
   final ApprovalDuration duration;

@@ -17,8 +17,8 @@ func approvalFixture(t *testing.T) *fixture {
 	s.Environments = append(s.Environments, api.Environment{
 		ID: "remote", Name: "远程", Role: "rw", Active: true, Position: 0, CreateVaults: []string{"shared"},
 		Items: []api.EnvItem{
-			{Name: "LLM_TOKEN", VaultID: "shared", Source: "TOKEN", Writable: true},
-			{Name: "K", VaultID: "shared", Source: "K", Writable: true},
+			{Name: "LLM_TOKEN", VaultID: "shared", Source: "TOKEN"},
+			{Name: "K", VaultID: "shared", Source: "K"},
 			{Name: "RO", VaultID: "shared", Source: "RO"},
 		},
 	})
@@ -73,8 +73,11 @@ func TestRemoteWriteDest(t *testing.T) {
 	if err != nil || !d.Remote() || d.ApprovalItem() != (api.ApprovalItem{EnvironmentID: "remote", Name: "LLM_TOKEN"}) || d.Source != "TOKEN" {
 		t.Fatalf("%+v %v", d, err)
 	}
-	if _, err := WriteDest(f.cache, env, "RO", 0); err == nil {
-		t.Fatal("不允许修改的引用不能写")
+	if d, err := WriteDest(f.cache, env, "RO", 0); err != nil || d.Source != "RO" {
+		t.Fatalf("读写授权能改环境里的任何变量：%+v %v", d, err)
+	}
+	if _, err := WriteDest(f.cache, env, "MISSING", 0); err == nil {
+		t.Fatal("环境里没有的变量不能通过环境写")
 	}
 	vault, _ := ResolveTarget(f.cache, "共享", false)
 	d, err = WriteDest(f.cache, vault, "TOKEN", 0)

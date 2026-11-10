@@ -30,9 +30,9 @@ export function vaultDialog() {
 export function envDialog(vaults, env) {
   return modal(env ? `编辑环境“${env.name}”` : '新建环境', (close) => {
     const nameIn = h('input', { type: 'text', maxLength: 64, required: true, value: env?.name ?? '', placeholder: '例如：博客、本地开发' });
-    // 每条引用：{ vaultId, scope, writable, missing, names: [原名], picked: Set, as: Map(原名 → 新名字) }
+    // 每条引用：{ vaultId, scope, missing, names: [原名], picked: Set, as: Map(原名 → 新名字) }
     const refs = (env?.refs ?? []).map((r) => ({
-      vaultId: r.vaultId, scope: r.scope, writable: r.writable, missing: !!r.missing, names: [],
+      vaultId: r.vaultId, scope: r.scope, missing: !!r.missing, names: [],
       picked: new Set(r.scope === 'pick' ? r.items.map((i) => i.name) : []),
       as: new Map(r.items.filter((i) => i.as).map((i) => [i.name, i.as])),
       wanted: r.items.map((i) => i.name),
@@ -58,7 +58,7 @@ export function envDialog(vaults, env) {
         const items = r.scope === 'pick'
           ? r.names.filter((n) => r.picked.has(n)).map(rename)
           : r.names.filter((n) => r.as.get(n)?.trim()).map(rename);
-        return { vaultId: r.vaultId, scope: r.scope, writable: r.writable, items };
+        return { vaultId: r.vaultId, scope: r.scope, items };
       });
     }
 
@@ -114,8 +114,6 @@ export function envDialog(vaults, env) {
         if (r.scope === 'pick' && r.picked.size === 0) r.names.forEach((n) => r.picked.add(n));
         render();
       };
-      const writable = h('input', { type: 'checkbox', checked: r.writable });
-      writable.onchange = () => { r.writable = writable.checked; schedule(); };
       const rows = r.names.map((n) => {
         const box = h('input', { type: 'checkbox', checked: r.scope === 'all' || r.picked.has(n), disabled: r.scope === 'all', 'aria-label': `引用 ${n}` });
         box.onchange = () => {
@@ -131,9 +129,7 @@ export function envDialog(vaults, env) {
         field('范围', scope),
         r.names.length
           ? h('ul', { class: 'pick' }, rows)
-          : h('p', { class: 'mute small', text: r.scope === 'all' ? '变量库里还没有变量，以后新增的会自动包含。' : '变量库里还没有变量。' }),
-        h('label', { class: 'check' }, writable, h('span', {}, h('b', { text: '可以修改' }),
-          h('span', { class: 'hint', text: '被授权读写的电脑可以修改这些变量，写回变量库里的原变量；范围是全部变量时还能新增变量。所有引用这个变量库的环境都会看到变化。' }))));
+          : h('p', { class: 'mute small', text: r.scope === 'all' ? '变量库里还没有变量，以后新增的会自动包含。' : '变量库里还没有变量。' }));
     }
 
     function render() {
@@ -142,7 +138,7 @@ export function envDialog(vaults, env) {
       const pick = h('select', { 'aria-label': '要引用的变量库' }, free.map((v) => h('option', { value: v.id, text: `${v.name}（${v.count} 个变量）` })));
       const add = labeled('plus', '添加引用', { class: 'small', disabled: free.length === 0 });
       add.onclick = () => run(add, '', error, async () => {
-        const r = { vaultId: pick.value, scope: 'all', writable: false, missing: false, names: [], picked: new Set(), as: new Map(), wanted: [] };
+        const r = { vaultId: pick.value, scope: 'all', missing: false, names: [], picked: new Set(), as: new Map(), wanted: [] };
         await loadNames(r);
         refs.push(r);
         render();
