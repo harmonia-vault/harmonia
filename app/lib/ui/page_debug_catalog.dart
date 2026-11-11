@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../app/controller.dart';
 import '../app/debug_session.dart';
 import '../app/updater.dart';
+import '../core/update_info.dart';
 import '../core/crypto.dart';
 import '../core/debug_account.dart';
 import '../core/debug_approvals.dart';
@@ -291,7 +292,7 @@ Map<String, List<DebugPageEntry>> debugPages() => {
       ),
     ),
     DebugPageEntry(
-      '检查更新、长说明与下载页',
+      appleDistribution ? '检查更新与新版本号' : '检查更新、长说明与下载页',
       (s) => DebugOverlay(show: (c) => checkForUpdate(c, manual: true, channel: s.c.updateChannel)),
     ),
   ],

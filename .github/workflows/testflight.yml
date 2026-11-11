@@ -1,0 +1,68 @@
+name: TestFlight
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+      commit:
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 已发布的版本标签（例如 v0.15.2）
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  upload:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit || inputs.tag }}
+      - uses: jdx/mise-action@v5
+        with:
+          install_args: flutter python
+          cache_key_prefix: mise-testflight
+      - name: 准备签名
+        env:
+          IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          IOS_APP_PROFILE_BASE64: ${{ secrets.IOS_APP_PROFILE_BASE64 }}
+        run: mise run prepare-ios-signing
+      - name: 构建内部测试包
+        env:
+          RELEASE_REF: ${{ inputs.tag }}
+        run: |
+          TAG="${RELEASE_REF#release/}"
+          VERSION="${TAG#v}"
+          BASE="${VERSION%%-*}"
+          # run_id 跨工作流唯一；重跑同一任务时 run_attempt 递增。
+          BUILD="$GITHUB_RUN_ID.$GITHUB_RUN_ATTEMPT"
+          mise run deps-app
+          mise run build-testflight --build-name "$BASE" --build-number "$BUILD" \
+            --dart-define=APP_VERSION="$VERSION" \
+            --export-options-plist="$RUNNER_TEMP/harmonia-ios-signing/ExportOptions.plist"
+      - name: 上传 App Store Connect
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+        run: |
+          umask 077
+          mkdir -p "$RUNNER_TEMP/harmonia-asc/private_keys"
+          printf '%s' "$ASC_PRIVATE_KEY" > "$RUNNER_TEMP/harmonia-asc/private_keys/AuthKey_$ASC_KEY_ID.p8"
+          cd "$RUNNER_TEMP/harmonia-asc"
+          xcrun altool --upload-package "$GITHUB_WORKSPACE"/app/build/ios/ipa/*.ipa \
+            --api-key "$ASC_KEY_ID" --api-issuer "$ASC_ISSUER_ID"
+      - name: 清理签名材料
+        if: always()
+        run: |
+          mise run clean-ios-signing
+          rm -rf "$RUNNER_TEMP/harmonia-asc"

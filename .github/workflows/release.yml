@@ -1,6 +1,6 @@
 name: Release
 
-# 推送 v* 标签时发布：CLI 六个平台二进制、签名 APK、未签名 IPA、签名清单。服务端由 publish-server.yml 发布到 harmonia-worker。
+# 推送 v* 标签时发布：CLI、APK、公开 IPA、签名清单，并签名上传 TestFlight。服务端由 publish-server.yml 发布。
 # 测试版也支持推送 release/v*-rc.*、release/v*-beta.*、release/v*-alpha.* 分支；全部构建成功后才创建标签和发布。
 # 带“-”的版本（例如 v0.1.2-rc.1、v0.1.2-beta.1）发布为预发布，只进入测试版渠道。
 on:
@@ -139,7 +139,7 @@ jobs:
           flutter pub get
           flutter build ios --release --no-codesign \
             --build-name "$BASE" --build-number "$CODE" \
-            --dart-define=APP_VERSION="$VERSION"
+            --dart-define=APP_VERSION="$VERSION" --dart-define=APPLE_DISTRIBUTION=false
           mkdir -p ../dist Payload
           cp -R build/ios/iphoneos/Runner.app Payload/
           zip -qry "../dist/harmonia-$VERSION.ipa" Payload
@@ -198,3 +198,11 @@ jobs:
           (cd cli && go run ./cmd/releasetool feed --version "${TAG#v}" --dist ../dist --feed ../feed)
           cp dist/install.sh dist/install.ps1 feed/
           gh release upload update-feed feed/* --clobber
+
+  testflight:
+    needs: release
+    uses: ./.github/workflows/testflight.yml
+    with:
+      tag: ${{ github.ref_name }}
+      commit: ${{ github.sha }}
+    secrets: inherit

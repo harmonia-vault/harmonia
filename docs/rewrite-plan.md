@@ -687,7 +687,7 @@ CI（`ci.yml`，2026-11-09 调整）：
 | 决策 | 结论 |
 | --- | --- |
 | 版本归属 | iOS App 放在 v0.2.0，作为里程碑 M10；v0.1.0 的范围和验收清单不变，不等 iOS |
-| 分发方式 | GitHub Releases 提供未签名 IPA，由使用者自己签名安装；不上架 App Store，不使用 TestFlight |
+| 分发方式 | 保留 GitHub Releases 未签名 IPA，同时由发布流水线签名并上传 TestFlight 内部测试；两种包在构建时区分更新行为（14.4，2026-11-11 调整） |
 | App PIN 的本机保护 | Secure Enclave 参与每一次 PIN 尝试，保证与 Android 相同。为此新增一个构件：把 PIN 派生值映射为 P-256 曲线上的点，再与 Secure Enclave 中的私钥做 ECDH（协议 2.5） |
 
 ---
@@ -833,9 +833,9 @@ iOS App 与 Android App 是同一个 Flutter 工程（`app/`），`lib/` 下的�
 - `app/ios` 工程，最低支持 iOS 16；只面向 iPhone，iPad 上以 iPhone 兼容模式运行，不单独适配。
 - Swift 原生实现，与 Android 的 Kotlin 部分一一对应：本机密钥保护、面容 ID / 触控 ID、恢复码 HTML 转 PDF、通过系统“存储到文件”保存、敏感内容复制、设备名。
 - 界面沿用现有的 Material 风格，不另做一套 iOS 风格的界面。
-- 发布未签名 IPA，App 内检查更新，下载新的 IPA 并交给签名工具。
+- 同时发布 GitHub 未签名 IPA 与 TestFlight 内部测试包，更新行为见 14.4。
 
-**不做：** 上架 App Store 与 TestFlight、AltStore / SideStore 软件源、App 后台推送（2026-11-09 起在 M16 做，见第 18 节；只有发布者签名的版本能收到）、iPad 布局、小组件、Apple Watch。
+**不做：** 上架 App Store、AltStore / SideStore 软件源、App 后台推送（2026-11-09 起在 M16 做，见第 18 节；只有发布者签名的版本能收到）、iPad 布局、小组件、Apple Watch。
 
 ### 14.2 与 Android 的差异
 
@@ -849,7 +849,7 @@ iOS App 与 Android App 是同一个 Flutter 工程（`app/`），`lib/` 下的�
 | 敏感内容复制 | 标记为敏感，App 在 1 分钟后清空 | 由系统在 1 分钟后让剪贴板内容过期，并且不同步到其他 Apple 设备 |
 | 扫码 | `mobile_scanner` | 相同；首次使用时系统询问相机权限，被拒绝时提示改为输入核对码，或到系统设置中允许 |
 | 账号表单自动填充 | 需要替换 FlutterView 才能正常工作 | 系统自带，不需要额外处理 |
-| 更新 | App 内下载并安装 APK | App 内下载并校验 IPA，交给签名工具安装，见 14.4 |
+| 更新 | App 内下载并安装 APK | Apple 分发包只提示新版本号；GitHub IPA 下载并校验 IPA，交给签名工具安装，见 14.4 |
 
 ### 14.3 本机存储与密钥保护
 
@@ -864,17 +864,20 @@ iOS App 与 Android App 是同一个 Flutter 工程（`app/`），`lib/` 下的�
 ### 14.4 分发与更新
 
 - **发布物**：每个 Release 增加 `harmonia-<版本>.ipa`（未签名），由 CI 在 macOS 上构建。签名清单的 `assets` 增加 `ios` 一项（下载地址、SHA-256、大小），格式与 Android 分包相同。构建号沿用 Android 的 `versionCode` 算法。
+- **TestFlight 内部测试**（2026-11-11 增加）：Release 工作流完成公开发布后调用独立的 TestFlight 工作流，也支持指定已发布标签手动重跑。使用仓库的 `IOS_CERTIFICATE_BASE64`、`IOS_CERTIFICATE_PASSWORD`、`IOS_APP_PROFILE_BASE64` 导入临时钥匙串并手动签名，使用 `ASC_KEY_ID`、`ASC_ISSUER_ID`、`ASC_PRIVATE_KEY` 上传；构建同一个发布提交，不复用公开 IPA；构建号为 GitHub `run_id.run_attempt`，跨工作流及重跑不重复。导出限制为内部测试，上传后由 Apple 处理；出口合规按下方“加密声明”处理。
+- **Apple 包检查更新**：仅该构建传入 `APPLE_DISTRIBUTION=true`。沿用渠道、检查频率、版本比较和清单签名验证，只读取版本号；发现更新仅提示新版本号，不读取 IPA 元数据，不显示更新说明、下载页、签名工具或分享入口。页面调试同步使用独立的模拟场景，不访问真实更新服务。
+- **加密声明**（2026-11-11 增加）：iOS 包使用系统之外的 libsodium 加密（协议第 2 节）。在 App Store Connect 如实选择系统外的标准加密算法、当前不在法国分发后，问卷明确提示无需上传文稿。因此 `Info.plist` 声明 `ITSAppUsesNonExemptEncryption=false`，表示豁免提交加密材料，并非不使用加密；无需填写 `ITSEncryptionExportComplianceCode`。此声明适用于当前的加密实现与非法国分发范围；改变算法或扩大至法国分发前，重新评估并更新声明。
 - **安装**：使用者用 AltStore、SideStore 或自己的开发者证书签名后安装。README 说明安装步骤，并提醒：
   - 用免费 Apple ID 签名的 App 7 天后过期，需要在过期前重新签名（上述工具会自动续签）；过期后 App 打不开，重新签名后数据仍在。
   - 换一个 Apple ID 或证书签名，相当于安装了另一个 App，原来的数据读不到，需要按新设备重新接入。
-- **检查更新**：时机和渠道规则与 Android 相同（前台、24 小时内最多一次、正式版与测试版渠道），同样验证清单签名。发现新版本时显示版本号和更新说明，提供“下载并导入签名工具”和“打开下载页”。
-- **下载并导入签名工具**（2026-10-12 增加）：App 下载新的 IPA，按清单核对大小和 SHA-256，然后弹出系统的分享面板，由用户选择安装 Harmonia 时使用的签名工具（轻松签、全能签、万能签等能接收 IPA 文件的工具都会出现在面板里）；之后的签名和安装在签名工具里完成，数据会保留。这样做不依赖各个工具自己的跳转接口（它们没有公开、稳定的“传入下载地址即导入”的接口），并且交出去的文件经过了校验。App 自己仍然不安装 IPA；下载的文件放在缓存目录，取消时立即删除，交出去的那一份在下次下载前清掉。
+- **GitHub IPA 检查更新**：时机和渠道规则与 Android 相同（前台、24 小时内最多一次、正式版与测试版渠道），同样验证清单签名。发现新版本时显示版本号和更新说明，提供“下载并导入签名工具”和“打开下载页”。
+- **GitHub IPA 下载并导入签名工具**（2026-10-12 增加）：App 下载新的 IPA，按清单核对大小和 SHA-256，然后弹出系统的分享面板，由用户选择安装 Harmonia 时使用的签名工具（轻松签、全能签、万能签等能接收 IPA 文件的工具都会出现在面板里）；之后的签名和安装在签名工具里完成，数据会保留。这样做不依赖各个工具自己的跳转接口（它们没有公开、稳定的“传入下载地址即导入”的接口），并且交出去的文件经过了校验。App 自己仍然不安装 IPA；下载的文件放在缓存目录，取消时立即删除，交出去的那一份在下次下载前清掉。
 - **不做软件源**：AltStore / SideStore 的软件源没有签名校验，本次不提供。
 
 ### 14.5 开发与测试
 
 - 工具链：本机 Xcode（不由 mise 管理），其余沿用 `mise.toml`；插件通过 Swift Package Manager 集成，不需要 CocoaPods。任务：`mise run build-ipa`（未签名 IPA）、`mise run run-ios`（在模拟器中运行）、`mise run test-ios`（原生部分的单元测试：用独立算出的测试向量核对 PIN 槽密钥的计算）。
-- CI：`ci.yml` 增加一次 iOS 无签名构建；`release.yml` 增加 IPA 构建并纳入签名清单。
+- CI：`ci.yml` 验证两种分发配置的 iOS 无签名构建及合成描述文件；`release.yml` 发布公开 IPA 并纳入签名清单，随后调用 `testflight.yml` 签名上传。`mise run build-testflight` 通过构建参数接收版本、构建号和导出配置，签名材料只在 GitHub Actions 的临时目录中准备与清理。
 - 分工不变：我用模拟器检查布局；Secure Enclave、面容 ID、相机扫码只能在真机上验证，由你验收。
 
 ### 14.6 验收
@@ -1340,7 +1343,7 @@ App ──登记推送令牌──▶ 推送中继 ──返回句柄──▶ A
 ### 18.8 覆盖范围
 
 - **Android**：手机有 Google 服务、并且连得上 FCM 时能收到。侧载安装的 APK 同样可以，FCM 不检查安装来源。
-- **iOS**：只有发布者签名的版本能收到。用户用自己的证书或签名工具重签的 IPA，推送令牌不属于发布者的 App，收不到。目前发布的是未签名 IPA（14.4），iOS 的通知要等上架或 TestFlight 渠道才能覆盖普通用户；开发时用 Xcode 签名安装到真机上验证（APNs 测试环境）。
+- **iOS**：只有发布者签名的版本能收到。用户用自己的证书或签名工具重签的 IPA，推送令牌不属于发布者的 App，收不到。GitHub 的未签名 IPA 与 TestFlight 内部测试包同时保留（14.4），后者可使用发布者的 APNs 正式环境；开发时用 Xcode 签名安装到真机上验证（APNs 测试环境）。
 - 收不到的手机按 18.4 显示说明，流程不受影响。
 
 ### 18.9 开发与测试

@@ -5,6 +5,7 @@ import '../app/controller.dart';
 import '../core/appearance.dart';
 import '../core/push.dart';
 import '../app/updater.dart';
+import '../core/update_info.dart';
 import '../core/api.dart' show appVersion;
 import 'about.dart';
 import 'page_debug.dart';
