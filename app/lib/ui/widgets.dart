@@ -10,6 +10,9 @@ import 'theme.dart';
 import 'app_scope.dart';
 import 'glass_overlays.dart';
 import 'glass.dart';
+import 'window_layout.dart';
+import 'workspace_scope.dart';
+import 'adaptive_presentation.dart';
 
 /// 把异常转成给用户看的一句话。
 String errorText(Object e) {
@@ -20,13 +23,11 @@ String errorText(Object e) {
 }
 
 void toast(BuildContext context, String msg) {
-  final glass = usesGlass(context);
-  final scheme = Theme.of(context).colorScheme;
   ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
     ..showSnackBar(
       // 固定式通知条自带从底部滑入、滑出的动画（悬浮式在 Material 3 下几乎是直接出现）；
-      // 外观自己画：玻璃模式是与底栏等宽的玻璃气泡，普通模式是深色圆角气泡。
+      // 与底栏等宽的悬浮玻璃气泡。
       SnackBar(
         behavior: SnackBarBehavior.fixed,
         backgroundColor: Colors.transparent,
@@ -35,27 +36,17 @@ void toast(BuildContext context, String msg) {
         clipBehavior: Clip.none,
         content: Padding(
           // 玻璃模式左右各留 24，与底栏等宽。
-          padding: EdgeInsets.symmetric(horizontal: glass ? 24 : Space.lg, vertical: Space.sm),
+          padding: EdgeInsets.symmetric(horizontal: 24, vertical: Space.sm),
           child: _ToastReveal(
-            child: glass
-                ? AppSurface(
-                    color: context.palette.card,
-                    radius: 24,
-                    panel: true,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                      child: Text(tidy(msg), style: TextStyle(color: context.palette.ink, height: 1.45)),
-                    ),
-                  )
-                : Material(
-                    color: scheme.inverseSurface,
-                    elevation: 4,
-                    borderRadius: BorderRadius.circular(14),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: Space.lg, vertical: 14),
-                      child: Text(tidy(msg), style: TextStyle(color: scheme.onInverseSurface, height: 1.45)),
-                    ),
-                  ),
+            child: (AppSurface(
+              color: context.palette.card,
+              radius: 24,
+              panel: true,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                child: Text(tidy(msg), style: TextStyle(color: context.palette.ink, height: 1.45)),
+              ),
+            )),
           ),
         ),
       ),
@@ -73,9 +64,7 @@ class _ToastReveal extends StatelessWidget {
   Widget build(BuildContext context) {
     final animation = context.findAncestorWidgetOfExactType<SnackBar>()?.animation;
     if (animation == null) return child;
-    return usesGlass(context)
-        ? GlassMaterializeTransition(animation: animation, scaleFrom: 1, child: child)
-        : FadeTransition(opacity: animation, child: child);
+    return GlassMaterializeTransition(animation: animation, scaleFrom: 1, child: child);
   }
 }
 
@@ -86,10 +75,11 @@ Future<bool> runBusy(
   String? done,
   WidgetBuilder? progressBuilder,
 }) async {
-  final nav = Navigator.of(context);
+  final nav = WindowLayoutScope.navigatorOf(context);
   // 只移除这个进度弹窗本身：操作期间页面栈可能因阶段切换而被清空。
   final route = appDialogRoute<void>(
     context: context,
+    workspace: WorkspaceScope.maybeOf(context),
     barrierDismissible: false,
     builder: (context) => PopScope(
       canPop: false,
@@ -128,7 +118,6 @@ Future<bool> confirmDialog(
 }) async {
   final r = await showAppDialog<bool>(
     context: context,
-    useRootNavigator: false,
     builder: (c) => AppAlertDialog(
       title: Text(title),
       content: Text(tidy(body)),
@@ -178,46 +167,54 @@ class AuthScaffold extends StatelessWidget {
   }
 
   Widget _scaffold(BuildContext context, Palette p) {
-    return AppPage(
-      appBar: onBack == null
-          ? null
-          : AppBarSurface(
-              leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: onBack),
-            ),
-      body: (context) => SafeArea(
-        top: !usesGlass(context) || onBack == null,
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 520),
-            child: ListView(
-              padding: EdgeInsets.fromLTRB(
-                Space.xl,
-                Space.xl + (usesGlass(context) && onBack != null ? MediaQuery.paddingOf(context).top : 0),
-                Space.xl,
-                Space.xxl,
-              ),
-              children: [
-                if (onBack == null) ...[
-                  Row(
-                    children: [
-                      const BrandMark(),
-                      const SizedBox(width: Space.md),
-                      Text('和弦', style: Theme.of(context).textTheme.titleLarge),
-                      const SizedBox(width: Space.sm),
-                      Text('Harmonia', style: TextStyle(color: p.mute)),
-                    ],
+    return ColoredBox(
+      color: p.paper,
+      child: AdaptivePresentation(
+        child: AppPage(
+          appBar: onBack == null
+              ? null
+              : AppBarSurface(
+                  leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: onBack),
+                ),
+          body: (context) => SafeArea(
+            top: onBack == null,
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 520),
+                child: ListView(
+                  padding: EdgeInsets.fromLTRB(
+                    Space.xl,
+                    Space.xl + ((onBack != null) ? MediaQuery.paddingOf(context).top : 0),
+                    Space.xl,
+                    Space.xxl,
                   ),
-                  const SizedBox(height: Space.xxl),
-                ],
-                Text(title, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w600)),
-                // 副标题里每个换行是一段，段与段之间不留额外间距。
-                if (subtitle != null) ...[
-                  const SizedBox(height: Space.sm),
-                  Text(tidy(subtitle!), style: TextStyle(color: p.mute, height: 1.5)),
-                ],
-                const SizedBox(height: Space.xl),
-                ...children,
-              ],
+                  children: [
+                    if (onBack == null) ...[
+                      Row(
+                        children: [
+                          const BrandMark(),
+                          const SizedBox(width: Space.md),
+                          Text('和弦', style: Theme.of(context).textTheme.titleLarge),
+                          const SizedBox(width: Space.sm),
+                          Text('Harmonia', style: TextStyle(color: p.mute)),
+                        ],
+                      ),
+                      const SizedBox(height: Space.xxl),
+                    ],
+                    Text(
+                      title,
+                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w600),
+                    ),
+                    // 副标题里每个换行是一段，段与段之间不留额外间距。
+                    if (subtitle != null) ...[
+                      const SizedBox(height: Space.sm),
+                      Text(tidy(subtitle!), style: TextStyle(color: p.mute, height: 1.5)),
+                    ],
+                    const SizedBox(height: Space.xl),
+                    ...children,
+                  ],
+                ),
+              ),
             ),
           ),
         ),
@@ -256,13 +253,13 @@ class Banner2 extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
-    final glass = usesGlass(context);
+
     return Container(
-      padding: EdgeInsets.all(glass ? 14 : Space.md),
+      padding: EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: warn ? p.warnBox : p.card,
-        borderRadius: BorderRadius.circular(glass ? 20 : 14),
-        border: glass ? null : Border.all(color: warn ? p.warnBox : p.line),
+        borderRadius: BorderRadius.circular(20),
+        border: null,
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -295,11 +292,7 @@ class CodeBox extends StatelessWidget {
     final p = context.palette;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: Space.lg, vertical: Space.lg),
-      decoration: BoxDecoration(
-        color: p.card,
-        borderRadius: BorderRadius.circular(usesGlass(context) ? 24 : 16),
-        border: usesGlass(context) ? null : Border.all(color: p.ink, width: 1.4),
-      ),
+      decoration: BoxDecoration(color: p.card, borderRadius: BorderRadius.circular(24), border: null),
       child: Row(
         children: [
           Expanded(

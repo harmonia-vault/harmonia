@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
 import 'glass.dart';
+import 'app_dialog.dart';
 import 'theme.dart';
+import 'window_layout.dart';
 
 export 'app_dialog.dart' show showAppDialog, appDialogRoute;
 
@@ -166,24 +168,25 @@ class _GlassDialogState extends State<_GlassDialog> {
   }
 }
 
-class AppAlertDialog extends AlertDialog {
-  const AppAlertDialog({super.key, super.title, super.content, super.actions}) : super(scrollable: true);
+class AppAlertDialog extends StatelessWidget {
+  const AppAlertDialog({super.key, this.title, this.content, this.actions});
+  final Widget? title, content;
+  final List<Widget>? actions;
 
   @override
-  Widget build(BuildContext context) =>
-      usesGlass(context) ? _GlassDialog(title: title, content: content, actions: actions) : super.build(context);
+  Widget build(BuildContext context) => _GlassDialog(title: title, content: content, actions: actions);
 }
 
-class AppSimpleDialog extends SimpleDialog {
-  const AppSimpleDialog({super.key, super.title, super.children});
+class AppSimpleDialog extends StatelessWidget {
+  const AppSimpleDialog({super.key, this.title, this.children});
+  final Widget? title;
+  final List<Widget>? children;
 
   @override
-  Widget build(BuildContext context) => usesGlass(context)
-      ? _GlassDialog(
-          title: title,
-          content: Column(mainAxisSize: MainAxisSize.min, children: children ?? []),
-        )
-      : super.build(context);
+  Widget build(BuildContext context) => _GlassDialog(
+    title: title,
+    content: Column(mainAxisSize: MainAxisSize.min, children: children ?? []),
+  );
 }
 
 class AppMenuButton extends StatelessWidget {
@@ -203,25 +206,32 @@ class AppMenuButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!usesGlass(context)) {
-      if (trigger != null) {
-        return MenuAnchor(
-          menuChildren: [
-            for (final item in items)
-              MenuItemButton(
-                leadingIcon: Icon(item.icon),
-                onPressed: () => onSelected(item.value),
-                child: Text(item.label),
-              ),
-          ],
-          builder: (context, controller, _) =>
-              trigger!(context, () => controller.isOpen ? controller.close() : controller.open()),
+    Widget button(VoidCallback open) =>
+        trigger?.call(context, open) ??
+        IconButton(tooltip: '更多操作', icon: const Icon(CupertinoIcons.ellipsis), onPressed: open);
+    if (WindowLayoutScope.maybeOf(context)?.fold != null) {
+      return button(() async {
+        final selected = await showAppDialog<String>(
+          context: context,
+          builder: (context) => AppSimpleDialog(
+            title: Text(semanticLabel),
+            children: [
+              for (final item in items)
+                SimpleDialogOption(
+                  onPressed: () => Navigator.pop(context, item.value),
+                  child: Row(
+                    children: [
+                      Icon(item.icon, color: item.danger ? Theme.of(context).colorScheme.error : null),
+                      const SizedBox(width: 12),
+                      Expanded(child: Text(item.label)),
+                    ],
+                  ),
+                ),
+            ],
+          ),
         );
-      }
-      return PopupMenuButton<String>(
-        onSelected: onSelected,
-        itemBuilder: (_) => [for (final item in items) PopupMenuItem(value: item.value, child: Text(item.label))],
-      );
+        if (context.mounted && selected != null) onSelected(selected);
+      });
     }
     return GlassMenu(
       autoAdjustToScreen: true,
@@ -245,9 +255,7 @@ class AppMenuButton extends StatelessWidget {
             onTap: () => onSelected(item.value),
           ),
       ],
-      triggerBuilder: (context, toggle) =>
-          trigger?.call(context, toggle) ??
-          IconButton(tooltip: '更多操作', icon: const Icon(CupertinoIcons.ellipsis), onPressed: toggle),
+      triggerBuilder: (context, toggle) => button(toggle),
     );
   }
 }

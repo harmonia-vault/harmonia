@@ -75,11 +75,11 @@ void main() {
     await session.vault.deleteEnvironment('debug-env-1');
     await session.c.identity.keyring.changePin(Uint8List(32), '654321');
     await session.c.setColorMode(AppColorMode.dark);
-    await session.c.setLiquidGlass(true);
+    await session.c.setGlassOpacity(0.75);
     expect(other.vault.environments.any((e) => e.id == 'debug-env-1'), isTrue);
     expect((await other.c.identity.keyring.unlock('123456')).key, Uint8List(32));
     expect(other.c.appearance.colorMode, AppColorMode.system);
-    expect(other.c.appearance.liquidGlass, isFalse);
+    expect(other.c.appearance.glassOpacity, 0.5);
     session.reset();
     expect(session.vault.environments.any((e) => e.id == 'debug-env-1'), isTrue);
     expect((await session.c.identity.keyring.unlock('123456')).key, Uint8List(32));

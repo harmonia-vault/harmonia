@@ -12,12 +12,12 @@ import 'list_row.dart';
 import 'theme.dart';
 import 'variable_edit.dart';
 import 'widgets.dart';
+import 'workspace_scope.dart';
 
 Future<String?> askName(BuildContext context, {required String title, String initial = '', String label = '名称'}) {
   final ctl = TextEditingController(text: initial);
   return showAppDialog<String>(
     context: context,
-    useRootNavigator: false,
     builder: (c) => AppAlertDialog(
       title: Text(title),
       content: TextField(
@@ -48,10 +48,13 @@ Future<void> createVaultFlow(BuildContext context, AppController c) async {
     await c.guard(() async => id = await c.vault.createVault(name));
   }, done: '已创建变量库');
   if (ok && id != null && context.mounted) {
-    await Navigator.push(
+    await openWorkspaceEntry(
       context,
-      MaterialPageRoute(
-        builder: (_) => VaultPage(c: c, vaultId: id!),
+      WorkspaceEntry(
+        tab: 0,
+        id: 'vault:$id',
+
+        page: (_) => VaultPage(c: c, vaultId: id!),
       ),
     );
   }
@@ -79,7 +82,7 @@ class _VariableListState extends State<VariableList> {
         children: [
           for (final (i, r) in widget.rows.indexed) ...[
             // 这一组没有行首图标，分隔线与文字左缘对齐。
-            if (i > 0) Divider(indent: usesGlass(context) ? listRowPadding.start : null),
+            if (i > 0) Divider(indent: listRowPadding.start),
             ListTile(
               contentPadding: listRowPadding,
               title: Text(
@@ -236,12 +239,7 @@ class _VaultPageState extends State<VaultPage> with LeaveWhenGone {
   @override
   bool get exists => c.vault.vaultName(widget.vaultId) != null;
 
-  void _edit([String? name]) => Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (_) => VariableEditPage(c: c, vaultId: widget.vaultId, name: name),
-    ),
-  );
+  void _edit([String? name]) => editVariable(context, c, widget.vaultId, name: name);
 
   Future<void> _menu(String action, String name, List<String> usedBy) async {
     if (action == 'rename') {
@@ -286,7 +284,7 @@ class _VaultPageState extends State<VaultPage> with LeaveWhenGone {
       appBar: AppBarSurface(
         title: Text(name),
         actions: [
-          if (usesGlass(context)) IconButton(tooltip: '添加变量', icon: const Icon(Icons.add), onPressed: _edit),
+          IconButton(tooltip: '添加变量', icon: const Icon(Icons.add), onPressed: _edit),
           AppMenuButton(
             semanticLabel: '变量库操作',
             onSelected: (a) => _menu(a, name, [for (final e in envs) e.name]),
@@ -297,9 +295,6 @@ class _VaultPageState extends State<VaultPage> with LeaveWhenGone {
           ),
         ],
       ),
-      floatingActionButton: usesGlass(context)
-          ? null
-          : FloatingActionButton.extended(onPressed: _edit, icon: const Icon(Icons.add), label: const Text('添加变量')),
       body: (context) => ListView(
         padding: pagePadding(context, const EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, 96)),
         children: [
@@ -326,10 +321,13 @@ class _VaultPageState extends State<VaultPage> with LeaveWhenGone {
                       title: Text(e.name),
                       subtitle: Text(refSummary(e.refs.firstWhere((r) => r.vaultId == widget.vaultId))),
                       trailing: const ListRowChevron(),
-                      onTap: () => Navigator.push(
+                      onTap: () => openWorkspaceEntry(
                         context,
-                        MaterialPageRoute(
-                          builder: (_) => EnvironmentPage(c: c, envId: e.id),
+                        WorkspaceEntry(
+                          tab: 1,
+                          id: 'env:${e.id}',
+
+                          page: (_) => EnvironmentPage(c: c, envId: e.id),
                         ),
                       ),
                     ),

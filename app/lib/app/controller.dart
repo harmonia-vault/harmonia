@@ -80,9 +80,8 @@ class AppController extends ChangeNotifier {
     required this.push,
     required Future<void> Function() prepareGlass,
     PushInstance? pushInstance,
-    bool defaultLiquidGlass = false,
   }) : _pushInstanceOverride = pushInstance,
-       appearance = AppearanceSettings(files, prepareGlass: prepareGlass, defaultLiquidGlass: defaultLiquidGlass);
+       appearance = AppearanceSettings(files, prepareGlass: prepareGlass);
 
   final HCrypto crypto;
   final LocalStore secure;
@@ -309,12 +308,6 @@ class AppController extends ChangeNotifier {
   }
 
   UpdateChannel get updateChannel => UpdateChannel.parse(prefs.updateChannel);
-
-  Future<void> setLiquidGlass(bool enabled) async {
-    await appearance.setLiquidGlass(enabled);
-    appearanceError = null;
-    notifyListeners();
-  }
 
   Future<void> setColorMode(AppColorMode mode) async {
     await appearance.setColorMode(mode);

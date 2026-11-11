@@ -1,11 +1,12 @@
-// 表单控件随液态玻璃开关切换：玻璃布局下选择菜单用组件库的玻璃菜单，分段用玻璃分段控件，
-// 开关和勾选框用 Cupertino 样式并统一填充色；普通布局沿用 Material 控件。
+// 表单控件统一使用玻璃菜单、玻璃分段控件与 Cupertino 开关、勾选框。
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
 import 'glass.dart';
+import 'glass_overlays.dart';
 import 'theme.dart';
+import 'window_layout.dart';
 
 typedef AppOption<T> = ({T value, String label});
 
@@ -26,18 +27,50 @@ class AppSelect<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!usesGlass(context)) {
-      return DropdownButton<T>(
-        value: value,
-        isDense: true,
-        underline: const SizedBox.shrink(),
-        style: TextStyle(color: context.palette.mute, fontSize: 14, fontWeight: FontWeight.w500),
-        items: [for (final o in options) DropdownMenuItem(value: o.value, child: Text(o.label))],
-        onChanged: (v) => onChanged(v as T),
-      );
-    }
     final p = context.palette;
     final current = options.firstWhere((o) => o.value == value, orElse: () => options.first).label;
+    Widget trigger(VoidCallback toggle) => TextButton(
+      onPressed: toggle,
+      style: TextButton.styleFrom(
+        foregroundColor: p.mute,
+        textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+        minimumSize: const Size(0, 32),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        shape: const StadiumBorder(),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(current),
+          const SizedBox(width: 4),
+          const Icon(CupertinoIcons.chevron_up_chevron_down, size: 13),
+        ],
+      ),
+    );
+    if (WindowLayoutScope.maybeOf(context)?.fold != null) {
+      return trigger(() async {
+        final selected = await showAppDialog<T>(
+          context: context,
+          builder: (context) => AppSimpleDialog(
+            title: Text(semanticLabel),
+            children: [
+              for (final option in options)
+                SimpleDialogOption(
+                  onPressed: () => Navigator.pop(context, option.value),
+                  child: Row(
+                    children: [
+                      Expanded(child: Text(option.label)),
+                      if (option.value == value) const Icon(CupertinoIcons.checkmark, size: 18),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        );
+        if (context.mounted && selected != null) onChanged(selected);
+      });
+    }
     return GlassMenu(
       autoAdjustToScreen: true,
       morphSpeed: MediaQuery.disableAnimationsOf(context) ? MorphSpeed.instant : MorphSpeed.fast,
@@ -59,26 +92,7 @@ class AppSelect<T> extends StatelessWidget {
             onTap: () => onChanged(o.value),
           ),
       ],
-      triggerBuilder: (context, toggle) => TextButton(
-        onPressed: toggle,
-        style: TextButton.styleFrom(
-          foregroundColor: p.mute,
-          textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-          minimumSize: const Size(0, 32),
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          // 左右各留 8 作按压反馈的余量。
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          shape: const StadiumBorder(),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(current),
-            const SizedBox(width: 4),
-            const Icon(CupertinoIcons.chevron_up_chevron_down, size: 13),
-          ],
-        ),
-      ),
+      triggerBuilder: (context, toggle) => trigger(toggle),
     );
   }
 }
@@ -92,14 +106,6 @@ class AppSegmented<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!usesGlass(context)) {
-      return SegmentedButton<T>(
-        showSelectedIcon: false,
-        segments: [for (final o in options) ButtonSegment(value: o.value, label: Text(o.label))],
-        selected: {value},
-        onSelectionChanged: (s) => onChanged(s.first),
-      );
-    }
     final p = context.palette;
     return GlassSegmentedControl(
       useOwnLayer: true,
@@ -123,9 +129,8 @@ class AppSwitch extends StatelessWidget {
   final ValueChanged<bool>? onChanged;
 
   @override
-  Widget build(BuildContext context) => usesGlass(context)
-      ? CupertinoSwitch(value: value, activeTrackColor: context.palette.accentFill, onChanged: onChanged)
-      : Switch(value: value, onChanged: onChanged);
+  Widget build(BuildContext context) =>
+      CupertinoSwitch(value: value, activeTrackColor: context.palette.accentFill, onChanged: onChanged);
 }
 
 /// 带勾选框的一行。玻璃布局下用 Cupertino 勾选框，填充色与开关相同；勾选框默认在行首。
@@ -149,17 +154,6 @@ class AppCheckboxTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!usesGlass(context)) {
-      return CheckboxListTile(
-        value: value,
-        onChanged: (v) => onChanged(v ?? false),
-        controlAffinity: leadingCheckbox ? ListTileControlAffinity.leading : ListTileControlAffinity.trailing,
-        contentPadding: contentPadding,
-        secondary: secondary,
-        title: title,
-        subtitle: subtitle,
-      );
-    }
     final box = CupertinoCheckbox(
       value: value,
       activeColor: context.palette.accentFill,

@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 
 import '../core/models.dart';
 import 'app_sheet.dart';
-import 'glass.dart';
 import 'glass_controls.dart';
 import 'list_row.dart';
 import 'theme.dart';
@@ -155,19 +154,19 @@ class _GrantSheetState extends State<_GrantSheet> {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
-    final glass = usesGlass(context);
+
     final expiryOptions = {..._expiryChoices.keys, _d.expiry, if (widget.initial.local) widget.initial.expiry};
     return SafeArea(
       top: false,
-      bottom: !glass,
+      bottom: false,
       child: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(24, glass ? 4 : 0, 24, glass ? 24 : Space.lg),
+        padding: EdgeInsets.fromLTRB(24, 4, 24, 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
               widget.envName,
-              style: TextStyle(color: p.ink, fontSize: glass ? 22 : 20, fontWeight: FontWeight.w700),
+              style: TextStyle(color: p.ink, fontSize: 22, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 4),
             Text('授权给“${widget.deviceName}”', style: TextStyle(color: p.mute, fontSize: 13)),
@@ -242,7 +241,7 @@ class _GrantSheetState extends State<_GrantSheet> {
                                 const Expanded(child: Text('期限')),
                                 // 玻璃菜单的触发处左右各有 8 的按压余量，向右挪回，让文字与开关的右边缘对齐。
                                 Transform.translate(
-                                  offset: Offset(glass ? 8 : 0, 0),
+                                  offset: Offset(8, 0),
                                   child: AppSelect<String>(
                                     semanticLabel: '“${widget.envName}”无人值守使用的期限',
                                     value: _d.expiry,
@@ -281,10 +280,10 @@ Future<Environment?> pickEnvironment(BuildContext context, List<Environment> env
   context,
   builder: (c) {
     final p = c.palette;
-    final glass = usesGlass(c);
+
     return SafeArea(
       top: false,
-      bottom: !glass,
+      bottom: false,
       child: ConstrainedBox(
         constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(c).height * 0.7),
         child: Column(
@@ -292,22 +291,22 @@ Future<Environment?> pickEnvironment(BuildContext context, List<Environment> env
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
-              padding: EdgeInsets.fromLTRB(24, glass ? 4 : 0, 24, Space.sm),
+              padding: EdgeInsets.fromLTRB(24, 4, 24, Space.sm),
               child: Text(
                 '添加环境',
-                style: TextStyle(color: p.ink, fontSize: glass ? 22 : 20, fontWeight: FontWeight.w700),
+                style: TextStyle(color: p.ink, fontSize: 22, fontWeight: FontWeight.w700),
               ),
             ),
             Flexible(
               child: ListView(
                 shrinkWrap: true,
-                padding: EdgeInsets.fromLTRB(Space.sm, 0, Space.sm, glass ? Space.lg : Space.sm),
+                padding: EdgeInsets.fromLTRB(Space.sm, 0, Space.sm, Space.lg),
                 children: [
                   for (final e in envs)
                     ListTile(
                       contentPadding: listRowPadding,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      leading: Icon(glass ? CupertinoIcons.square_stack_3d_up : Icons.layers_outlined),
+                      leading: Icon(CupertinoIcons.square_stack_3d_up),
                       title: Text(e.name),
                       subtitle: Text('${e.items.length} 个变量'),
                       trailing: const ListRowChevron(),
@@ -333,7 +332,7 @@ class AddEnvironmentRow extends StatelessWidget {
     final accent = context.palette.accent;
     return ListTile(
       contentPadding: listRowPadding,
-      leading: Icon(usesGlass(context) ? CupertinoIcons.add : Icons.add, color: accent),
+      leading: Icon(CupertinoIcons.add, color: accent),
       title: Text(
         '添加环境',
         style: TextStyle(color: accent, fontWeight: FontWeight.w600),

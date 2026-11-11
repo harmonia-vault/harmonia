@@ -6,6 +6,13 @@ import '../core/crypto.dart' show maxNoteLen;
 import 'glass.dart';
 import 'theme.dart';
 import 'widgets.dart';
+import 'adaptive_presentation.dart';
+import 'glass_overlays.dart';
+
+Future<void> editVariable(BuildContext context, AppController c, String vaultId, {String? name}) => showAppDialog<void>(
+  context: context,
+  builder: (context) => adaptiveEditor(context, (_) => VariableEditPage(c: c, vaultId: vaultId, name: name)),
+);
 
 final _varName = RegExp(r'^[A-Za-z_][A-Za-z0-9_]{0,127}$');
 

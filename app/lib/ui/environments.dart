@@ -9,6 +9,9 @@ import 'glass.dart';
 import 'list_row.dart';
 import 'theme.dart';
 import 'widgets.dart';
+import 'workspace_scope.dart';
+import 'adaptive_presentation.dart';
+import 'glass_overlays.dart';
 
 class EnvironmentsTab extends StatelessWidget {
   const EnvironmentsTab({super.key, required this.c});
@@ -18,7 +21,10 @@ class EnvironmentsTab extends StatelessWidget {
     if (c.vault.vaults.isEmpty) {
       toast(context, '先在“变量库”里新建一个变量库，环境里的变量来自变量库');
     } else {
-      Navigator.push(context, MaterialPageRoute(builder: (_) => EnvEditorPage(c: c)));
+      showAppDialog<void>(
+        context: context,
+        builder: (context) => adaptiveEditor(context, (_) => EnvEditorPage(c: c)),
+      );
     }
   }
 
@@ -38,13 +44,7 @@ class EnvironmentsTab extends StatelessWidget {
     return AppTabPage(
       title: '环境',
       actions: [IconButton(tooltip: '新建环境', onPressed: () => _create(context), icon: const Icon(Icons.add))],
-      floatingActionButton: envs.isEmpty
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: () => _create(context),
-              icon: const Icon(Icons.add),
-              label: const Text('新建环境'),
-            ),
+
       onRefresh: c.syncNow,
       padding: envs.isEmpty ? EdgeInsets.zero : const EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, 96),
       children: envs.isEmpty
@@ -73,10 +73,14 @@ class EnvironmentsTab extends StatelessWidget {
                         title: Text(e.name, style: const TextStyle(fontWeight: FontWeight.w600)),
                         subtitle: subtitle(e),
                         trailing: const ListRowChevron(),
-                        onTap: () => Navigator.push(
+                        selected: WorkspaceScope.maybeOf(context)?.selected[1]?.id == 'env:${e.id}',
+                        onTap: () => openWorkspaceEntry(
                           context,
-                          MaterialPageRoute(
-                            builder: (_) => EnvironmentPage(c: c, envId: e.id),
+                          WorkspaceEntry(
+                            tab: 1,
+                            id: 'env:${e.id}',
+
+                            page: (_) => EnvironmentPage(c: c, envId: e.id),
                           ),
                         ),
                       ),

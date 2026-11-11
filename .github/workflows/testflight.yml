@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   upload:
-    runs-on: macos-latest
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@v4
         with:

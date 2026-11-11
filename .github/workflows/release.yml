@@ -123,7 +123,7 @@ jobs:
 
   # 未签名的 IPA：由使用者用自己的证书或签名工具签名后安装。
   ipa:
-    runs-on: macos-latest
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@v4
       - uses: jdx/mise-action@v5

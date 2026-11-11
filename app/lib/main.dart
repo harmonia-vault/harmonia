@@ -28,6 +28,7 @@ import 'ui/stage_page.dart';
 import 'ui/pairing.dart';
 import 'ui/theme.dart';
 import 'ui/widgets.dart';
+import 'ui/window_layout.dart';
 
 /// 安全存储：Android 上由 Keystore 包装加密，iOS 上是仅限本机的钥匙串条目。
 /// 设备密钥另外用本机数据密钥加密（见 core/keyring.dart）。
@@ -65,7 +66,6 @@ Future<void> main() async {
     platform: hostPlatform,
     identity: identity,
     prepareGlass: GlassResources.prepare,
-    defaultLiquidGlass: await hostDefaultsToGlass(),
   );
   runApp(HarmoniaApp(c: controller));
   await controller.start();
@@ -175,21 +175,16 @@ class _HarmoniaAppState extends State<HarmoniaApp> with WidgetsBindingObserver {
     title: 'Harmonia',
     debugShowCheckedModeBanner: false,
     themeMode: colorThemeMode(widget.c.appearance.colorMode),
-    theme: buildTheme(
-      Brightness.light,
-      liquidGlass: widget.c.appearance.liquidGlass,
-      glassOpacity: widget.c.appearance.glassOpacity,
-    ),
-    darkTheme: buildTheme(
-      Brightness.dark,
-      liquidGlass: widget.c.appearance.liquidGlass,
-      glassOpacity: widget.c.appearance.glassOpacity,
-    ),
+    theme: buildTheme(Brightness.light, glassOpacity: widget.c.appearance.glassOpacity),
+    darkTheme: buildTheme(Brightness.dark, glassOpacity: widget.c.appearance.glassOpacity),
     builder: (context, child) => GlassOpacityPreview(
       preview: widget.c.glassOpacityPreview,
       child: AppScope(
         identity: widget.c.identity,
-        child: LiquidGlassWidgets.wrap(brightnessResolver: Theme.maybeBrightnessOf, child: child!),
+        child: AppWindowLayout(
+          navigator: _navigator,
+          child: LiquidGlassWidgets.wrap(brightnessResolver: Theme.maybeBrightnessOf, child: child!),
+        ),
       ),
     ),
     locale: const Locale('zh', 'CN'),

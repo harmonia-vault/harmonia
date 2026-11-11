@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 import 'package:liquid_glass_easy/liquid_glass_easy.dart';
 
 import '../core/appearance.dart';
-import 'glass.dart';
 import 'theme.dart';
 import 'widgets.dart';
 
@@ -97,7 +96,7 @@ class _GlassTransparencyControlState extends State<GlassTransparencyControl> {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
-    final glass = usesGlass(context) && !MediaQuery.disableAnimationsOf(context);
+    final glass = !MediaQuery.highContrastOf(context) && !MediaQuery.disableAnimationsOf(context);
     final percent = (_opacity * 100).round();
     final label = '遮盖 $percent%';
     const layout = LiquidGlassSliderLayout();
