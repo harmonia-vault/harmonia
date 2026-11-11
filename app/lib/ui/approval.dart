@@ -148,7 +148,7 @@ class _ApprovalPageState extends State<ApprovalPage> {
       const SizedBox(height: Space.lg),
       const Text('请求码'),
       const SizedBox(height: Space.sm),
-      CodeBox(a.code, copyable: false),
+      CodeBox(a.code, copyable: false, big: true, centered: true),
       const SizedBox(height: Space.sm),
       const Banner2('确认是你刚在电脑上发起的、请求码一致，再批准。', warn: true),
       const SectionTitle('请求'),

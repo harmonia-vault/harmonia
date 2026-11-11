@@ -92,6 +92,8 @@ class DebugVault extends Vault with DebugApprovals {
     cache.manager = {
       'devices': [
         _device('debug-phone', '示例 iPhone', 'ios', 'manager', [], version: '0.4.5'),
+        _device('debug-android', '示例 Android 手机', 'android', 'manager', []),
+        _device('debug-manager-mac', '备用管理电脑', 'darwin', 'manager', []),
         // 测试版渠道，有新版本可以更新。
         // 一个开启本机解密的环境，一个 30 天后到期、没有激活的环境。
         _device('debug-computer', '开发电脑', 'windows', 'client', [
