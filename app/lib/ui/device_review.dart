@@ -35,25 +35,31 @@ class _DeviceReviewViewState extends State<DeviceReviewView> {
 
   Future<void> _remove() async {
     final picked = otherDevices(c).where((d) => _selected.contains(d.id)).toList();
-    final ok = await confirmDialog(context,
-        title: '移除 ${picked.length} 台设备？',
-        body: '${picked.map((d) => '“${d.name}”').join('、')}将立即失去访问权限，联网后会自动清除本机保存的变量。\n'
-            '已经被复制或正在运行的程序中的变量无法收回，必要时请在服务商处更换相应的密钥。',
-        ok: '移除',
-        danger: true);
+    final ok = await confirmDialog(
+      context,
+      title: '移除 ${picked.length} 台设备？',
+      body:
+          '${picked.map((d) => '“${d.name}”').join('、')}将立即失去访问权限，联网后会自动清除本机保存的变量。\n'
+          '已经被复制或正在运行的程序中的变量无法收回，必要时请在服务商处更换相应的密钥。',
+      ok: '移除',
+      danger: true,
+    );
     if (!ok || !mounted) return;
     if (!await confirmIdentity(context, '验证身份以移除所选的 ${picked.length} 台设备')) return;
     if (!mounted) return;
     final failed = <String, String>{};
-    await runBusy(context, () => c.guard(() async {
-          for (final d in picked) {
-            try {
-              await c.vault.revokeDevice(d.id);
-            } on ApiException catch (e) {
-              failed[d.id] = e.message;
-            }
+    await runBusy(
+      context,
+      () => c.guard(() async {
+        for (final d in picked) {
+          try {
+            await c.vault.revokeDevice(d.id);
+          } on ApiException catch (e) {
+            failed[d.id] = e.message;
           }
-        }));
+        }
+      }),
+    );
     if (!mounted) return;
     final left = otherDevices(c).map((d) => d.id).toSet().intersection(_selected);
     if (left.isEmpty) return widget.onDone();
@@ -90,15 +96,21 @@ class _DeviceReviewViewState extends State<DeviceReviewView> {
   @override
   Widget build(BuildContext context) {
     final devices = otherDevices(c);
-    final managers = devices.where((d) => d.isManager);
-    final clients = devices.where((d) => !d.isManager);
+    final managers = devices.where((d) => d.isManager).toList();
+    final clients = devices.where((d) => !d.isManager).toList();
     return AuthScaffold(
       title: '检查其他设备',
       subtitle: '恢复不会让账号中的其他设备失效。\n其他管理设备仍然可以访问全部变量库和环境，也能批准和移除设备。',
       children: [
         const Banner2('已丢失或不再使用的设备，请勾选后移除；还在使用的设备不用勾选。', warn: true),
-        if (managers.isNotEmpty) ...[const SectionTitle('管理设备'), ...managers.map(_tile)],
-        if (clients.isNotEmpty) ...[const SectionTitle('电脑'), ...clients.map(_tile)],
+        if (managers.isNotEmpty) ...[
+          const SectionTitle('管理设备'),
+          for (final (i, d) in managers.indexed) ...[if (i > 0) const SizedBox(height: Space.sm), _tile(d)],
+        ],
+        if (clients.isNotEmpty) ...[
+          const SectionTitle('电脑'),
+          for (final (i, d) in clients.indexed) ...[if (i > 0) const SizedBox(height: Space.sm), _tile(d)],
+        ],
         const SizedBox(height: Space.xl),
         if (_selected.isEmpty)
           FilledButton(onPressed: widget.onDone, child: const Text('完成'))

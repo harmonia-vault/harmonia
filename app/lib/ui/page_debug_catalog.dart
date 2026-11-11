@@ -121,7 +121,7 @@ Map<String, List<DebugPageEntry>> debugPages() => {
         s.c.approvals = await s.vault.pendingApprovals();
       },
     ),
-    DebugPageEntry('批准使用变量：请求码、命令、按环境列出、多久内不再询问与范围', (s) => _approval(s, debugApproval())),
+    DebugPageEntry('批准使用变量：居中放大的请求码、命令、按环境列出、多久内不再询问与范围', (s) => _approval(s, debugApproval())),
     DebugPageEntry('批准使用变量：Windows 电脑只能授权给所有程序', (s) => _approval(s, debugApproval(deviceId: 'debug-computer'))),
     DebugPageEntry('批准写入变量：新增和删除、值默认遮住', (s) => _approval(s, debugApproval(write: true))),
     DebugPageEntry('批准请求已失效（电脑已取消或超时）', (s) => _approval(s, debugApproval(), expire: true)),
@@ -226,7 +226,7 @@ Map<String, List<DebugPageEntry>> debugPages() => {
       stage: Stage.rotation,
     ),
     DebugPageEntry(
-      '恢复后检查设备',
+      '恢复后检查设备：多台管理设备与电脑、卡片间距与勾选移除',
       (s) => s.vault.paired ? DeviceReviewView(c: s.c, onDone: s.c.finishRotation) : SignInPage(c: s.c),
       stage: Stage.rotation,
     ),

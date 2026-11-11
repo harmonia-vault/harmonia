@@ -284,10 +284,11 @@ class Banner2 extends StatelessWidget {
 
 /// 等宽显示的码（恢复码、核对码），可复制。
 class CodeBox extends StatelessWidget {
-  const CodeBox(this.code, {super.key, this.copyable = true, this.big = false});
+  const CodeBox(this.code, {super.key, this.copyable = true, this.big = false, this.centered = false});
   final String code;
   final bool copyable;
   final bool big;
+  final bool centered;
 
   @override
   Widget build(BuildContext context) {
@@ -304,6 +305,7 @@ class CodeBox extends StatelessWidget {
           Expanded(
             // 按组换行，不在一组中间断开。
             child: Wrap(
+              alignment: centered ? WrapAlignment.center : WrapAlignment.start,
               spacing: 10,
               runSpacing: 4,
               children: [
