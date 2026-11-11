@@ -7,6 +7,7 @@ java = "temurin-17.0.16+8"
 android-sdk = "19.0"
 cmake = "3.31.8"
 bun = "1.3.14"
+python = "3.13.14"
 
 [env]
 # 已经设置了 ANDROID_HOME 时沿用（CI 的 runner 自带完整 SDK），否则用 mise 安装的 SDK。
@@ -124,7 +125,7 @@ description = "构建未签名的 iOS IPA（自行签名后安装）"
 dir = "app"
 run = '''
 set -eu
-flutter build ios --release --no-codesign
+flutter build ios --release --no-codesign --dart-define=APPLE_DISTRIBUTION=false
 rm -rf build/ios/ipa
 mkdir -p build/ios/ipa/Payload
 cp -R build/ios/iphoneos/Runner.app build/ios/ipa/Payload/
@@ -183,3 +184,25 @@ run = [
   "git push https://github.com/harmonia-vault/harmonia-worker.git server-release:main",
   "git branch -D server-release",
 ]
+
+[tasks.prepare-ios-signing]
+description = "为 TestFlight 构建准备临时签名配置（仅 GitHub Actions）"
+run = "python app/tool/ios_signing.py prepare"
+
+[tasks.clean-ios-signing]
+description = "清理 TestFlight 临时签名配置"
+run = "python app/tool/ios_signing.py clean"
+
+[tasks.test-ios-signing]
+description = "验证 TestFlight 描述文件与导出配置"
+run = "python -m unittest discover -s app/tool -p 'test_ios_signing.py'"
+
+[tasks.build-testflight]
+description = "构建 TestFlight 内部测试包（需先准备签名配置）"
+dir = "app"
+run = "flutter build ipa --release --dart-define=APPLE_DISTRIBUTION=true"
+
+[tasks.build-ios]
+description = "构建无签名 iOS App，用于验证分发配置"
+dir = "app"
+run = "flutter build ios --release --no-codesign"

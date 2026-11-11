@@ -1,5 +1,5 @@
 // 应用内更新：读取更新源（GitHub Releases 的 update-feed）中对应渠道、带 minisign 签名的清单。
-// 安装包下载后先按清单校验。Android 上交给系统安装器；iOS 上交给用户选择的签名工具，由它签名安装。
+// Apple 分发包只提示版本号；其余包下载后校验，再交给系统安装器或签名工具。
 import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
@@ -13,7 +13,7 @@ import 'package:path_provider/path_provider.dart';
 import '../core/api.dart' show appVersion;
 import '../core/crypto.dart';
 import '../core/update_download.dart';
-import '../core/update_asset.dart';
+import '../core/update_info.dart';
 import 'debug_update.dart';
 import 'platform.dart';
 import '../ui/download_progress.dart';
@@ -41,40 +41,6 @@ enum UpdateChannel {
 }
 
 const _channel = MethodChannel('harmonia/platform');
-
-class UpdateInfo {
-  UpdateInfo(this.version, this.notes, this.url, this.sha256, this.size);
-  final String version, notes, url, sha256;
-  final int size;
-}
-
-// 预发布标识的先后：rc 晚于 beta，beta 晚于 alpha；正式版晚于同一基础版本的全部预发布版本。
-const _preRank = {'alpha': 1, 'beta': 2, 'rc': 3};
-
-List<int> _versionKey(String v) {
-  final s = v.trim().replaceFirst(RegExp('^v'), '');
-  final dash = s.indexOf('-');
-  final main = dash < 0 ? s : s.substring(0, dash);
-  final base = (main.split('.') + ['0', '0', '0']).take(3).map((x) => int.tryParse(x) ?? 0).toList();
-  if (dash < 0) return [...base, 4, 0];
-  final pre = s.substring(dash + 1).toLowerCase();
-  final kind = pre.replaceFirst(RegExp(r'[0-9.]*$'), '');
-  final num = int.tryParse(pre.substring(kind.length).replaceFirst(RegExp(r'^\.'), '')) ?? 0;
-  return [...base, _preRank[kind] ?? 0, num];
-}
-
-/// 比较版本：a 较新返回正数。顺序示例：0.1.2 > 0.1.2-rc.1 > 0.1.2-beta.1 > 0.1.1。
-int compareVersions(String a, String b) {
-  final ka = _versionKey(a), kb = _versionKey(b);
-  for (var i = 0; i < ka.length; i++) {
-    if (ka[i] != kb[i]) return ka[i].compareTo(kb[i]);
-  }
-  return 0;
-}
-
-bool isNewer(String a, String b) => compareVersions(a, b) > 0;
-
-bool isPrerelease(String v) => v.contains('-');
 
 /// 校验 minisign 签名（预哈希 ED 算法 + 可信注释签名）。
 bool verifyMinisign(HCrypto c, String publicKey, Uint8List data, String signature) {
@@ -126,23 +92,13 @@ Future<Map<String, dynamic>> _fetchManifest(HCrypto c, UpdateChannel channel) as
   return m;
 }
 
-Future<UpdateInfo?> fetchUpdate(HCrypto c, UpdateChannel channel) async {
-  final m = await _fetchManifest(c, channel);
-  final version = m['version'] as String;
-  if (!isNewer(version, appVersion)) return null;
-  final asset = selectAppUpdateAsset(
-    (m['assets'] as Map).cast<String, dynamic>(),
-    platform: hostPlatform,
-    abi: Abi.current(),
-  );
-  return UpdateInfo(
-    version,
-    m['notes'] as String? ?? '',
-    asset['url'] as String,
-    asset['sha256'] as String,
-    asset['size'] as int,
-  );
-}
+Future<UpdateNotice?> fetchUpdate(HCrypto c, UpdateChannel channel) async => parseAppUpdate(
+  await _fetchManifest(c, channel),
+  currentVersion: appVersion,
+  apple: appleDistribution,
+  platform: hostPlatform,
+  abi: Abi.current(),
+);
 
 /// 电脑上的命令行按版本推断的更新渠道：带后缀的版本在测试版渠道，与命令行的默认规则相同。
 /// 命令行用 update channel 改过渠道时可能不准，只影响显示，实际升级以命令行自己的渠道为准。
@@ -168,6 +124,10 @@ Future<void> checkForUpdate(BuildContext context, {required bool manual, require
     if (!manual) return;
     if (!await runBusy(context, () => Future<void>.delayed(const Duration(milliseconds: 600)))) return;
     if (!context.mounted) return;
+    if (appleDistribution) {
+      toast(context, '发现新版本 0.0.1');
+      return;
+    }
     final choice = await showUpdateSheet(
       context,
       version: '0.0.1',
@@ -190,7 +150,7 @@ Future<void> checkForUpdate(BuildContext context, {required bool manual, require
     if (_lastAutoCheck != null && DateTime.now().difference(_lastAutoCheck!) < const Duration(hours: 24)) return;
     _lastAutoCheck = DateTime.now();
   }
-  UpdateInfo? fetched;
+  UpdateNotice? fetched;
   if (manual) {
     // 手动检查时显示进度，失败时提示原因。
     if (!await runBusy(context, () async => fetched = await fetchUpdate(updaterCrypto, channel))) return;
@@ -201,9 +161,8 @@ Future<void> checkForUpdate(BuildContext context, {required bool manual, require
       return;
     }
   }
-  final info = fetched;
   if (!context.mounted) return;
-  if (info == null) {
+  if (fetched == null) {
     if (manual) {
       toast(
         context,
@@ -214,6 +173,11 @@ Future<void> checkForUpdate(BuildContext context, {required bool manual, require
     }
     return;
   }
+  if (appleDistribution) {
+    toast(context, '发现新版本 ${fetched!.version}');
+    return;
+  }
+  final info = fetched as UpdateInfo;
   if (Platform.isIOS) return _offerIpa(context, info);
   final choice = await showUpdateSheet(
     context,

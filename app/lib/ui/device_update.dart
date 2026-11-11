@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../app/controller.dart';
 import '../app/updater.dart';
+import '../core/update_info.dart';
 import '../core/debug_vault.dart' show debugCliLatest;
 import '../core/models.dart';
 import 'app_scope.dart';

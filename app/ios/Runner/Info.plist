@@ -24,6 +24,10 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<!-- libsodium：XChaCha20-Poly1305、X25519/XSalsa20-Poly1305、Ed25519、Argon2id；另用系统 Secure Enclave P-256 ECDH。 -->
+	<!-- 当前不在法国分发，App Store Connect 问卷判定无需文稿；false 表示豁免提交材料。分发范围或算法变更时重新评估。 -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>

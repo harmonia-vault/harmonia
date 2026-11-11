@@ -1,1 +1,2 @@
+HARMONIA_ENTITLEMENTS = Runner/Runner.entitlements
 #include "Generated.xcconfig"

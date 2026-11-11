@@ -26,7 +26,7 @@ jobs:
         id: filter
         with:
           filters: |
-            ci: ['.github/workflows/ci.yml', 'mise.toml']
+            ci: ['.github/workflows/ci.yml', '.github/workflows/release.yml', '.github/workflows/testflight.yml', 'mise.toml']
             cli: ['cli/**']
             server: ['server/**']
             relay: ['relay/**']
@@ -151,17 +151,20 @@ jobs:
       - uses: actions/checkout@v4
       - uses: jdx/mise-action@v5
         with:
-          install_args: flutter
+          install_args: flutter python
           cache_key_prefix: mise-ios
       - uses: actions/cache@v4
         with:
           path: ~/.pub-cache
           key: pub-${{ runner.os }}-${{ hashFiles('app/pubspec.lock') }}
+      - name: 验证签名配置
+        run: mise run test-ios-signing
       - name: 无签名构建
         working-directory: app
         run: |
           flutter pub get
-          flutter build ios --release --no-codesign
+          mise run build-ios --dart-define=APPLE_DISTRIBUTION=false
+          mise run build-ios --dart-define=APPLE_DISTRIBUTION=true
 
   # 与各单元测试并行，不等它们结束。
   e2e:
