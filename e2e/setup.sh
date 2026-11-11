@@ -14,7 +14,7 @@ step() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 fail() { printf '\033[31m失败：%s\033[0m\n' "$*"; exit 1; }
 expect_eq() { [ "$1" == "$2" ] || fail "$3：期望 [$2]，实际 [$1]"; }
 # expect_has 输出 模式 说明：先拿到完整输出再匹配，避免 grep -q 提前退出让管道失败。
-expect_has() { grep -qE "$2" <<<"$1" || fail "$3：$1"; }
+expect_has() { grep -qE -- "$2" <<<"$1" || fail "$3：$1"; }
 
 cleanup() {
   [ -n "${DAEMON_PID:-}" ] && kill "$DAEMON_PID" 2>/dev/null || true

@@ -33,6 +33,6 @@ func TestPruneOverridesOfInaccessibleEnvironments(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := a.SetOverride("env-gone", "A", nil); err == nil {
-		t.Fatal("不应该再能按环境 ID 指定环境")
+		t.Fatal("已撤销授权的环境不应再能设置本机覆盖")
 	}
 }

@@ -107,6 +107,11 @@ export function envView(ctx, envId) {
   function render() {
     if (!env) return;
     const issues = problems();
+    const copyId = labeled('copy', '复制环境 ID', { class: 'small' });
+    copyId.onclick = () => run(copyId, '', null, async () => {
+      await navigator.clipboard.writeText(env.id);
+      toast('已复制环境 ID');
+    });
     mount(main,
       h('header', { class: 'env-head' },
         h('div', { class: 'env-title' }, h('span', { class: 'kind' }, icon('layers', 16), '环境'), h('h1', { text: env.name }),
@@ -115,6 +120,9 @@ export function envView(ctx, envId) {
         h('ul', { class: 'facts' },
           h('li', {}, icon('key', 16), h('b', { text: String(env.items.length) }), ' 个变量'),
           h('li', { title: '全部管理设备，加上在手机上授权了这个环境的电脑' }, icon('devices', 16), h('b', { text: String(env.devices) }), ' 台设备可以读取'))),
+      h('section', { class: 'refs' },
+        h('div', { class: 'refs-head' }, h('h2', { text: '环境 ID' }), copyId),
+        h('code', { text: env.id, style: 'overflow-wrap: anywhere' })),
       issues.length > 0 && h('div', { class: 'warn' }, h('b', { text: '需要处理' }), h('ul', { class: 'names' }, issues.map((t) => h('li', { text: t })))),
       h('section', { class: 'refs' },
         h('div', { class: 'refs-head' }, h('h2', { text: '引用的变量库' }), labeled('edit', '编辑引用', { class: 'small', onclick: edit })),

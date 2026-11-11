@@ -11,6 +11,7 @@ import '../core/crypto.dart';
 import '../core/debug_account.dart';
 import '../core/debug_approvals.dart';
 import '../core/debug_push.dart';
+import '../core/debug_vault.dart' show debugEnvironmentId;
 import '../core/vault.dart' show ApprovalRequest;
 import 'about.dart';
 import 'ai_prompt.dart';
@@ -61,7 +62,8 @@ Map<String, List<DebugPageEntry>> debugPages() => {
     DebugPageEntry('设备列表、添加设备菜单与行尾间距', (s) => s.vault.paired ? DevicesTab(c: s.c) : SignInPage(c: s.c)),
     DebugPageEntry('设置、白色滑块与输入弹窗', (s) => s.vault.paired ? SettingsTab(c: s.c) : SignInPage(c: s.c)),
     DebugPageEntry('关于、连点版本号与开源许可', (s) => AboutPage(c: s.c)),
-    DebugPageEntry('环境详情：来自哪个变量库、可访问的电脑与菜单', (s) => _environment(s)),
+    DebugPageEntry('环境详情：来自哪个变量库、可访问的电脑、复制环境 ID 与菜单', (s) => _environment(s)),
+    DebugPageEntry('环境详情：完整环境 ID、模拟复制与空变量', (s) => _environment(s, envId: debugEnvironmentId)),
     DebugPageEntry('环境详情：同名变量被遮住、引用的变量库已删除', (s) => _environment(s, problems: true)),
     DebugPageEntry('环境变量面板：选中的变量（已改名），可以改名、移除、编辑值和备注', (s) => _envVariable(s, 'debug-env-2', 'LLM_KEY')),
     DebugPageEntry('环境变量面板：来自“全部变量”，不能单独移除的提示', (s) => _envVariable(s, 'debug-env-1', null)),
@@ -327,8 +329,10 @@ Widget _none(String what) => Center(child: Text('当前没有示例$what，请�
 String? _problemEnv(DebugSession s) =>
     s.vault.environments.where((e) => envProblems(s.c, e.id).isNotEmpty).firstOrNull?.id;
 
-Widget _environment(DebugSession s, {bool problems = false}) {
-  final id = problems ? _problemEnv(s) : s.vault.environments.firstOrNull?.id;
+Widget _environment(DebugSession s, {bool problems = false, String? envId}) {
+  final id = problems
+      ? _problemEnv(s)
+      : s.vault.environments.where((e) => envId == null || e.id == envId).firstOrNull?.id;
   return id == null ? _none('环境') : EnvironmentPage(c: s.c, envId: id);
 }
 

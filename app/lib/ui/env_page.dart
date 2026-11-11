@@ -207,6 +207,12 @@ class _EnvironmentPageState extends State<EnvironmentPage> with LeaveWhenGone {
                 ],
               ),
             ),
+          ...idSection(
+            context,
+            label: '环境 ID',
+            id: env.id,
+            usage: '电脑上使用这个环境时可以指定 ID，例如 harmonia exec --env ${env.id} -- <命令>。',
+          ),
         ],
       ),
     );

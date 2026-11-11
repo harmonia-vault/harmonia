@@ -79,7 +79,7 @@ func TestRemoteWriteDest(t *testing.T) {
 	if _, err := WriteDest(f.cache, env, "MISSING", 0); err == nil {
 		t.Fatal("环境里没有的变量不能通过环境写")
 	}
-	vault, _ := ResolveTarget(f.cache, "共享", false)
+	vault, _ := ResolveTarget(f.cache, "共享", true)
 	d, err = WriteDest(f.cache, vault, "TOKEN", 0)
 	if err != nil || d.Name != "LLM_TOKEN" {
 		t.Fatalf("写变量库时用原名，批准请求里用环境里的名字：%+v %v", d, err)

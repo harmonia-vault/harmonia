@@ -207,7 +207,7 @@ func TestSelectPicks(t *testing.T) {
 	if p := parse("测试:旧")[0]; p.EnvID != "env-b" || p.Var != "" {
 		t.Fatalf("名称带冒号的环境应整个选中：%+v", p)
 	}
-	got, _, err := Select(f.cache, f.dev, parse("开发", "测试:旧", "生产:API_KEY", "生产:DB_URL", "生产:SHARED"), state.Overrides{"env-c": {"API_KEY": "local"}}, nil, 0)
+	got, _, err := Select(f.cache, f.dev, parse("env-a", "测试:旧", "env-c:API_KEY", "生产:DB_URL", "env-c:SHARED"), state.Overrides{"env-c": {"API_KEY": "local"}}, nil, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -273,24 +273,52 @@ func TestBrokenVariableOnlyAffectsItself(t *testing.T) {
 	}
 }
 
-// 名字同时是环境和变量库时（新建变量库时一起创建的同名环境），环境里没有的变量按变量库新增；
-// 只是环境的名字时仍然报错并列出可以新增变量的变量库。
-func TestNewVariableThroughSameNameEnvironment(t *testing.T) {
+// 环境与变量库同名、同 ID 时，目标类型只能由调用方显式指定，不能按变量是否存在切换。
+func TestExplicitWriteTarget(t *testing.T) {
 	f := newFixture(t)
-	s := f.sync(t, 0, map[string]map[string]string{"proj": {"A": "1"}})
-	s.Environments = append(s.Environments, api.Environment{ID: "env2", Name: "only-env", Role: "rw", LocalDecrypt: true})
+	s := f.sync(t, 0, map[string]map[string]string{"proj": {"A": "1"}, "other": {"A": "2"}})
 	if err := Apply(f.cache, s, 0, hc.B64(f.root.Pub), f.dev.ID); err != nil {
 		t.Fatal(err)
 	}
-	tg, err := ResolveTarget(f.cache, "proj", false)
-	if err != nil || tg.Env == nil {
-		t.Fatalf("应先匹配到环境：%+v %v", tg, err)
+	// proj 环境里的 A 来自另一个变量库；同 ID 的 proj 变量库仍有自己的 A。
+	env := ByID(f.cache, "proj")
+	env.Items = []api.EnvItem{{Name: "ALIAS", VaultID: "other", Source: "A"}}
+	env.CreateVaults = []string{"other"}
+	f.cache.Environments = append(f.cache.Environments, api.Environment{
+		ID: "writer", Name: "写入授权", Role: "rw", LocalDecrypt: true,
+		Items: []api.EnvItem{{Name: "A", VaultID: "proj", Source: "A"}},
+	})
+	for _, target := range []string{"proj", "PROJ"} {
+		tg, err := ResolveTarget(f.cache, target, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		d, err := WriteDest(f.cache, tg, "ALIAS", 0)
+		if err != nil || d.VaultID != "other" || d.Source != "A" {
+			t.Fatalf("默认按环境里的名字修改：%+v %v", d, err)
+		}
+		for _, missing := range []string{"A", "NEW"} {
+			if _, err := WriteDest(f.cache, tg, missing, 0); err == nil {
+				t.Fatalf("环境里没有 %s 时不应转到同名变量库", missing)
+			}
+		}
+		tg, err = ResolveTarget(f.cache, target, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		d, err = WriteDest(f.cache, tg, "A", 0)
+		if err != nil || d.VaultID != "proj" || d.Source != "A" {
+			t.Fatalf("显式变量库必须按原名修改：%+v %v", d, err)
+		}
 	}
-	if d, err := WriteDest(f.cache, tg, "NEW", 0); err != nil || d.VaultID != "proj" || d.Source != "NEW" {
-		t.Fatalf("应改写到同名变量库：%+v %v", d, err)
+	f.cache.VaultNames = append(f.cache.VaultNames, api.VaultName{ID: "vault-only", Name: "只有变量库"})
+	if _, err := ResolveTarget(f.cache, "vault-only", false); err == nil {
+		t.Fatal("默认目标不应把变量库 ID 当作环境")
 	}
-	tg, _ = ResolveTarget(f.cache, "only-env", false)
-	if _, err := WriteDest(f.cache, tg, "NEW", 0); err == nil || !strings.Contains(err.Error(), "“proj”") {
-		t.Fatalf("没有同名变量库时应报错并列出变量库：%v", err)
+	if _, err := ResolveTarget(f.cache, "只有变量库", false); err == nil {
+		t.Fatal("默认目标不应把变量库名称当作环境")
+	}
+	if _, err := ResolveTarget(f.cache, "missing", true); err == nil {
+		t.Fatal("显式变量库不存在时应报错")
 	}
 }

@@ -19,6 +19,8 @@ class DebugNetworkClient extends http.BaseClient {
 
 enum DebugScenario { normal, empty, offline, failure }
 
+const debugEnvironmentId = 'ZGVtby1lbnYtaWQtc2FtcA';
+
 /// 页面调试里更新源的最新版本：带后缀的版本走测试版渠道。
 String debugCliLatest(String version) => version.contains('-') ? '0.10.1-rc.1' : '0.10.0';
 
@@ -150,6 +152,7 @@ class DebugVault extends Vault with DebugApprovals {
         const EnvRef('debug-vault-2', 'pick', items: [RefItem('OPENAI_API_KEY', 'LLM_KEY'), RefItem('MODEL')]),
       ]),
       EnvDef('debug-env-3', '个人服务', [const EnvRef('debug-vault-3', 'all')]),
+      EnvDef(debugEnvironmentId, '环境 ID 示例', []),
       // 名字冲突（被遮住的 MODEL）和已失效的引用。
       EnvDef('debug-env-4', '合并示例', [
         const EnvRef('debug-vault-2', 'all'),

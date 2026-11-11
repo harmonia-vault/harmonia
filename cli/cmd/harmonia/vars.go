@@ -17,9 +17,12 @@ import (
 )
 
 func cmdVar(ctx context.Context, args []string) error {
-	f, err := parseFlags(args, "env=", "note=", "show", "yes")
+	f, err := parseFlags(args, "env=", "vault=", "note=", "show", "yes")
 	if err != nil {
 		return err
+	}
+	if _, ok := f.values["vault"]; ok && (len(f.args) == 0 || f.args[0] == "list") {
+		return usageError("var list 只接受 --env；用 harmonia var list --env <环境名称或ID> 查看变量")
 	}
 	a, err := app.Load(true)
 	if err != nil {
@@ -33,11 +36,12 @@ func cmdVar(ctx context.Context, args []string) error {
 	}
 	switch f.args[0] {
 	case "set":
-		if len(f.args) < 3 || len(f.args) > 4 {
-			return errors.New("用法：harmonia var set <变量库|环境> <变量名> [值] [--note 备注] [--yes]。新增变量要指定变量库")
+		w, err := parseVarWrite(f)
+		if err != nil {
+			return err
 		}
-		target, name := f.args[1], f.args[2]
-		if !confirmWrite(a, target, name, false, f.bools["yes"]) {
+		target, name := w.target, w.name
+		if !confirmWrite(a, target, name, w.vaultOnly, false, f.bools["yes"]) {
 			fmt.Println("已取消。")
 			return nil
 		}
@@ -45,8 +49,8 @@ func cmdVar(ctx context.Context, args []string) error {
 		if note, ok := f.values["note"]; ok {
 			ch.Note = &note
 		}
-		if len(f.args) == 4 {
-			ch.Value = &f.args[3]
+		if w.value != nil {
+			ch.Value = w.value
 		} else if ch.Note == nil {
 			value, err := promptSecret(fmt.Sprintf("%s 的值：", name))
 			if err != nil {
@@ -54,7 +58,7 @@ func cmdVar(ctx context.Context, args []string) error {
 			}
 			ch.Value = &value
 		}
-		res, err := a.SetVariables(ctx, target, false, map[string]app.VarChange{name: ch}, false)
+		res, err := a.SetVariables(ctx, target, w.vaultOnly, map[string]app.VarChange{name: ch}, false)
 		if err != nil && res == nil {
 			return err
 		}
@@ -69,7 +73,7 @@ func cmdVar(ctx context.Context, args []string) error {
 		} else {
 			fmt.Printf("已写入 %s，回读校验一致。\n", name)
 		}
-		notes, err := a.Shadowing(target, name)
+		notes, err := a.Shadowing(target, name, w.vaultOnly)
 		if err != nil {
 			return err
 		}
@@ -77,27 +81,66 @@ func cmdVar(ctx context.Context, args []string) error {
 			fmt.Println("注意：" + sentence(n))
 		}
 	case "rm":
-		if len(f.args) != 3 {
-			return errors.New("用法：harmonia var rm <变量库|环境> <变量名> [--yes]")
+		w, err := parseVarWrite(f)
+		if err != nil {
+			return err
 		}
-		if !confirmWrite(a, f.args[1], f.args[2], true, f.bools["yes"]) {
+		if !confirmWrite(a, w.target, w.name, w.vaultOnly, true, f.bools["yes"]) {
 			fmt.Println("已取消。")
 			return nil
 		}
-		if err := a.DeleteVariable(ctx, f.args[1], f.args[2]); err != nil {
+		if err := a.DeleteVariable(ctx, w.target, w.name, w.vaultOnly); err != nil {
 			return err
 		}
-		fmt.Printf("已删除 %s。\n", f.args[2])
+		fmt.Printf("已删除 %s。\n", w.name)
 	default:
 		return fmt.Errorf("未知操作：%s", f.args[0])
 	}
 	return nil
 }
 
+// varWrite 是命令行明确指定的写入目标；不根据目标名称推断类型。
+type varWrite struct {
+	target    string
+	name      string
+	value     *string
+	vaultOnly bool
+}
+
+func parseVarWrite(f *flags) (varWrite, error) {
+	op := f.args[0]
+	usage := "用法：harmonia var " + op + " <环境> <变量名> | harmonia var " + op + " --vault <变量库> <变量名>"
+	if op == "set" {
+		usage += " [值] [--note 备注] [--yes]"
+	} else {
+		usage += " [--yes]"
+	}
+	if _, ok := f.values["env"]; ok {
+		return varWrite{}, usageError("修改和删除变量时直接填写环境名称或 ID，不使用 --env。" + usage)
+	}
+	_, hasNote := f.values["note"]
+	if f.bools["show"] || (op == "rm" && hasNote) {
+		return varWrite{}, usageError(usage)
+	}
+	pos := f.args[1:]
+	target, vaultOnly := f.values["vault"]
+	if !vaultOnly && len(pos) > 0 {
+		target, pos = pos[0], pos[1:]
+	}
+	if strings.TrimSpace(target) == "" || len(pos) < 1 || len(pos) > 2 || (op == "rm" && len(pos) != 1) {
+		return varWrite{}, usageError(usage)
+	}
+	w := varWrite{target: target, name: pos[0], vaultOnly: vaultOnly}
+	if len(pos) == 2 {
+		w.value = &pos[1]
+	}
+	return w, nil
+}
+
 // confirmWrite 在终端里修改或删除已有变量前确认：写的是变量库里的原变量，会影响所有引用它的环境。
 // 给了 --yes 或不在终端里运行时不询问，只提示。
-func confirmWrite(a *app.App, target, name string, del, yes bool) bool {
-	notice := a.WriteNotice(target, name, del)
+func confirmWrite(a *app.App, target, name string, vaultOnly, del, yes bool) bool {
+	notice := a.WriteNotice(target, name, vaultOnly, del)
 	if notice == "" {
 		return true
 	}
