@@ -10,12 +10,12 @@ import (
 
 // WriteNotice 是写入前要让用户确认的提示：修改或删除已有变量时，写的是变量库里的原变量，
 // 引用它的所有环境都会看到变化（设计文档 17.2）。新增变量、或无法确定位置时返回空，由写入时报错。
-func (a *App) WriteNotice(target, name string, del bool) string {
+func (a *App) WriteNotice(target, name string, vaultOnly, del bool) string {
 	cache, err := a.Dir.Cache()
 	if err != nil {
 		return ""
 	}
-	t, err := vault.ResolveTarget(cache, target, false)
+	t, err := vault.ResolveTarget(cache, target, vaultOnly)
 	if err != nil {
 		return ""
 	}
@@ -46,12 +46,12 @@ func vaultName(c *state.Cache, id string) string {
 // Shadowing 检查不带 --env 的 harmonia exec 能不能拿到刚写入的变量：环境没有启用、有本机覆盖值、
 // 被排在前面的环境的同名变量遮住时，各返回一句提示和处理办法。target 是写入时指定的环境或变量库；
 // 写的是变量库时，检查这台设备上包含这个变量的每个环境。
-func (a *App) Shadowing(target, name string) ([]string, error) {
+func (a *App) Shadowing(target, name string, vaultOnly bool) ([]string, error) {
 	cache, err := a.Dir.Cache()
 	if err != nil {
 		return nil, err
 	}
-	t, err := vault.ResolveTarget(cache, target, false)
+	t, err := vault.ResolveTarget(cache, target, vaultOnly)
 	if err != nil {
 		return nil, err
 	}

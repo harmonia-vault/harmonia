@@ -27,8 +27,9 @@ DUP=$(manager other register --server "$SERVER" --email "$EMAIL" 2>&1 || true)
 [[ "$DUP" == *"这个邮箱已经注册并完成了设置"* ]] || fail "已初始化的邮箱重新注册应当被拒绝，实际：$DUP"
 expect_eq "$(manager phone push-register --relay "$RELAY" --token e2e-push-token)" "ok" "手机登记后台通知"
 
-manager phone env-create OpenAI >/dev/null
-manager phone env-create Other >/dev/null
+OPENAI_ENV_ID=$(manager phone env-create OpenAI)
+OTHER_ENV_ID=$(manager phone env-create Other)
+[ -n "$OPENAI_ENV_ID" ] && [ -n "$OTHER_ENV_ID" ] || fail "新建环境没有返回 ID"
 manager phone var-set OpenAI OPENAI_API_KEY "sk-first 'quoted' \$(no)" >/dev/null
 
 step "J3 终端取消等待后，请求立即作废"
@@ -96,6 +97,10 @@ grep -q "可以访问 1 个环境" "$TMP/login.out" || fail "配对后环境数�
 
 step "J4 授权的环境默认启用，通过 exec 使用"
 expect_eq "$(cli exec -- printenv OPENAI_API_KEY 2>/dev/null)" "sk-first 'quoted' \$(no)" "exec 注入"
+ENV_LIST=$(cli env list)
+expect_has "$ENV_LIST" "环境 ID" "env list 没有显示环境 ID 列"
+expect_has "$ENV_LIST" "OpenAI[[:space:]]+$OPENAI_ENV_ID[[:space:]]" "env list 没有显示完整环境 ID"
+expect_eq "$(cli exec --env "$OPENAI_ENV_ID" -- printenv OPENAI_API_KEY 2>/dev/null)" "sk-first 'quoted' \$(no)" "--env 使用完整环境 ID"
 [ -e "$TMP/cli/env.sh" ] && fail "没有开启 Shell 集成时不应生成 env.sh"
 if cli export >/dev/null 2>&1; then fail "export 不指明范围时不应输出"; fi
 expect_eq "$(cli export --all --format json 2>/dev/null | grep -c OPENAI_API_KEY)" "1" "export --all 输出全部启用的变量"
@@ -122,16 +127,21 @@ done
 echo "推送生效用时 $(( $(date +%s) - START )) 秒"
 
 step "J5 电脑写入，手机可读"
-cli var set OpenAI FROM_CLI "written-by-cli" >/dev/null
+cli var set --vault OpenAI FROM_CLI "first-write" >/dev/null
+expect_eq "$(manager phone var-get OpenAI FROM_CLI)" "first-write" "显式指定变量库新增变量"
+cli var set --vault openai FROM_CLI "written-by-cli" >/dev/null
 expect_eq "$(manager phone var-get OpenAI FROM_CLI)" "written-by-cli" "手机读取电脑写入的值"
 
 step "J5 变量备注：手机写入多行备注，电脑可见；电脑只改备注不动值"
 manager phone var-set OpenAI NOTED "v1" $'第一行备注\n第二行' >/dev/null
-cli var list --env OpenAI | grep -q "NOTED .*第一行备注 …" || fail "电脑的变量列表没有显示备注"
-cli var set OpenAI NOTED --note "电脑改的备注" >/dev/null
-expect_eq "$(manager phone var-get OpenAI NOTED)" "v1" "只改备注时值不变"
+expect_has "$(cli var list --env "$OPENAI_ENV_ID")" "NOTED .*第一行备注 …" "按环境 ID 列出变量时没有显示备注"
+cli var set "$OPENAI_ENV_ID" NOTED "v2" >/dev/null
+expect_eq "$(manager phone var-get OpenAI NOTED)" "v2" "通过环境 ID 修改已有变量的值"
+cli var set "$OPENAI_ENV_ID" NOTED --note "电脑改的备注" >/dev/null
+expect_eq "$(manager phone var-get OpenAI NOTED)" "v2" "只改备注时值不变"
 expect_eq "$(manager phone var-note OpenAI NOTED)" "电脑改的备注" "手机读取电脑改的备注"
-cli var rm OpenAI NOTED >/dev/null
+cli var rm "$OPENAI_ENV_ID" NOTED >/dev/null
+expect_eq "$(manager phone var-get OpenAI NOTED)" "" "通过环境 ID 删除变量库里的原变量"
 
 step "批量导入：一次请求写入，重跑跳过已写入的，逐条输出结果"
 printf 'IMPORT_A=1\nIMPORT_B="two words"\n' >"$TMP/import.env"
@@ -148,7 +158,7 @@ RC=0; cli exec --env OpenAI:MISSING -- true 2>/dev/null || RC=$?
 expect_eq "$RC" "125" "exec 自身出错时退出码为 125"
 
 step "J6 本地覆盖：只在本机生效，云端删除后失效"
-cli override set OpenAI FROM_CLI "local-only" >/dev/null
+cli override set "$OPENAI_ENV_ID" FROM_CLI "local-only" >/dev/null
 expect_eq "$(cli exec -- printenv FROM_CLI 2>/dev/null)" "local-only" "本地覆盖生效"
 expect_eq "$(manager phone var-get OpenAI FROM_CLI)" "written-by-cli" "云端值不受本地覆盖影响"
 cli var rm OpenAI FROM_CLI >/dev/null
@@ -170,13 +180,13 @@ manager phone activation e2e-laptop Other OpenAI >/dev/null
 wait_env "from-other" "手机把 Other 移到最前"
 manager phone activation e2e-laptop Other:off OpenAI >/dev/null
 wait_env "sk-second" "手机停用 Other"
-cli env activate Other >/dev/null
+cli env activate "$OTHER_ENV_ID" >/dev/null
 wait_env "from-other" "电脑重新启用 Other"
-cli env order OpenAI >/dev/null
+cli env order "$OPENAI_ENV_ID" >/dev/null
 wait_env "sk-second" "电脑把 OpenAI 移到最前"
-cli env list | grep -q "OPENAI_API_KEY  使用“OpenAI”中的值，同时出现在“Other”" || fail "env list 没有显示同名变量来源"
+expect_has "$(cli env list)" "OPENAI_API_KEY  使用“OpenAI”中的值，同时出现在“Other”" "env list 没有显示同名变量来源"
 expect_eq "$(manager phone devices | grep e2e-laptop | cut -f3)" "OpenAI:rw,Other:ro" "手机看到电脑上的顺序"
-cli env deactivate Other >/dev/null
+cli env deactivate "$OTHER_ENV_ID" >/dev/null
 expect_eq "$(manager phone devices | grep e2e-laptop | cut -f3)" "OpenAI:rw,Other:ro:off" "手机看到电脑停用的环境"
 
 step "exec --env：只用指定的环境，终端里其他环境的变量不传给命令"
@@ -189,34 +199,46 @@ done
 expect_eq "$(cli exec --env Other --env OpenAI -- printenv OPENAI_API_KEY 2>/dev/null)" "from-other" "--env 可以使用已停用的环境，重复给出时先列出的优先"
 # 模拟开启了 Shell 集成的终端：先加载 env.sh，再用 --env 只选 Other。
 expect_eq "$(bash -c ". '$TMP/cli/env.sh'; export MINE=kept; HARMONIA_HOME='$TMP/cli' '$TMP/harmonia' exec --env Other -- sh -c 'printf \"%s %s\" \"\${ONLY_OPENAI-unset}\" \"\$MINE\"'" 2>/dev/null)" "unset kept" "--env 时不带上终端里其他环境的变量，保留用户自己的变量"
-expect_eq "$(cli exec --env Other,OpenAI:ONLY_OPENAI -- sh -c 'printf "%s %s" "$OPENAI_API_KEY" "$ONLY_OPENAI"' 2>/dev/null)" "from-other only-openai" "--env 环境:变量名 只取这一个变量"
-expect_eq "$(bash -c ". '$TMP/cli/env.sh'; HARMONIA_HOME='$TMP/cli' '$TMP/harmonia' exec --env OpenAI:ONLY_OPENAI -- sh -c 'printf \"%s %s\" \"\${OPENAI_API_KEY-unset}\" \"\$ONLY_OPENAI\"'" 2>/dev/null)" "unset only-openai" "只取一个变量时，终端里同一环境的其他变量也不传给命令"
+expect_eq "$(cli exec --env "$OTHER_ENV_ID,$OPENAI_ENV_ID:ONLY_OPENAI" -- sh -c 'printf "%s %s" "$OPENAI_API_KEY" "$ONLY_OPENAI"' 2>/dev/null)" "from-other only-openai" "--env 完整环境 ID 和 ID:变量名可以组合选择"
+expect_eq "$(bash -c ". '$TMP/cli/env.sh'; HARMONIA_HOME='$TMP/cli' '$TMP/harmonia' exec --env '$OPENAI_ENV_ID:ONLY_OPENAI' -- sh -c 'printf \"%s %s\" \"\${OPENAI_API_KEY-unset}\" \"\$ONLY_OPENAI\"'" 2>/dev/null)" "unset only-openai" "按 ID:变量名筛选时，终端里同一环境的其他变量也不传给命令"
 cli exec --env OpenAI:NOT_THERE -- true 2>/dev/null && fail "指定的变量不存在时不应运行命令"
 expect_eq "$(cli exec --env other:OPENAI_API_KEY -- printenv OPENAI_API_KEY 2>/dev/null)" "from-other" "--env 的环境名不区分大小写"
 # 终端里是旧值时，不加 --env 也以最新值为准（同名变量只传一份）。
 expect_eq "$(bash -c "export OPENAI_API_KEY=stale; HARMONIA_HOME='$TMP/cli' '$TMP/harmonia' exec -- sh -c 'env | grep -c ^OPENAI_API_KEY=; printenv OPENAI_API_KEY'" 2>/dev/null | tr '\n' ' ')" "1 sk-second " "同名变量只传最新值"
 
 step "两层结构：环境引用变量库，按勾选和改名展开，写回变量库里的原变量"
-manager phone vault-create Shared >/dev/null
+SHARED_VAULT_ID=$(manager phone vault-create Shared)
 manager phone var-set Shared TOKEN "tok-1" >/dev/null
 manager phone var-set Shared MODEL "gpt" >/dev/null
-manager phone env-define Mix Shared:pick:TOKEN=LLM_TOKEN OpenAI:all >/dev/null
+MIX_ENV_ID=$(manager phone env-define Mix Shared:pick:TOKEN=LLM_TOKEN OpenAI:all)
+[ -n "$SHARED_VAULT_ID" ] && [ -n "$MIX_ENV_ID" ] || fail "新建变量库或环境没有返回 ID"
 if manager phone env-define Dup OpenAI:all Other:all >/dev/null 2>&1; then fail "两个变量库都有 OPENAI_API_KEY 时不应能保存环境"; fi
 manager phone env-define Dup OpenAI:all Other:all:OPENAI_API_KEY=OTHER_KEY >/dev/null || fail "给重名变量改名后应能保存"
 manager phone env-delete Dup >/dev/null
 manager phone grants e2e-laptop OpenAI:rw Other:ro Mix:rw >/dev/null
 cli sync >/dev/null
 expect_eq "$(cli exec --env Mix -- sh -c 'printf "%s %s %s" "$LLM_TOKEN" "${MODEL-unset}" "$OPENAI_API_KEY"' 2>/dev/null)" "tok-1 unset sk-second" "勾选并改名的变量、引用全部变量的变量库"
-cli var list --env Mix | grep -q "LLM_TOKEN.*来自 Shared / TOKEN" || fail "var list 没有显示变量来自哪个变量库：$(cli var list --env Mix)"
+expect_has "$(cli var list --env Mix)" "LLM_TOKEN.*来自 Shared / TOKEN" "var list 没有显示变量来自哪个变量库"
 cli var set Mix LLM_TOKEN "tok-2" --yes >/dev/null || fail "通过环境用新名字修改失败"
 expect_eq "$(manager phone var-get Shared TOKEN)" "tok-2" "写回变量库里的原变量"
+if cli var set "$SHARED_VAULT_ID" TOKEN "wrong-target" --yes 2>"$TMP/w.err"; then fail "变量库 ID 不应默认作为环境目标写入"; fi
+expect_has "$(cat "$TMP/w.err")" "找不到环境" "变量库 ID 应按环境目标解析"
+if cli var rm "$SHARED_VAULT_ID" TOKEN --yes 2>"$TMP/w.err"; then fail "变量库 ID 不应默认作为环境目标删除"; fi
+expect_has "$(cat "$TMP/w.err")" "找不到环境" "删除时变量库 ID 应按环境目标解析"
+expect_eq "$(manager phone var-get Shared TOKEN)" "tok-2" "拒绝变量库位置参数后原变量不变"
+cli var set --vault "$SHARED_VAULT_ID" TOKEN --note "按库 ID 修改" --yes >/dev/null
+expect_eq "$(manager phone var-note Mix LLM_TOKEN)" "按库 ID 修改" "显式变量库 ID 使用原名修改，环境里的新名字可读"
 if cli var set Other OPENAI_API_KEY "x" --yes 2>"$TMP/w.err"; then fail "只读授权时不应能写入"; fi
 grep -q "只读" "$TMP/w.err" || fail "只读的提示不清楚：$(cat "$TMP/w.err")"
 if cli var set Mix BRAND_NEW "x" 2>"$TMP/w.err"; then fail "环境里没有的变量不应能通过环境新增"; fi
 grep -q "可以新增变量的变量库：“OpenAI”" "$TMP/w.err" || fail "没有列出可以新增变量的变量库：$(cat "$TMP/w.err")"
-cli var set OpenAI BRAND_NEW "x" >/dev/null || fail "名字同时是环境和变量库时应能直接新增"
-expect_eq "$(manager phone var-get OpenAI BRAND_NEW)" "x" "新增到同名变量库"
-cli var rm OpenAI BRAND_NEW --yes >/dev/null
+if cli var set openai BRAND_NEW "x" 2>"$TMP/w.err"; then fail "环境和变量库同名时不应自动新增"; fi
+expect_has "$(cat "$TMP/w.err")" "--vault" "新增失败时应提示显式指定变量库"
+expect_eq "$(manager phone var-get OpenAI BRAND_NEW)" "" "同名环境新增失败后变量库没有新变量"
+cli var set --vault OpenAI BRAND_NEW "x" >/dev/null
+expect_eq "$(manager phone var-get OpenAI BRAND_NEW)" "x" "显式指定同名变量库新增"
+cli var rm --vault OpenAI BRAND_NEW --yes >/dev/null
+expect_eq "$(manager phone var-get OpenAI BRAND_NEW)" "" "显式指定变量库删除原变量"
 step "手机批准：没有开启本机解密的环境在使用时请求批准；拒绝、仅这一次、保管进程、仅这个终端、lock、写入"
 manager phone grants e2e-laptop OpenAI:rw Other:ro Mix:rw:nolocal >/dev/null
 cli sync >/dev/null
@@ -285,7 +307,7 @@ expect_eq "$(manager phone authorizations | grep -c e2e-laptop || true)" "0" "lo
 for _ in $(seq 1 20); do [ -S "$TMP/cli/keeper.sock" ] || break; sleep 0.1; done
 [ -S "$TMP/cli/keeper.sock" ] && fail "lock 后保管进程应退出"
 # 写入：经手机批准，由手机写入变量库里的原变量。
-ask cli var set Mix LLM_TOKEN "tok-w" --yes
+ask cli var set "$MIX_ENV_ID" LLM_TOKEN "tok-w" --yes
 CODE=$(approval_code)
 expect_has "$(manager phone approvals)" "write	LLM_TOKEN" "写入请求的内容不对"
 manager phone approval-approve "$CODE" >/dev/null
@@ -325,7 +347,7 @@ manager phone grants e2e-laptop OpenAI:ro >/dev/null
 cli sync >/dev/null
 if cli var set OpenAI NEW "x" 2>"$TMP/ro.err"; then fail "只读设备不应能写入"; fi
 grep -q "只读" "$TMP/ro.err" || fail "只读错误提示不清楚：$(cat "$TMP/ro.err")"
-cli env list | grep -q Other && fail "未授权的环境不应可见"
+expect_eq "$(cli env list | grep -c Other || true)" "0" "未授权的环境不应可见"
 
 step "J9 第二台管理设备用配对码加入，并能管理全部环境"
 PCODE2=$(manager phone pairing-code)
@@ -450,7 +472,7 @@ until [ ! -f "$TMP/cli/keys.json" ]; do
   sleep 0.2
 done
 [ -e "$TMP/cli/env.sh" ] && fail "撤销后 env.sh 应当不存在"
-cli status | grep -q "还没有接入账号" || fail "撤销后状态不对"
+expect_has "$(cli status)" "还没有接入账号" "撤销后状态不对"
 
 step "J8 恢复：新手机用恢复码恢复，必须轮换；旧恢复码失效"
 expect_eq "$(manager phone3 recover --server "$SERVER" --email "$EMAIL" --code "$RECOVERY" --name "恢复手机")" "rotation-required" "恢复后需要轮换"

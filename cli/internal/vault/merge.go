@@ -33,7 +33,7 @@ type Pick struct {
 	Var   string
 }
 
-// ParsePick 解析 --env 的一项：整串是环境名称时取整个环境；否则按最后一个“:”
+// ParsePick 解析 --env 的一项：整串是环境名称或完整 ID 时取整个环境；否则按最后一个“:”
 // 拆成环境和变量名（变量名不含“:”），只取这个变量。
 func ParsePick(c *state.Cache, item string) (Pick, error) {
 	env, err := Find(c, item)

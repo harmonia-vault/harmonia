@@ -74,9 +74,12 @@ func Apply(c *state.Cache, s *api.Sync, since int64, rootPub string, deviceID st
 	return nil
 }
 
-// Find 按名称（不区分大小写）查找可访问的环境；环境名不能重复（设计文档 19.2）。
+// Find 先按完整 ID 精确匹配，再按名称（不区分大小写）查找可访问的环境。
 func Find(c *state.Cache, name string) (*api.Environment, error) {
 	name = strings.TrimSpace(name)
+	if env := ByID(c, name); env != nil {
+		return env, nil
+	}
 	var match []api.Environment
 	for _, e := range c.Environments {
 		if strings.EqualFold(e.Name, name) {

@@ -264,13 +264,13 @@ func TestShadowing(t *testing.T) {
 	cache.Environments = append([]api.Environment{prod}, cache.Environments...)
 	d.SaveCache(cache)
 	d.SaveOverrides(state.Overrides{"ENV": {"A": "本机"}})
-	notes, err := a.Shadowing("dev", "A")
+	notes, err := a.Shadowing("dev", "A", false)
 	if err != nil || len(notes) != 2 || !strings.Contains(notes[0], "覆盖") || !strings.Contains(notes[1], "prod") {
 		t.Fatalf("提示不对：%q %v", notes, err)
 	}
 	cache.Environments[1].Active = false
 	d.SaveCache(cache)
-	if notes, _ := a.Shadowing("dev", "A"); len(notes) != 1 || !strings.Contains(notes[0], "没有启用") {
+	if notes, _ := a.Shadowing("dev", "A", false); len(notes) != 1 || !strings.Contains(notes[0], "没有启用") {
 		t.Fatalf("环境未启用时应当提示：%q", notes)
 	}
 }
@@ -295,7 +295,7 @@ func TestSyncPicksUpNewDeviceName(t *testing.T) {
 }
 
 // 两层结构下的写入（设计文档 17.2）：通过环境用改名后的名字修改，写回变量库里的原变量；
-// 新增变量必须指定变量库；引用不允许修改时拒绝。
+// 新增变量必须指定变量库；没有“全部变量”的引用时拒绝新增。
 func TestWriteThroughEnvironmentAndVault(t *testing.T) {
 	_, fs := fakeDevice(t, "电脑")
 	fs.rename = map[string]string{"A": "LLM_KEY"}
@@ -314,24 +314,24 @@ func TestWriteThroughEnvironmentAndVault(t *testing.T) {
 	if r := set1(t, a, "NEW_KEY", VarChange{Value: &value}); r.Status != Failed || !strings.Contains(r.Err.Error(), "共享") {
 		t.Fatalf("通过环境新增变量应失败并列出变量库：%+v", r)
 	}
-	res, err := a.SetVariables(ctx, "共享", false, map[string]VarChange{"NEW_KEY": {Value: &value}}, false)
+	res, err := a.SetVariables(ctx, "共享", true, map[string]VarChange{"NEW_KEY": {Value: &value}}, false)
 	if err != nil || res[0].Status != Written {
 		t.Fatalf("指定变量库新增：%+v %v", res, err)
 	}
-	if notice := a.WriteNotice("dev", "LLM_KEY", false); !strings.Contains(notice, "共享") || !strings.Contains(notice, " A，") {
+	if notice := a.WriteNotice("dev", "LLM_KEY", false, false); !strings.Contains(notice, "共享") || !strings.Contains(notice, " A，") {
 		t.Fatalf("修改已有变量前应提示影响变量库里的原变量：%q", notice)
 	}
-	if notice := a.WriteNotice("共享", "BRAND_NEW", false); notice != "" {
+	if notice := a.WriteNotice("共享", "BRAND_NEW", true, false); notice != "" {
 		t.Fatalf("新增变量不需要确认：%q", notice)
 	}
-	if err := a.DeleteVariable(ctx, "dev", "LLM_KEY"); err != nil {
+	if err := a.DeleteVariable(ctx, "dev", "LLM_KEY", false); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := fs.vars["A"]; ok {
 		t.Fatal("应删除变量库里的原变量 A")
 	}
 	fs.locked = true
-	res, err = a.SetVariables(ctx, "共享", false, map[string]VarChange{"ANOTHER": {Value: &value}}, false)
+	res, err = a.SetVariables(ctx, "共享", true, map[string]VarChange{"ANOTHER": {Value: &value}}, false)
 	if err == nil && (len(res) != 1 || res[0].Status != Failed || !strings.Contains(res[0].Err.Error(), "不能修改")) {
 		t.Fatalf("没有“全部变量”的引用时应拒绝新增：%+v", res)
 	}

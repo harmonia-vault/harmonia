@@ -125,8 +125,9 @@ harmonia exec --env OpenAI,Other -- <命令>
                                       只用这几个环境（也可以写成 --env OpenAI --env Other），
                                       靠前的优先；终端里其他环境的变量不会传给命令
 harmonia export --all --format dotenv 输出全部启用环境的变量（明文；--env 只输出指定的）
-harmonia var set <环境> <变量名>       写入变量并回读校验（需要读写权限，必须联网）
-harmonia import --env <环境> --file .env
+harmonia var set <环境> <变量名>       修改已有变量（需要读写权限，必须联网）
+harmonia var set --vault <变量库> <变量名>  新增或修改变量（名称或完整 ID）
+harmonia import --vault <变量库> --file .env
                                       批量导入 .env 或 JSON（- 为标准输入）；没变的跳过，
                                       中断后重跑即可续传；不给 --file 时从当前终端勾选
 harmonia override set <环境> <变量名> <值>

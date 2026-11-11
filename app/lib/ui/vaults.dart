@@ -341,7 +341,7 @@ class _VaultPageState extends State<VaultPage> with LeaveWhenGone {
             context,
             label: '变量库 ID',
             id: widget.vaultId,
-            usage: '电脑上修改变量时要指定变量库，例如 harmonia var set ${widget.vaultId} 变量名。改名后 ID 不变，适合写进脚本。',
+            usage: '电脑上用 harmonia var set --vault ${widget.vaultId} 变量名 新增或修改变量。',
           ),
         ],
       ),

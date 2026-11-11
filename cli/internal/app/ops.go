@@ -31,7 +31,7 @@ func ValidateName(name string) error {
 	return nil
 }
 
-// Env 按名称查找可访问的环境。
+// Env 按完整 ID 或名称查找可访问的环境。
 func (a *App) Env(name string) (*api.Environment, error) {
 	cache, err := a.Dir.Cache()
 	if err != nil {
@@ -253,7 +253,7 @@ func (a *App) SetVariables(ctx context.Context, target string, vaultOnly bool, c
 }
 
 // DeleteVariable 删除变量：target 是环境（用环境里的名字）或变量库（用原名），从变量库里删除原变量。
-func (a *App) DeleteVariable(ctx context.Context, target, name string) error {
+func (a *App) DeleteVariable(ctx context.Context, target, name string, vaultOnly bool) error {
 	if err := a.Sync(ctx); err != nil {
 		return err
 	}
@@ -261,7 +261,7 @@ func (a *App) DeleteVariable(ctx context.Context, target, name string) error {
 	if err != nil {
 		return err
 	}
-	t, err := vault.ResolveTarget(cache, target, false)
+	t, err := vault.ResolveTarget(cache, target, vaultOnly)
 	if err != nil {
 		return err
 	}

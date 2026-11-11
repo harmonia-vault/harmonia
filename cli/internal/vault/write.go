@@ -15,9 +15,6 @@ type Target struct {
 	Env       *api.Environment
 	VaultID   string
 	VaultName string
-	// SameName 是与环境同名的变量库（例如新建变量库时一起创建的同名环境）。
-	// 环境里没有要新增的变量时改写到它，免得“改用变量库”的提示又匹配回环境。
-	SameName *api.VaultName
 }
 
 // Label 是给用户看的位置名称。
@@ -48,8 +45,9 @@ func (d Dest) ApprovalItem() api.ApprovalItem {
 	return api.ApprovalItem{EnvironmentID: d.Env.ID, Name: d.Name}
 }
 
-// FindVault 按 ID 或名称（不区分大小写）查找这台设备的环境引用到的变量库。
+// FindVault 先按完整 ID 精确匹配，再按名称（不区分大小写）查找设备可见的变量库。
 func FindVault(c *state.Cache, nameOrID string) (*api.VaultName, error) {
+	nameOrID = strings.TrimSpace(nameOrID)
 	var match []api.VaultName
 	for _, v := range c.VaultNames {
 		if v.ID == nameOrID {
@@ -69,26 +67,20 @@ func FindVault(c *state.Cache, nameOrID string) (*api.VaultName, error) {
 	}
 }
 
-// ResolveTarget 解析写入的位置：先按环境匹配，再按变量库匹配；vaultOnly 时只认变量库。
+// ResolveTarget 按显式类型解析目标：默认只查环境，vaultOnly 时只查变量库。
 func ResolveTarget(c *state.Cache, nameOrID string, vaultOnly bool) (Target, error) {
 	if !vaultOnly {
-		if env, err := Find(c, nameOrID); err == nil {
-			same, _ := FindVault(c, nameOrID)
-			return Target{Env: env, SameName: same}, nil
-		}
+		env, err := Find(c, nameOrID)
+		return Target{Env: env}, err
 	}
 	v, err := FindVault(c, nameOrID)
 	if err != nil {
 		return Target{}, err
 	}
-	if v != nil {
-		return Target{VaultID: v.ID, VaultName: v.Name}, nil
-	}
-	if vaultOnly {
+	if v == nil {
 		return Target{}, fmt.Errorf("找不到变量库“%s”。%s", nameOrID, creatableHint(c, 0))
 	}
-	_, err = Find(c, nameOrID)
-	return Target{}, err
+	return Target{VaultID: v.ID, VaultName: v.Name}, nil
 }
 
 // writableEnvs 是这台设备有读写权限、未到期的环境；可以在本机解密的排在前面。
@@ -116,7 +108,7 @@ func creatableHint(c *state.Cache, nowMs int64) string {
 	if len(names) == 0 {
 		return "这台设备现在不能新增变量：需要在管理设备上为它授予读写权限，并让环境以“全部变量”的方式引用一个变量库"
 	}
-	return "可以新增变量的变量库：“" + strings.Join(names, "”“") + "”，写成 harmonia var set <变量库> <变量名>"
+	return "可以新增变量的变量库：“" + strings.Join(names, "”“") + "”，写成 harmonia var set --vault <变量库> <变量名>"
 }
 
 func vaultName(c *state.Cache, id string) string {
@@ -151,9 +143,6 @@ func WriteDest(c *state.Cache, t Target, name string, nowMs int64) (Dest, error)
 			if it.Name == name {
 				return Dest{VaultID: it.VaultID, Source: it.Source, Env: env, Name: name}, nil
 			}
-		}
-		if t.SameName != nil {
-			return WriteDest(c, Target{VaultID: t.SameName.ID, VaultName: t.SameName.Name}, name, nowMs)
 		}
 		return Dest{}, fmt.Errorf("环境“%s”里没有 %s。新增变量需要指定变量库。%s", env.Name, name, creatableHint(c, nowMs))
 	}

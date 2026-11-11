@@ -4,6 +4,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"os"
@@ -46,6 +47,13 @@ func parseFlags(args []string, spec ...string) (*flags, error) {
 		if a == "--" {
 			f.rest = args[i+1:]
 			break
+		}
+		// 完整 ID 是 16 字节的 base64url，可能以一个或两个连字符开头。
+		if len(a) == 22 && strings.HasPrefix(a, "-") {
+			if raw, err := base64.RawURLEncoding.Strict().DecodeString(a); err == nil && len(raw) == 16 {
+				f.args = append(f.args, a)
+				continue
+			}
 		}
 		if !strings.HasPrefix(a, "-") || a == "-" {
 			f.args = append(f.args, a)

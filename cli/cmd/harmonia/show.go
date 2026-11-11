@@ -169,7 +169,7 @@ func printEnvs(a *app.App) error {
 		return nil
 	}
 	fmt.Println("环境（同名变量由排在前面的环境提供）")
-	rows := [][]string{{"", "名称", "权限", "变量", "变量库", "有效期", "状态", "健康"}}
+	rows := [][]string{{"", "名称", "环境 ID", "权限", "变量", "变量库", "有效期", "状态", "健康"}}
 	for i, e := range vault.Ordered(cache) {
 		state := "未启用"
 		if e.Active {
@@ -177,7 +177,7 @@ func printEnvs(a *app.App) error {
 		}
 		health, _ := envHealth(a, cache, e)
 		rows = append(rows, []string{
-			fmt.Sprint(i + 1), e.Name, roleNames[e.Role], fmt.Sprint(len(e.Items)), strings.Join(envVaults(cache, e), "、"), expiry(e.ExpiresAt), state, health,
+			fmt.Sprint(i + 1), e.Name, e.ID, roleNames[e.Role], fmt.Sprint(len(e.Items)), strings.Join(envVaults(cache, e), "、"), expiry(e.ExpiresAt), state, health,
 		})
 	}
 	printTable(os.Stdout, "  ", rows)
