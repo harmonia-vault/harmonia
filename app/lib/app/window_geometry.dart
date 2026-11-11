@@ -8,6 +8,7 @@ class WindowGeometry extends ChangeNotifier {
   static const _channel = EventChannel('harmonia/layout');
   NavigationEdge? navigation;
   bool? regularWidth;
+  double width = 0, height = 0;
   LayoutRect? fold;
   List<LayoutRect> occlusions = const [];
   late final _subscription = _channel.receiveBroadcastStream().listen(_update);
@@ -16,6 +17,8 @@ class WindowGeometry extends ChangeNotifier {
 
   void _update(Object? event) {
     final data = (event as Map).cast<String, dynamic>();
+    width = (data['width'] as num).toDouble();
+    height = (data['height'] as num).toDouble();
     navigation = switch (data['edge']) {
       'left' => NavigationEdge.left,
       'right' => NavigationEdge.right,

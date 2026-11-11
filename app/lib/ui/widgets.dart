@@ -12,6 +12,7 @@ import 'glass_overlays.dart';
 import 'glass.dart';
 import 'window_layout.dart';
 import 'workspace_scope.dart';
+import 'adaptive_presentation.dart';
 
 /// 把异常转成给用户看的一句话。
 String errorText(Object e) {
@@ -166,46 +167,54 @@ class AuthScaffold extends StatelessWidget {
   }
 
   Widget _scaffold(BuildContext context, Palette p) {
-    return AppPage(
-      appBar: onBack == null
-          ? null
-          : AppBarSurface(
-              leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: onBack),
-            ),
-      body: (context) => SafeArea(
-        top: onBack == null,
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 520),
-            child: ListView(
-              padding: EdgeInsets.fromLTRB(
-                Space.xl,
-                Space.xl + ((onBack != null) ? MediaQuery.paddingOf(context).top : 0),
-                Space.xl,
-                Space.xxl,
-              ),
-              children: [
-                if (onBack == null) ...[
-                  Row(
-                    children: [
-                      const BrandMark(),
-                      const SizedBox(width: Space.md),
-                      Text('和弦', style: Theme.of(context).textTheme.titleLarge),
-                      const SizedBox(width: Space.sm),
-                      Text('Harmonia', style: TextStyle(color: p.mute)),
-                    ],
+    return ColoredBox(
+      color: p.paper,
+      child: AdaptivePresentation(
+        child: AppPage(
+          appBar: onBack == null
+              ? null
+              : AppBarSurface(
+                  leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: onBack),
+                ),
+          body: (context) => SafeArea(
+            top: onBack == null,
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 520),
+                child: ListView(
+                  padding: EdgeInsets.fromLTRB(
+                    Space.xl,
+                    Space.xl + ((onBack != null) ? MediaQuery.paddingOf(context).top : 0),
+                    Space.xl,
+                    Space.xxl,
                   ),
-                  const SizedBox(height: Space.xxl),
-                ],
-                Text(title, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w600)),
-                // 副标题里每个换行是一段，段与段之间不留额外间距。
-                if (subtitle != null) ...[
-                  const SizedBox(height: Space.sm),
-                  Text(tidy(subtitle!), style: TextStyle(color: p.mute, height: 1.5)),
-                ],
-                const SizedBox(height: Space.xl),
-                ...children,
-              ],
+                  children: [
+                    if (onBack == null) ...[
+                      Row(
+                        children: [
+                          const BrandMark(),
+                          const SizedBox(width: Space.md),
+                          Text('和弦', style: Theme.of(context).textTheme.titleLarge),
+                          const SizedBox(width: Space.sm),
+                          Text('Harmonia', style: TextStyle(color: p.mute)),
+                        ],
+                      ),
+                      const SizedBox(height: Space.xxl),
+                    ],
+                    Text(
+                      title,
+                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w600),
+                    ),
+                    // 副标题里每个换行是一段，段与段之间不留额外间距。
+                    if (subtitle != null) ...[
+                      const SizedBox(height: Space.sm),
+                      Text(tidy(subtitle!), style: TextStyle(color: p.mute, height: 1.5)),
+                    ],
+                    const SizedBox(height: Space.xl),
+                    ...children,
+                  ],
+                ),
+              ),
             ),
           ),
         ),

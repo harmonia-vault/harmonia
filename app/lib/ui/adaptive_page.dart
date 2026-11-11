@@ -18,11 +18,19 @@ class PresentationScope extends InheritedWidget {
 }
 
 class AdaptivePageFrame extends StatefulWidget {
-  const AdaptivePageFrame({super.key, this.appBar, required this.body, this.overlay, this.avoidKeyboard});
+  const AdaptivePageFrame({
+    super.key,
+    this.appBar,
+    required this.body,
+    this.overlay,
+    this.avoidKeyboard,
+    this.controls,
+  });
   final AppBarSurface? appBar;
   final WidgetBuilder body;
   final WidgetBuilder? overlay;
   final bool? avoidKeyboard;
+  final Widget? controls;
 
   @override
   State<AdaptivePageFrame> createState() => _AdaptivePageFrameState();
@@ -43,7 +51,6 @@ class _AdaptivePageFrameState extends State<AdaptivePageFrame> {
     final pane = WorkspacePane.maybeOf(context);
     final presentation = PresentationScope.contains(context);
     final side = !presentation && layout?.verticalNavigation == true && pane?.master != true;
-    final tabletop = !presentation && pane?.tabletop == true && pane?.master == false;
     final nav = Navigator.of(context);
     final leading =
         appBar?.leading ??
@@ -51,7 +58,6 @@ class _AdaptivePageFrameState extends State<AdaptivePageFrame> {
             ? IconButton(tooltip: '返回', icon: const Icon(CupertinoIcons.chevron_back), onPressed: nav.maybePop)
             : null);
     final toolbar = WorkspaceToolReporter(
-      title: appBar?.title,
       leading: leading,
       actions: appBar?.actions,
       child: GlassBackdropGroup(
@@ -59,12 +65,10 @@ class _AdaptivePageFrameState extends State<AdaptivePageFrame> {
           backgroundColor: presentation ? Colors.transparent : null,
           resizeToAvoidBottomInset: widget.avoidKeyboard ?? true,
           extendBodyBehindAppBar: !side && appBar != null,
-          appBar: side
-              ? null
-              : tabletop
-              ? AppBarSurface(title: appBar?.title, leading: const SizedBox.shrink())
-              : appBar,
-          body: side
+          appBar: side ? null : appBar,
+          body: widget.controls != null && layout?.tabletop == true && WorkspaceScope.maybeOf(context) == null
+              ? _tabletop(context, layout!)
+              : side
               ? _side(context, layout!, leading)
               : Builder(
                   builder: (context) {
@@ -144,6 +148,36 @@ class _AdaptivePageFrameState extends State<AdaptivePageFrame> {
           Positioned.fill(
             child: AdaptiveTools(layout: layout, tools: tools),
           ),
+      ],
+    );
+  }
+
+  Widget _tabletop(BuildContext context, WindowLayout layout) {
+    final media = MediaQuery.of(context);
+    return Stack(
+      children: [
+        Positioned.fromRect(
+          rect: Rect.fromLTWH(0, 0, layout.width, layout.fold!.top),
+          child: MediaQuery(
+            data: media.copyWith(
+              size: Size(layout.width, layout.fold!.top),
+              padding: media.padding.copyWith(bottom: 0),
+              viewPadding: media.viewPadding.copyWith(bottom: 0),
+            ),
+            child: _content(),
+          ),
+        ),
+        Positioned.fromRect(
+          rect: flutterRect(layout.tabletopControls),
+          child: SafeArea(
+            top: false,
+            child: SingleChildScrollView(padding: const EdgeInsets.all(16), child: widget.controls),
+          ),
+        ),
+        Positioned.fromRect(
+          rect: flutterRect(layout.fold!),
+          child: ColoredBox(color: context.palette.line),
+        ),
       ],
     );
   }

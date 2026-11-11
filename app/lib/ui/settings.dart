@@ -14,6 +14,7 @@ import 'devices.dart' show platformIcon;
 import 'lock.dart';
 import 'recovery_pages.dart';
 import 'theme.dart';
+import 'window_layout.dart';
 import 'glass_overlays.dart';
 import 'glass.dart';
 import 'glass_transparency.dart';
@@ -171,7 +172,7 @@ class _SettingsTabState extends State<SettingsTab> {
         builder: (_) =>
             PageDebug(initialColorMode: c.appearance.colorMode, initialGlassOpacity: c.appearance.glassOpacity),
       );
-      final closed = Navigator.push(context, route);
+      final closed = WindowLayoutScope.navigatorOf(context).push(route);
       // 转场结束、调试页完全盖住之后才停止绘制真实页面；开始返回时立刻恢复。
       route.animation?.addStatusListener((status) => c.setPageDebugCovers(status == AnimationStatus.completed));
       await closed;

@@ -176,7 +176,7 @@ class _EnvEditorPageState extends State<EnvEditorPage> {
       final entry = WorkspaceEntry(
         tab: 1,
         id: 'env:$created',
-        title: name,
+
         page: (_) => EnvironmentPage(c: c, envId: created!),
       );
       if (workspace != null) {

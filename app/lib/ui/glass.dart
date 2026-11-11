@@ -183,9 +183,10 @@ class AppBarSurface extends StatelessWidget implements PreferredSizeWidget {
 
 /// 正文必须在 Scaffold 的 MediaQuery 之下构建，读取的是实际遮挡高度。
 class AppPage extends StatelessWidget {
-  const AppPage({super.key, this.appBar, required this.body, this.overlay, this.avoidKeyboard});
+  const AppPage({super.key, this.appBar, required this.body, this.overlay, this.avoidKeyboard, this.controls});
   final AppBarSurface? appBar;
   final WidgetBuilder body;
+  final Widget? controls;
 
   /// 正文是否随键盘收缩；一级列表由上层面板处理键盘，不收缩。
   final bool? avoidKeyboard;
@@ -195,7 +196,7 @@ class AppPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) =>
-      AdaptivePageFrame(appBar: appBar, body: body, overlay: overlay, avoidKeyboard: avoidKeyboard);
+      AdaptivePageFrame(appBar: appBar, body: body, overlay: overlay, avoidKeyboard: avoidKeyboard, controls: controls);
 }
 
 /// Scaffold 已计算标题栏与安全区；不要在这里再次累加工具栏高度。

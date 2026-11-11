@@ -3,19 +3,18 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 class WorkspaceEntry {
-  const WorkspaceEntry({required this.tab, required this.id, required this.title, required this.page});
+  const WorkspaceEntry({required this.tab, required this.id, required this.page});
   final int tab;
-  final String id, title;
+  final String id;
   final WidgetBuilder page;
 }
 
 class WorkspaceTools extends ChangeNotifier {
   Object? _owner;
-  Widget? title, leading;
+  Widget? leading;
   List<Widget> actions = const [];
-  void publish(Object owner, {Widget? title, Widget? leading, List<Widget>? actions}) {
+  void publish(Object owner, {Widget? leading, List<Widget>? actions}) {
     _owner = owner;
-    this.title = title;
     this.leading = leading;
     this.actions = actions ?? const [];
     notifyListeners();
@@ -24,7 +23,6 @@ class WorkspaceTools extends ChangeNotifier {
   void release(Object owner) {
     if (_owner != owner) return;
     _owner = null;
-    title = null;
     leading = null;
     actions = const [];
     notifyListeners();
@@ -63,25 +61,21 @@ class WorkspacePane extends InheritedWidget {
     super.key,
     required this.master,
     required this.active,
-    this.tabletop = false,
     required this.navigationHeight,
     required super.child,
   });
-  final bool master, active, tabletop;
+  final bool master, active;
   final double navigationHeight;
   static WorkspacePane? maybeOf(BuildContext context) => context.dependOnInheritedWidgetOfExactType<WorkspacePane>();
   @override
   bool updateShouldNotify(WorkspacePane oldWidget) =>
-      master != oldWidget.master ||
-      active != oldWidget.active ||
-      tabletop != oldWidget.tabletop ||
-      navigationHeight != oldWidget.navigationHeight;
+      master != oldWidget.master || active != oldWidget.active || navigationHeight != oldWidget.navigationHeight;
 }
 
-/// 只更新下半区工具条，不重建页面或表单。
+/// 只更新侧边工具条，不重建页面或表单。
 class WorkspaceToolReporter extends StatefulWidget {
-  const WorkspaceToolReporter({super.key, this.title, this.leading, this.actions, required this.child});
-  final Widget? title, leading;
+  const WorkspaceToolReporter({super.key, this.leading, this.actions, required this.child});
+  final Widget? leading;
   final List<Widget>? actions;
   final Widget child;
   @override
@@ -97,7 +91,9 @@ class _WorkspaceToolReporterState extends State<WorkspaceToolReporter> {
     if (scope != null && pane != null && pane.active && !pane.master && current) {
       final tools = _tools = scope.tools;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) tools.publish(this, title: widget.title, leading: widget.leading, actions: widget.actions);
+        if (mounted) {
+          tools.publish(this, leading: widget.leading, actions: widget.actions);
+        }
       });
     } else {
       final tools = _tools;

@@ -38,7 +38,7 @@ class SettingsCategories extends StatelessWidget {
                     WorkspaceEntry(
                       tab: 3,
                       id: 'settings:${item.name}',
-                      title: item.name,
+
                       page: (_) => SettingsTab(c: c, section: item.name),
                     ),
                   ),

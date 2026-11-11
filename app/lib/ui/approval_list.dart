@@ -37,7 +37,7 @@ class PendingApprovals extends StatelessWidget {
                   WorkspaceEntry(
                     tab: 2,
                     id: 'approval:${a.id}',
-                    title: c.vault.approvalDevice(a)?.name ?? '批准请求',
+
                     page: (_) => ApprovalPage(c: c, request: a),
                   ),
                 ),

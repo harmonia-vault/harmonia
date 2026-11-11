@@ -28,6 +28,7 @@ private final class WindowLayoutChannel: NSObject, FlutterStreamHandler {
     super.init()
     probe.onChange = { [weak self] in self?.publish() }
     controller.view.addSubview(probe)
+    probe.setNeedsUpdateConstraints()
     channel.setStreamHandler(self)
   }
 
@@ -44,8 +45,10 @@ private final class WindowLayoutChannel: NSObject, FlutterStreamHandler {
   }
 
   private func publish() {
-    guard let view = probe.superview, let sink else { return }
+    guard let sink else { return }
+    let view = probe
     var data: [String: Any] = [
+      "width": Double(view.bounds.width), "height": Double(view.bounds.height),
       "regularWidth": view.traitCollection.horizontalSizeClass == .regular,
       "occlusions": [[Double]]()
     ]
@@ -74,7 +77,7 @@ private final class WindowLayoutProbe: UIView {
   override init(frame: CGRect) {
     super.init(frame: frame)
     isUserInteractionEnabled = false
-    isHidden = true
+    backgroundColor = .clear
     autoresizingMask = [.flexibleWidth, .flexibleHeight]
     NotificationCenter.default.addObserver(
       self, selector: #selector(refresh), name: UIApplication.didBecomeActiveNotification, object: nil)
@@ -86,6 +89,8 @@ private final class WindowLayoutProbe: UIView {
   }
   required init?(coder: NSCoder) { fatalError("仅从当前 Flutter 视图创建") }
   override func layoutSubviews() { super.layoutSubviews(); onChange?() }
+  // 在约束更新中查询当前视图，UIKit 会在保留区域变化时自动再次调用。
+  override func updateConstraints() { onChange?(); super.updateConstraints() }
   override func safeAreaInsetsDidChange() { super.safeAreaInsetsDidChange(); onChange?() }
   override func didMoveToWindow() { super.didMoveToWindow(); onChange?() }
   @objc private func refresh() { onChange?() }

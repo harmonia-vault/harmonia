@@ -176,7 +176,7 @@ class _EnvironmentPageState extends State<EnvironmentPage> with LeaveWhenGone {
                               WorkspaceEntry(
                                 tab: 0,
                                 id: 'vault:${r.vaultId}',
-                                title: c.vault.vaultName(r.vaultId) ?? '',
+
                                 page: (_) => VaultPage(c: c, vaultId: r.vaultId),
                               ),
                             ),

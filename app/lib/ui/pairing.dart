@@ -17,6 +17,8 @@ import 'glass_overlays.dart';
 import 'glass.dart';
 import 'glass_controls.dart';
 import 'widgets.dart';
+import 'window_layout.dart';
+import 'workspace_scope.dart';
 
 /// “添加设备”按钮：从按钮展开浮动菜单，先选择方式。配对码要在对方发起之前生成，扫码则在对方发起之后，
 /// 两者并列（docs/rewrite-plan.md 5.10）；另有复制 AI 安装提示词（5.13）。[trigger] 是展开菜单的按钮，例如设备页的悬浮按钮或标题栏的加号。
@@ -227,8 +229,10 @@ class _ReviewPairingPageState extends State<ReviewPairingPage> {
 
   @override
   Widget build(BuildContext context) {
+    final tabletop = WindowLayoutScope.maybeOf(context)?.tabletop == true && WorkspaceScope.maybeOf(context) == null;
     return AppPage(
       appBar: AppBarSurface(title: const Text('批准设备')),
+      controls: tabletop ? Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: _controls()) : null,
       body: (context) => ListView(
         padding: pagePadding(context, const EdgeInsets.all(Space.lg)),
         children: [
@@ -243,22 +247,33 @@ class _ReviewPairingPageState extends State<ReviewPairingPage> {
             const SizedBox(height: Space.lg),
             const Banner2('这次请求已失效：对方已取消或离开了等待页面，也可能已在另一台管理设备上处理。\n需要接入时，请在那台设备上重新发起。', warn: true),
             const SizedBox(height: Space.xl),
-            FilledButton(onPressed: () => Navigator.pop(context), child: const Text('关闭')),
+            if (!tabletop) ..._controls(),
           ] else
-            ..._review(),
+            ..._review(tabletop),
         ],
       ),
     );
   }
 
-  List<Widget> _review() {
+  List<Widget> _review(bool tabletop) {
     final code = pairingCode(pairingFingerprint(p.id, p.signPub, p.boxPub, p.rootPub));
-    final envs = widget.c.vault.environments;
     return [
       const SizedBox(height: Space.lg),
       Text(widget.scanned ? '核对码' : '请确认设备上显示的核对码与下面完全一致：'),
       const SizedBox(height: Space.sm),
       CodeBox(code, copyable: false),
+      if (!widget.scanned) ...[
+        const SizedBox(height: Space.sm),
+        const Banner2('只批准你自己刚刚发起的请求。如果你此刻没有在电脑或其他手机上发起接入，或者是别人发来的二维码、核对码，请点“拒绝”并勾选阻止这个网络。', warn: true),
+      ],
+      if (!tabletop) ..._controls(),
+    ];
+  }
+
+  List<Widget> _controls() {
+    if (_gone) return [FilledButton(onPressed: () => Navigator.pop(context), child: const Text('关闭'))];
+    final envs = widget.c.vault.environments;
+    return [
       if (!widget.scanned) ...[
         const SizedBox(height: Space.md),
         Card(
@@ -268,8 +283,6 @@ class _ReviewPairingPageState extends State<ReviewPairingPage> {
             title: const Text('核对码一致，这是我自己的设备'),
           ),
         ),
-        const SizedBox(height: Space.sm),
-        const Banner2('只批准你自己刚刚发起的请求。如果你此刻没有在电脑或其他手机上发起接入，或者是别人发来的二维码、核对码，请点“拒绝”并勾选阻止这个网络。', warn: true),
       ],
       // 只有具备管理功能的客户端（目前只有 App）才能作为管理设备。
       if (p.canManage) ...[

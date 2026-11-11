@@ -34,9 +34,29 @@ class WindowLayout {
   bool get verticalNavigation => navigation != NavigationEdge.bottom;
   bool get book => fold != null && fold!.height > fold!.width;
   bool get tabletop => fold != null && !book;
-  bool get twoPanes => !tabletop && (book || regularWidth && width >= 620);
-  bool get compactNavigation => verticalNavigation && usable.height < 420;
+  bool get twoPanes => book || regularWidth && width > height && width - navigationWidth >= 720;
+  bool get compactNavigation => verticalNavigation && height - navigationTop - navigationBottom < 420;
   double get navigationWidth => verticalNavigation ? 84 : 0;
+
+  double get navigationTop {
+    var top = insets.top + 12;
+    for (final area in _navigationOcclusions) {
+      if (area.top < height / 2) top = math.max(top, area.top + area.height + 12);
+    }
+    return top;
+  }
+
+  double get navigationBottom {
+    var bottom = math.max(insets.bottom, keyboard) + 12;
+    for (final area in _navigationOcclusions) {
+      if (area.top >= height / 2) bottom = math.max(bottom, height - area.top + 12);
+    }
+    return bottom;
+  }
+
+  Iterable<LayoutRect> get _navigationOcclusions => occlusions.where(
+    (area) => navigation == NavigationEdge.left ? area.left < 84 : area.left + area.width > width - 84,
+  );
 
   LayoutRect get usable => layoutRect(
     insets.left,
@@ -75,7 +95,6 @@ class WindowLayout {
       final left = fold!.left + fold!.width;
       return layoutRect(left, 0, width - left, height);
     }
-    if (tabletop) return layoutRect(0, 0, width, fold!.top);
     if (!twoPanes) return layoutRect(0, 0, width, height);
     final first = master;
     return layoutRect(first.width, 0, width - first.width, height);

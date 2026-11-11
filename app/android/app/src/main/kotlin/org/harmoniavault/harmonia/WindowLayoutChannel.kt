@@ -31,7 +31,10 @@ class WindowLayoutChannel(private val activity: Activity) : EventChannel.StreamH
                 edge = if (window.centerX() < display.centerX()) "left" else "right"
             }
         }
-        val data = mapOf("edge" to edge, "occlusions" to emptyList<List<Double>>())
+        val view = activity.window.decorView
+        val scale = activity.resources.displayMetrics.density.toDouble()
+        val data = mapOf("edge" to edge, "occlusions" to emptyList<List<Double>>(),
+            "width" to view.width / scale, "height" to view.height / scale)
         if (data != previous) {
             previous = data
             sink?.success(data)

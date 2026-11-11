@@ -79,7 +79,7 @@ class EnvironmentsTab extends StatelessWidget {
                           WorkspaceEntry(
                             tab: 1,
                             id: 'env:${e.id}',
-                            title: e.name,
+
                             page: (_) => EnvironmentPage(c: c, envId: e.id),
                           ),
                         ),

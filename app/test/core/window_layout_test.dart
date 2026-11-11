@@ -2,6 +2,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:harmonia/core/window_layout.dart';
 
 void main() {
+  test('侧边相机占用工具区后收起导航，另一侧相机不影响当前导航', () {
+    final camera = layoutRect(630, 210, 48, 46);
+    final right = WindowLayout(width: 678, height: 466, occlusions: [camera]);
+    expect(right.navigationTop, 268);
+    expect(right.compactNavigation, isTrue);
+    final left = WindowLayout(width: 678, height: 466, navigation: NavigationEdge.left, occlusions: [camera]);
+    expect(left.navigationTop, 12);
+    expect(left.compactNavigation, isFalse);
+  });
   test('普通窗口按可用空间切换分栏，横竖导航独立于分栏', () {
     final narrow = WindowLayout(width: 420, height: 860);
     expect(narrow.twoPanes, isFalse);
@@ -13,12 +22,16 @@ void main() {
     expect(wide.detail.left, wide.master.width);
   });
 
-  test('内屏竖向可保持双栏和水平导航，不把尺寸类别当设备型号', () {
+  test('内屏竖向使用单栏和水平导航，横向有足够内容宽度才显示双栏', () {
     final inner = WindowLayout(width: 669, height: 951, regularWidth: true, navigation: NavigationEdge.bottom);
-    expect(inner.twoPanes, isTrue);
+    expect(inner.twoPanes, isFalse);
     expect(inner.verticalNavigation, isFalse);
     final compact = WindowLayout(width: 669, height: 951, regularWidth: false);
     expect(compact.twoPanes, isFalse);
+    final crowded = WindowLayout(width: 790, height: 669, regularWidth: true);
+    expect(crowded.twoPanes, isFalse);
+    final landscape = WindowLayout(width: 951, height: 669, regularWidth: true);
+    expect(landscape.twoPanes, isTrue);
   });
 
   test('分屏边缘服从当前窗口的信息，不从左右安全区猜测', () {
@@ -45,11 +58,11 @@ void main() {
     expect(layout.presentation.width, 492);
   });
 
-  test('桌面式把查看与操作分在折叠区上下，面板位于下半区', () {
+  test('竖屏半展开保持普通分栏，面板仍完整位于折叠区下方', () {
     final layout = WindowLayout(width: 700, height: 1000, fold: layoutRect(0, 480, 700, 20));
     expect(layout.tabletop, isTrue);
     expect(layout.twoPanes, isFalse);
-    expect(layout.detail, layoutRect(0, 0, 700, 480));
+    expect(layout.detail, layoutRect(0, 0, 700, 1000));
     expect(layout.tabletopControls, layoutRect(0, 500, 700, 500));
     expect(layout.presentation.top, 500);
   });

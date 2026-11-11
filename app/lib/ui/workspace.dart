@@ -81,7 +81,7 @@ class _WorkspaceState extends State<Workspace> {
         ? 0.0
         : 84.0 + (MediaQuery.textScalerOf(context).scale(11) - 11).clamp(0.0, 40.0);
     final showDetail = _selected.containsKey(_tab);
-    final showMaster = layout.twoPanes || layout.tabletop || !showDetail;
+    final showMaster = layout.twoPanes || !showDetail;
     return WorkspaceScope(
       open: _open,
       selected: Map.of(_selected),
@@ -94,45 +94,19 @@ class _WorkspaceState extends State<Workspace> {
               _pane(
                 context,
                 layout: layout,
-                bounds: layout.tabletop
-                    ? layout.tabletopControls
-                    : layout.twoPanes
-                    ? layout.master
-                    : layoutRect(0, 0, layout.width, layout.height),
+                bounds: layout.twoPanes ? layout.master : layoutRect(0, 0, layout.width, layout.height),
                 visible: showMaster,
                 child: Column(
                   children: [
-                    if (layout.tabletop)
-                      ListenableBuilder(
-                        listenable: _tools,
-                        builder: (context, _) => SafeArea(
-                          bottom: false,
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                            child: Row(
-                              children: [
-                                ?_tools.leading,
-                                Expanded(
-                                  child: DefaultTextStyle(
-                                    style: Theme.of(context).textTheme.titleMedium!,
-                                    child: _tools.title ?? Text(labels[_tab]),
-                                  ),
-                                ),
-                                ..._tools.actions,
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
                     Expanded(
                       child: IndexedStack(
                         index: _tab,
                         children: [
                           for (var i = 0; i < 4; i++)
                             WorkspacePane(
-                              master: layout.twoPanes || layout.tabletop,
+                              master: layout.twoPanes,
                               active: i == _tab && showMaster,
-                              tabletop: layout.tabletop,
+
                               navigationHeight: navigationHeight,
                               child: TickerMode(enabled: i == _tab, child: masterPages[i]),
                             ),
@@ -146,15 +120,15 @@ class _WorkspaceState extends State<Workspace> {
                 context,
                 layout: layout,
                 bounds: layout.detail,
-                visible: layout.twoPanes || layout.tabletop || showDetail,
+                visible: layout.twoPanes || showDetail,
                 child: IndexedStack(
                   index: _tab,
                   children: [
                     for (var i = 0; i < 4; i++)
                       WorkspacePane(
                         master: false,
-                        active: i == _tab && (layout.twoPanes || layout.tabletop || showDetail),
-                        tabletop: layout.tabletop,
+                        active: i == _tab && (layout.twoPanes || showDetail),
+
                         navigationHeight: navigationHeight,
                         child: TickerMode(
                           enabled: i == _tab,
@@ -190,11 +164,6 @@ class _WorkspaceState extends State<Workspace> {
                   ],
                 ),
               ),
-              if (layout.fold case final fold?)
-                Positioned.fromRect(
-                  rect: flutterRect(fold),
-                  child: IgnorePointer(child: ColoredBox(color: context.palette.line)),
-                ),
               Positioned.fill(
                 child: AdaptiveNavigation(
                   selected: _tab,
@@ -209,7 +178,7 @@ class _WorkspaceState extends State<Workspace> {
                     builder: (context, _) => AdaptiveTools(
                       layout: layout,
                       withNavigation: true,
-                      tools: showDetail ? [?_tools.leading, ..._tools.actions] : const [],
+                      tools: [?_tools.leading, ..._tools.actions],
                     ),
                   ),
                 ),
@@ -253,9 +222,9 @@ class _WorkspaceState extends State<Workspace> {
     final rect = flutterRect(bounds);
     EdgeInsets local(EdgeInsets insets) => EdgeInsets.fromLTRB(
       rect.left == 0 ? math.max(insets.left, layout.navigation == NavigationEdge.left ? 84 : 0) : 0,
-      rect.top == 0 ? insets.top : 0,
+      rect.top == 0 ? math.max(insets.top, layout.verticalNavigation ? 12 : 0) : 0,
       rect.right == full.right ? math.max(insets.right, layout.navigation == NavigationEdge.right ? 84 : 0) : 0,
-      rect.bottom == full.bottom ? insets.bottom : 0,
+      rect.bottom == full.bottom ? math.max(insets.bottom, layout.verticalNavigation ? 12 : 0) : 0,
     );
     return Positioned.fromRect(
       rect: rect,

@@ -168,7 +168,7 @@ class _FoldPreviewPageState extends State<FoldPreviewPage> {
                             ? WorkspaceEntry(
                                 tab: 0,
                                 id: 'vault:${vault.id}',
-                                title: vault.name,
+
                                 page: (_) => VaultPage(c: widget.c, vaultId: vault.id),
                               )
                             : null,

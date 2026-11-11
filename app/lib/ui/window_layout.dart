@@ -53,6 +53,7 @@ class _AppWindowLayoutState extends State<AppWindowLayout> {
     builder: (context, _) {
       final media = MediaQuery.of(context);
       final padding = media.viewPadding;
+      final current = _geometry.width == media.size.width && _geometry.height == media.size.height;
       final folds = media.displayFeatures.where(
         (f) =>
             (f.type == DisplayFeatureType.fold || f.type == DisplayFeatureType.hinge) &&
@@ -64,10 +65,12 @@ class _AppWindowLayoutState extends State<AppWindowLayout> {
         height: media.size.height,
         insets: (left: padding.left, top: padding.top, right: padding.right, bottom: padding.bottom),
         keyboard: media.viewInsets.bottom,
-        fold: _geometry.fold ?? (fold == null ? null : layoutRect(fold.left, fold.top, fold.width, fold.height)),
-        occlusions: _geometry.occlusions,
-        navigation: _geometry.navigation,
-        regularWidth: _geometry.regularWidth,
+        fold:
+            (current ? _geometry.fold : null) ??
+            (fold == null ? null : layoutRect(fold.left, fold.top, fold.width, fold.height)),
+        occlusions: current ? _geometry.occlusions : const [],
+        navigation: current ? _geometry.navigation : null,
+        regularWidth: current ? _geometry.regularWidth : null,
       );
       return WindowLayoutScope(layout: layout, navigator: widget.navigator, child: widget.child);
     },
@@ -76,22 +79,12 @@ class _AppWindowLayoutState extends State<AppWindowLayout> {
 
 GlassVerticalBarData? verticalBarData(WindowLayout layout) {
   if (!layout.verticalNavigation) return null;
-  var top = layout.insets.top + 12;
-  var bottom = layout.insets.bottom + 12;
   final left = layout.navigation == NavigationEdge.left;
-  for (final area in layout.occlusions) {
-    if (left ? area.left > 84 : area.left + area.width < layout.width - 84) continue;
-    if (area.top < layout.height / 2) {
-      top = (area.top + area.height + 12).clamp(top, layout.height);
-    } else {
-      bottom = (layout.height - area.top + 12).clamp(bottom, layout.height);
-    }
-  }
   return GlassVerticalBarData(
     edge: left ? GlassVerticalBarEdge.leading : GlassVerticalBarEdge.trailing,
     width: 84,
-    top: top,
-    bottom: bottom,
+    top: layout.navigationTop,
+    bottom: layout.navigationBottom,
     rowTop: layout.insets.top + 12,
     collapsesTabBar: layout.compactNavigation,
     systemInset: false,

@@ -13,6 +13,8 @@ import 'glass_overlays.dart';
 import 'lock.dart';
 import 'theme.dart';
 import 'widgets.dart';
+import 'window_layout.dart';
+import 'workspace_scope.dart';
 
 class ApprovalPage extends StatefulWidget {
   const ApprovalPage({super.key, required this.c, required this.request});
@@ -118,8 +120,10 @@ class _ApprovalPageState extends State<ApprovalPage> {
   @override
   Widget build(BuildContext context) {
     final d = _device;
+    final tabletop = WindowLayoutScope.maybeOf(context)?.tabletop == true && WorkspaceScope.maybeOf(context) == null;
     return AppPage(
       appBar: AppBarSurface(title: Text(a.isWrite ? '批准写入变量' : '批准使用变量')),
+      controls: tabletop ? Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: _controls()) : null,
       body: (context) => ListView(
         padding: pagePadding(context, const EdgeInsets.all(Space.lg)),
         children: [
@@ -134,15 +138,15 @@ class _ApprovalPageState extends State<ApprovalPage> {
             const SizedBox(height: Space.lg),
             const Banner2('请求已失效：电脑已取消或超时，或已在其他管理设备上处理。需要时在电脑上重新运行命令。', warn: true),
             const SizedBox(height: Space.xl),
-            FilledButton(onPressed: () => Navigator.pop(context), child: const Text('关闭')),
+            if (!tabletop) ..._controls(),
           ] else
-            ..._review(),
+            ..._review(tabletop),
         ],
       ),
     );
   }
 
-  List<Widget> _review() {
+  List<Widget> _review(bool tabletop) {
     final blocked = _problem ?? _writeError;
     return [
       const SizedBox(height: Space.lg),
@@ -162,11 +166,19 @@ class _ApprovalPageState extends State<ApprovalPage> {
       ),
       if (blocked != null) ...[const SizedBox(height: Space.md), Banner2(blocked, warn: true)],
       ...a.isWrite ? _writeList() : _readList(),
-      if (!a.isWrite && blocked == null) ..._options(),
-      const SizedBox(height: Space.xl),
+      if (!tabletop) ..._controls(),
+    ];
+  }
+
+  List<Widget> _controls() {
+    if (_gone) return [FilledButton(onPressed: () => Navigator.pop(context), child: const Text('关闭'))];
+    final blocked = _problem ?? _writeError;
+    return [
+      const SizedBox(height: Space.sm),
       FilledButton(onPressed: blocked == null ? _approve : null, child: const Text('批准')),
       const SizedBox(height: Space.sm),
       OutlinedButton(onPressed: _reject, child: const Text('拒绝')),
+      if (!a.isWrite && blocked == null) ..._options(),
     ];
   }
 

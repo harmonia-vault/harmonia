@@ -61,7 +61,7 @@ class VaultsTab extends StatelessWidget {
                           WorkspaceEntry(
                             tab: 0,
                             id: 'vault:${v.id}',
-                            title: v.name,
+
                             page: (_) => VaultPage(c: c, vaultId: v.id),
                           ),
                         ),

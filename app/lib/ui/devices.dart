@@ -83,7 +83,7 @@ class _DevicesTabState extends State<DevicesTab> {
               WorkspaceEntry(
                 tab: 2,
                 id: 'device:${d.id}',
-                title: d.name,
+
                 page: (_) => DevicePage(c: c, deviceId: d.id),
               ),
             ),
@@ -145,7 +145,7 @@ class _DevicesTabState extends State<DevicesTab> {
                       WorkspaceEntry(
                         tab: 2,
                         id: 'pairing:${p.id}',
-                        title: p.name,
+
                         page: (_) => ReviewPairingPage(c: c, request: p, scanned: false),
                       ),
                     );

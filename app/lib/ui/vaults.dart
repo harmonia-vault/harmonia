@@ -53,7 +53,7 @@ Future<void> createVaultFlow(BuildContext context, AppController c) async {
       WorkspaceEntry(
         tab: 0,
         id: 'vault:$id',
-        title: name,
+
         page: (_) => VaultPage(c: c, vaultId: id!),
       ),
     );
@@ -326,7 +326,7 @@ class _VaultPageState extends State<VaultPage> with LeaveWhenGone {
                         WorkspaceEntry(
                           tab: 1,
                           id: 'env:${e.id}',
-                          title: e.name,
+
                           page: (_) => EnvironmentPage(c: c, envId: e.id),
                         ),
                       ),
