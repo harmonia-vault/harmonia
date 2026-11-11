@@ -82,7 +82,6 @@ class _AddDevicePageState extends State<AddDevicePage> {
     final ctl = TextEditingController();
     final code = await showAppDialog<String>(
       context: context,
-      useRootNavigator: false,
       builder: (c) => AppAlertDialog(
         title: const Text('输入核对码'),
         content: TextField(
@@ -202,7 +201,6 @@ class _ReviewPairingPageState extends State<ReviewPairingPage> {
     var block = false;
     final ok = await showAppDialog<bool>(
       context: context,
-      useRootNavigator: false,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, set) => AppAlertDialog(
           title: Text('拒绝“${p.name}”？'),

@@ -10,15 +10,12 @@ import 'glass_overlays.dart';
 import 'theme.dart';
 import 'variable_edit.dart' show validateVarName;
 import 'widgets.dart';
+import 'workspace_scope.dart';
 
 /// 编辑中的一条引用。勾选范围下 [items] 是勾选的变量（按勾选顺序）；全部变量范围下只记改了名的变量。
 class _Draft {
   _Draft(this.vaultId) : scope = 'all', items = [], missing = false;
-  _Draft.of(EnvRef r)
-    : vaultId = r.vaultId,
-      scope = r.scope,
-      items = [...r.items],
-      missing = r.missing;
+  _Draft.of(EnvRef r) : vaultId = r.vaultId, scope = r.scope, items = [...r.items], missing = r.missing;
 
   final String vaultId;
   String scope;
@@ -41,12 +38,8 @@ class _Draft {
     if (all && as == null) items.removeWhere((i) => i.name == name);
   }
 
-  EnvRef toRef() => EnvRef(
-    vaultId,
-    scope,
-    items: all ? items.where((i) => i.as != null).toList() : items,
-    missing: missing,
-  );
+  EnvRef toRef() =>
+      EnvRef(vaultId, scope, items: all ? items.where((i) => i.as != null).toList() : items, missing: missing);
 }
 
 /// 询问变量库里的 [source] 在环境里的名字。返回 null 表示取消，空字符串表示用回原名。
@@ -55,7 +48,6 @@ Future<String?> askAlias(BuildContext context, String source, String? current) a
   final form = GlobalKey<FormState>();
   final result = await showAppDialog<String>(
     context: context,
-    useRootNavigator: false,
     builder: (ctx) {
       void submit() {
         if (form.currentState!.validate()) Navigator.pop(ctx, ctl.text.trim());
@@ -112,7 +104,6 @@ class _EnvEditorPageState extends State<EnvEditorPage> {
     }
     final id = await showAppDialog<String>(
       context: context,
-      useRootNavigator: false,
       builder: (ctx) => AppSimpleDialog(
         title: const Text('添加变量库'),
         children: [
@@ -168,6 +159,7 @@ class _EnvEditorPageState extends State<EnvEditorPage> {
     }
     final refs = _built;
     final nav = Navigator.of(context);
+    final workspace = WorkspaceScope.maybeOf(context);
     String? created;
     final ok = await runBusy(context, () async {
       await c.guard(() async {
@@ -178,13 +170,20 @@ class _EnvEditorPageState extends State<EnvEditorPage> {
         }
       });
     }, done: widget.envId == null ? '已创建环境“$name”' : '已保存');
-    if (!ok) return;
+    if (!ok || !mounted) return;
     if (created != null) {
-      nav.pushReplacement(
-        MaterialPageRoute(
-          builder: (_) => EnvironmentPage(c: c, envId: created!),
-        ),
+      nav.pop();
+      final entry = WorkspaceEntry(
+        tab: 1,
+        id: 'env:$created',
+        title: name,
+        page: (_) => EnvironmentPage(c: c, envId: created!),
       );
+      if (workspace != null) {
+        workspace.open(entry);
+      } else {
+        nav.push(MaterialPageRoute(builder: entry.page));
+      }
     } else {
       nav.pop();
     }

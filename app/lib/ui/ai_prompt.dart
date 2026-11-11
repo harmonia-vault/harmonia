@@ -16,7 +16,6 @@ import 'widgets.dart';
 
 Future<void> showAiPrompt(BuildContext context, AppController c) => showAppDialog<void>(
   context: context,
-  useRootNavigator: false,
   builder: (_) => _AiPromptDialog(c: c),
 );
 

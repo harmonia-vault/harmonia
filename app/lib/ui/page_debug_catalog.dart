@@ -25,6 +25,7 @@ import 'env_page.dart';
 import 'env_var_sheet.dart';
 import 'environments.dart';
 import 'feedback_debug.dart';
+import 'fold_preview.dart';
 import 'glass.dart';
 import 'glass_debug.dart';
 import 'home.dart';
@@ -37,6 +38,7 @@ import 'recovery_actions.dart';
 import 'recovery_pages.dart';
 import 'scanner.dart';
 import 'settings.dart';
+import 'settings_categories.dart';
 import 'widgets.dart';
 import 'theme.dart';
 import 'variable_edit.dart';
@@ -54,6 +56,8 @@ class DebugPageEntry {
 
 Map<String, List<DebugPageEntry>> debugPages() => {
   '首页与管理': [
+    DebugPageEntry('折叠屏：内外屏、半折叠与左右分屏', (s) => FoldPreviewPage(c: s.c), followStage: false),
+    DebugPageEntry('设置分组与详情', (s) => SettingsCategories(c: s.c)),
     DebugPageEntry('首页、底栏交互动效与系统间距', (s) => s.vault.paired ? HomePage(c: s.c) : SignInPage(c: s.c)),
     DebugPageEntry('玻璃透明度与折射对照', (s) => GlassDebugPage(c: s.c)),
     DebugPageEntry('通知默认动效与下载进度', (_) => const FeedbackDebugPage()),

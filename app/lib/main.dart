@@ -28,6 +28,7 @@ import 'ui/stage_page.dart';
 import 'ui/pairing.dart';
 import 'ui/theme.dart';
 import 'ui/widgets.dart';
+import 'ui/window_layout.dart';
 
 /// 安全存储：Android 上由 Keystore 包装加密，iOS 上是仅限本机的钥匙串条目。
 /// 设备密钥另外用本机数据密钥加密（见 core/keyring.dart）。
@@ -180,7 +181,10 @@ class _HarmoniaAppState extends State<HarmoniaApp> with WidgetsBindingObserver {
       preview: widget.c.glassOpacityPreview,
       child: AppScope(
         identity: widget.c.identity,
-        child: LiquidGlassWidgets.wrap(brightnessResolver: Theme.maybeBrightnessOf, child: child!),
+        child: AppWindowLayout(
+          navigator: _navigator,
+          child: LiquidGlassWidgets.wrap(brightnessResolver: Theme.maybeBrightnessOf, child: child!),
+        ),
       ),
     ),
     locale: const Locale('zh', 'CN'),

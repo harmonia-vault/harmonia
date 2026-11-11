@@ -38,7 +38,6 @@ Future<Uint8List?> verifyIdentity(BuildContext context, String reason) async {
   }
   return showAppDialog<Uint8List>(
     context: context,
-    useRootNavigator: false,
     barrierDismissible: false,
     builder: (_) => _PinDialog(reason: reason),
   );
@@ -140,7 +139,6 @@ Future<String?> askNewPin(BuildContext context) {
   String? error;
   return showAppDialog<String>(
     context: context,
-    useRootNavigator: false,
     builder: (c) => StatefulBuilder(
       builder: (c, setState) => AppAlertDialog(
         title: const Text('设置新的 App PIN'),

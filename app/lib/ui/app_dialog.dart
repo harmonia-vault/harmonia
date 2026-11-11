@@ -3,11 +3,15 @@ import 'package:flutter/material.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
 import 'glass.dart';
+import 'adaptive_presentation.dart';
+import 'window_layout.dart';
+import 'workspace_scope.dart';
 
 RawDialogRoute<T> appDialogRoute<T>({
   required BuildContext context,
   required WidgetBuilder builder,
   CapturedThemes? themes,
+  WorkspaceScope? workspace,
   bool barrierDismissible = true,
 }) {
   final reduceMotion = MediaQuery.disableAnimationsOf(context);
@@ -16,18 +20,23 @@ RawDialogRoute<T> appDialogRoute<T>({
       barrierColor: glassBarrierColor(context),
       barrierDismissible: barrierDismissible,
       barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
-      pageBuilder: (context, _, _) => SafeArea(
+      pageBuilder: (context, _, _) => AdaptivePresentation(
+        workspace: workspace,
         child: themes?.wrap(Builder(builder: builder)) ?? Builder(builder: builder),
       ),
     );
   }
-  return DialogRoute<T>(
-    context: context,
-    builder: builder,
-    themes: themes,
+  return RawDialogRoute<T>(
+    pageBuilder: (context, _, _) => AdaptivePresentation(
+      workspace: workspace,
+      child: themes?.wrap(Builder(builder: builder)) ?? Builder(builder: builder),
+    ),
+    barrierColor: glassBarrierColor(context),
+    barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
     barrierDismissible: barrierDismissible,
     traversalEdgeBehavior: TraversalEdgeBehavior.closedLoop,
-    animationStyle: reduceMotion ? AnimationStyle.noAnimation : null,
+    transitionDuration: Duration.zero,
+    transitionBuilder: (context, animation, secondary, child) => child,
   );
 }
 
@@ -52,14 +61,15 @@ class _AppGlassDialogRoute<T> extends RawDialogRoute<T> {
 Future<T?> showAppDialog<T>({
   required BuildContext context,
   required WidgetBuilder builder,
-  bool useRootNavigator = true,
   bool barrierDismissible = true,
 }) {
-  final navigator = Navigator.of(context, rootNavigator: useRootNavigator);
+  // 使用本次会话自己的根导航器；页面调试不会把弹窗放进真实账号的导航器。
+  final navigator = WindowLayoutScope.navigatorOf(context);
   return navigator.push<T>(
     appDialogRoute<T>(
       context: context,
       builder: builder,
+      workspace: WorkspaceScope.maybeOf(context),
       barrierDismissible: barrierDismissible,
       themes: InheritedTheme.capture(from: context, to: navigator.context),
     ),

@@ -292,7 +292,6 @@ Future<ApprovalDuration?> askCustomDuration(BuildContext context) async {
   String? error;
   final result = await showAppDialog<ApprovalDuration>(
     context: context,
-    useRootNavigator: false,
     builder: (ctx) => StatefulBuilder(
       builder: (ctx, set) => AppAlertDialog(
         title: const Text('自定义时长'),

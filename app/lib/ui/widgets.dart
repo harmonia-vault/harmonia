@@ -10,6 +10,8 @@ import 'theme.dart';
 import 'app_scope.dart';
 import 'glass_overlays.dart';
 import 'glass.dart';
+import 'window_layout.dart';
+import 'workspace_scope.dart';
 
 /// 把异常转成给用户看的一句话。
 String errorText(Object e) {
@@ -72,10 +74,11 @@ Future<bool> runBusy(
   String? done,
   WidgetBuilder? progressBuilder,
 }) async {
-  final nav = Navigator.of(context);
+  final nav = WindowLayoutScope.navigatorOf(context);
   // 只移除这个进度弹窗本身：操作期间页面栈可能因阶段切换而被清空。
   final route = appDialogRoute<void>(
     context: context,
+    workspace: WorkspaceScope.maybeOf(context),
     barrierDismissible: false,
     builder: (context) => PopScope(
       canPop: false,
@@ -114,7 +117,6 @@ Future<bool> confirmDialog(
 }) async {
   final r = await showAppDialog<bool>(
     context: context,
-    useRootNavigator: false,
     builder: (c) => AppAlertDialog(
       title: Text(title),
       content: Text(tidy(body)),

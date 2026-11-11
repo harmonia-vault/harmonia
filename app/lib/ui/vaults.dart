@@ -12,12 +12,12 @@ import 'list_row.dart';
 import 'theme.dart';
 import 'variable_edit.dart';
 import 'widgets.dart';
+import 'workspace_scope.dart';
 
 Future<String?> askName(BuildContext context, {required String title, String initial = '', String label = '名称'}) {
   final ctl = TextEditingController(text: initial);
   return showAppDialog<String>(
     context: context,
-    useRootNavigator: false,
     builder: (c) => AppAlertDialog(
       title: Text(title),
       content: TextField(
@@ -48,10 +48,13 @@ Future<void> createVaultFlow(BuildContext context, AppController c) async {
     await c.guard(() async => id = await c.vault.createVault(name));
   }, done: '已创建变量库');
   if (ok && id != null && context.mounted) {
-    await Navigator.push(
+    await openWorkspaceEntry(
       context,
-      MaterialPageRoute(
-        builder: (_) => VaultPage(c: c, vaultId: id!),
+      WorkspaceEntry(
+        tab: 0,
+        id: 'vault:$id',
+        title: name,
+        page: (_) => VaultPage(c: c, vaultId: id!),
       ),
     );
   }
@@ -236,12 +239,7 @@ class _VaultPageState extends State<VaultPage> with LeaveWhenGone {
   @override
   bool get exists => c.vault.vaultName(widget.vaultId) != null;
 
-  void _edit([String? name]) => Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (_) => VariableEditPage(c: c, vaultId: widget.vaultId, name: name),
-    ),
-  );
+  void _edit([String? name]) => editVariable(context, c, widget.vaultId, name: name);
 
   Future<void> _menu(String action, String name, List<String> usedBy) async {
     if (action == 'rename') {
@@ -323,10 +321,13 @@ class _VaultPageState extends State<VaultPage> with LeaveWhenGone {
                       title: Text(e.name),
                       subtitle: Text(refSummary(e.refs.firstWhere((r) => r.vaultId == widget.vaultId))),
                       trailing: const ListRowChevron(),
-                      onTap: () => Navigator.push(
+                      onTap: () => openWorkspaceEntry(
                         context,
-                        MaterialPageRoute(
-                          builder: (_) => EnvironmentPage(c: c, envId: e.id),
+                        WorkspaceEntry(
+                          tab: 1,
+                          id: 'env:${e.id}',
+                          title: e.name,
+                          page: (_) => EnvironmentPage(c: c, envId: e.id),
                         ),
                       ),
                     ),

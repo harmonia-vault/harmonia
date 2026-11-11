@@ -20,8 +20,9 @@ import 'glass_transparency.dart';
 import 'widgets.dart';
 
 class SettingsTab extends StatefulWidget {
-  const SettingsTab({super.key, required this.c});
+  const SettingsTab({super.key, required this.c, this.section});
   final AppController c;
+  final String? section;
   @override
   State<SettingsTab> createState() => _SettingsTabState();
 }
@@ -76,7 +77,6 @@ class _SettingsTabState extends State<SettingsTab> {
   Future<void> _pickChannel() async {
     final picked = await showAppDialog<UpdateChannel>(
       context: context,
-      useRootNavigator: false,
       builder: (ctx) => AppSimpleDialog(
         title: const Text('更新渠道'),
         children: [
@@ -132,7 +132,6 @@ class _SettingsTabState extends State<SettingsTab> {
   Future<void> _pickColorMode() async {
     final picked = await showAppDialog<AppColorMode>(
       context: context,
-      useRootNavigator: false,
       builder: (ctx) => AppSimpleDialog(
         title: const Text('颜色模式'),
         children: [
@@ -185,174 +184,183 @@ class _SettingsTabState extends State<SettingsTab> {
   Widget build(BuildContext context) {
     final cfg = c.vault.config!;
     final p = context.palette;
-    return AppTabPage(
-      title: '设置',
-      padding: EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, 96),
-      children: [
-        const SectionTitle('账号'),
-        Card(
-          child: Column(
-            children: [
-              ListTile(leading: const Icon(Icons.alternate_email), title: Text(cfg.email), subtitle: const Text('账号')),
-              const Divider(),
-              ListTile(
-                leading: const Icon(Icons.dns_outlined),
-                title: Text(cfg.server),
-                subtitle: Text(c.online ? '已连接' : '离线，显示的是上次同步的数据'),
-                trailing: Icon(Icons.circle, size: 10, color: c.online ? p.ok : p.mute),
-              ),
-              const Divider(),
-              ListTile(
-                leading: Icon(platformIcon(c.platform)),
-                title: Text(cfg.deviceName),
-                subtitle: const Text('本机'),
-              ),
-            ],
-          ),
-        ),
-        const SectionTitle('外观'),
-        if (c.appearanceError != null) Banner2(c.appearanceError!, warn: true),
-        Card(
-          child: Column(
-            children: [
-              ListTile(
-                leading: const Icon(Icons.brightness_6_outlined),
-                title: const Text('颜色模式'),
-                subtitle: Text(colorModeLabel(c.appearance.colorMode)),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: _changingAppearance ? null : _pickColorMode,
-              ),
-              const Divider(),
-              GlassTransparencyControl(
-                value: c.appearance.glassOpacity,
-                onChanged: c.setGlassOpacity,
-                onPreview: c.previewGlassOpacity,
-              ),
-            ],
-          ),
-        ),
-        const SectionTitle('通知'),
-        Card(
-          child: Column(
-            children: [
-              AppSwitchTile(
-                icon: const Icon(Icons.notifications_outlined),
-                title: const Text('后台通知'),
-                subtitle: Text(pushStatusText(c.pushStatus)),
-                value: c.pushEnabled,
-                onChanged: _changingPush ? null : _togglePush,
-              ),
-              if (c.pushStatus == PushStatus.needsPermission) ...[
-                const Divider(),
-                ListTile(
-                  leading: const Icon(Icons.notifications_active_outlined),
-                  title: const Text('允许通知'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: _changingPush ? null : () => _pushAction(c.requestPushPermission),
-                ),
-              ],
-              if (c.pushStatus == PushStatus.systemOff) ...[
-                const Divider(),
-                ListTile(
-                  leading: const Icon(Icons.settings_outlined),
-                  title: const Text('打开系统设置'),
-                  subtitle: const Text('允许 Harmonia 发送通知后回到这里'),
-                  trailing: const Icon(Icons.open_in_new),
-                  onTap: c.openNotificationSettings,
-                ),
-              ],
-            ],
-          ),
-        ),
-        const SectionTitle('安全'),
-        Card(
-          child: Column(
-            children: [
-              ListTile(
-                leading: const Icon(Icons.pin_outlined),
-                title: const Text('修改 App PIN'),
-                subtitle: const Text('离开 App 超过 5 分钟后，需输入 App PIN'),
-                onTap: _changePin,
-              ),
-              if (_bioAvailable || _bioEnabled) ...[
-                const Divider(),
-                AppSwitchTile(
-                  icon: Icon(bioIcon(c.identity)),
-                  value: _bioEnabled,
-                  onChanged: _toggleBio,
-                  title: Text(c.identity.bio('解锁')),
-                  subtitle: Text('可以用${c.identity.bio('代替')} App PIN'),
-                ),
-              ],
-              const Divider(),
-              ListTile(
-                leading: const Icon(Icons.key_outlined),
-                title: const Text('更换恢复码'),
-                subtitle: const Text('保存并核对新恢复码后，旧恢复码失效'),
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => RotationPage(c: c))),
-              ),
-            ],
-          ),
-        ),
-        const SectionTitle('关于'),
-        Card(
-          child: Column(
-            children: [
-              ListTile(
-                leading: const Icon(Icons.system_update_outlined),
-                title: const Text('检查更新'),
-                subtitle: Text('当前版本 $appVersion'),
-                onTap: () => checkForUpdate(context, manual: true, channel: c.updateChannel),
-              ),
-              const Divider(),
-              ListTile(
-                leading: const Icon(Icons.alt_route_outlined),
-                title: const Text('更新渠道'),
-                subtitle: Text(c.updateChannel.label),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: _pickChannel,
-              ),
-              const Divider(),
-              ListTile(
-                leading: const Icon(Icons.info_outline),
-                title: const Text('关于 Harmonia'),
-                subtitle: const Text('版本信息和开源项目的版权说明'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AboutPage(c: c))),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: Space.xl),
-        OutlinedButton(
-          style: OutlinedButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error),
-          onPressed: _logout,
-          child: const Text('退出登录'),
-        ),
-        if (c.prefs.developerOptions && !AppScope.isSimulated(context)) ...[
-          const SectionTitle('开发者选项'),
-          Card(
-            child: Column(
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.developer_mode),
-                  title: const Text('页面调试'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: _openPageDebug,
-                ),
-                const Divider(),
-                ListTile(
-                  leading: const Icon(Icons.visibility_off_outlined),
-                  title: const Text('关闭开发者选项'),
-                  subtitle: const Text('在“关于”页连点 5 次版本号可以再次打开'),
-                  onTap: _closeDeveloperOptions,
-                ),
-              ],
+    final allSections = <Widget>[
+      const SectionTitle('账号'),
+      Card(
+        child: Column(
+          children: [
+            ListTile(leading: const Icon(Icons.alternate_email), title: Text(cfg.email), subtitle: const Text('账号')),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.dns_outlined),
+              title: Text(cfg.server),
+              subtitle: Text(c.online ? '已连接' : '离线，显示的是上次同步的数据'),
+              trailing: Icon(Icons.circle, size: 10, color: c.online ? p.ok : p.mute),
             ),
+            const Divider(),
+            ListTile(leading: Icon(platformIcon(c.platform)), title: Text(cfg.deviceName), subtitle: const Text('本机')),
+          ],
+        ),
+      ),
+      const SectionTitle('外观'),
+      if (c.appearanceError != null) Banner2(c.appearanceError!, warn: true),
+      Card(
+        child: Column(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.brightness_6_outlined),
+              title: const Text('颜色模式'),
+              subtitle: Text(colorModeLabel(c.appearance.colorMode)),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: _changingAppearance ? null : _pickColorMode,
+            ),
+            const Divider(),
+            GlassTransparencyControl(
+              value: c.appearance.glassOpacity,
+              onChanged: c.setGlassOpacity,
+              onPreview: c.previewGlassOpacity,
+            ),
+          ],
+        ),
+      ),
+      const SectionTitle('通知'),
+      Card(
+        child: Column(
+          children: [
+            AppSwitchTile(
+              icon: const Icon(Icons.notifications_outlined),
+              title: const Text('后台通知'),
+              subtitle: Text(pushStatusText(c.pushStatus)),
+              value: c.pushEnabled,
+              onChanged: _changingPush ? null : _togglePush,
+            ),
+            if (c.pushStatus == PushStatus.needsPermission) ...[
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.notifications_active_outlined),
+                title: const Text('允许通知'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: _changingPush ? null : () => _pushAction(c.requestPushPermission),
+              ),
+            ],
+            if (c.pushStatus == PushStatus.systemOff) ...[
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.settings_outlined),
+                title: const Text('打开系统设置'),
+                subtitle: const Text('允许 Harmonia 发送通知后回到这里'),
+                trailing: const Icon(Icons.open_in_new),
+                onTap: c.openNotificationSettings,
+              ),
+            ],
+          ],
+        ),
+      ),
+      const SectionTitle('安全'),
+      Card(
+        child: Column(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.pin_outlined),
+              title: const Text('修改 App PIN'),
+              subtitle: const Text('离开 App 超过 5 分钟后，需输入 App PIN'),
+              onTap: _changePin,
+            ),
+            if (_bioAvailable || _bioEnabled) ...[
+              const Divider(),
+              AppSwitchTile(
+                icon: Icon(bioIcon(c.identity)),
+                value: _bioEnabled,
+                onChanged: _toggleBio,
+                title: Text(c.identity.bio('解锁')),
+                subtitle: Text('可以用${c.identity.bio('代替')} App PIN'),
+              ),
+            ],
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.key_outlined),
+              title: const Text('更换恢复码'),
+              subtitle: const Text('保存并核对新恢复码后，旧恢复码失效'),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => RotationPage(c: c))),
+            ),
+          ],
+        ),
+      ),
+      const SectionTitle('关于'),
+      Card(
+        child: Column(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.system_update_outlined),
+              title: const Text('检查更新'),
+              subtitle: Text('当前版本 $appVersion'),
+              onTap: () => checkForUpdate(context, manual: true, channel: c.updateChannel),
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.alt_route_outlined),
+              title: const Text('更新渠道'),
+              subtitle: Text(c.updateChannel.label),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: _pickChannel,
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.info_outline),
+              title: const Text('关于 Harmonia'),
+              subtitle: const Text('版本信息和开源项目的版权说明'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AboutPage(c: c))),
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: Space.xl),
+      OutlinedButton(
+        style: OutlinedButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error),
+        onPressed: _logout,
+        child: const Text('退出登录'),
+      ),
+      if (c.prefs.developerOptions && !AppScope.isSimulated(context)) ...[
+        const SectionTitle('开发者选项'),
+        Card(
+          child: Column(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.developer_mode),
+                title: const Text('页面调试'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: _openPageDebug,
+              ),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.visibility_off_outlined),
+                title: const Text('关闭开发者选项'),
+                subtitle: const Text('在“关于”页连点 5 次版本号可以再次打开'),
+                onTap: _closeDeveloperOptions,
+              ),
+            ],
           ),
-        ],
+        ),
       ],
-    );
+    ];
+    if (widget.section case final section?) {
+      var include = false;
+      final selected = <Widget>[];
+      for (final child in allSections) {
+        if (child is SectionTitle) {
+          include = child.text == section;
+          continue;
+        }
+        if (include) selected.add(child);
+      }
+      return AppPage(
+        appBar: AppBarSurface(title: Text(section)),
+        body: (context) =>
+            ListView(padding: pagePadding(context, const EdgeInsets.fromLTRB(16, 12, 16, 96)), children: selected),
+      );
+    }
+    return AppTabPage(title: '设置', padding: const EdgeInsets.fromLTRB(16, 0, 16, 96), children: allSections);
   }
 }
 

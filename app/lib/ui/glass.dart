@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
 import 'theme.dart';
+import 'adaptive_page.dart';
 import 'glass_material.dart';
 
 abstract final class GlassResources {
@@ -186,49 +187,15 @@ class AppPage extends StatelessWidget {
   final AppBarSurface? appBar;
   final WidgetBuilder body;
 
-  /// 正文是否随键盘收缩。默认只有不带悬浮按钮的页面收缩：带悬浮按钮的页面自己没有输入框，
-  /// 键盘来自上面的弹窗，按钮不该被顶上去。
+  /// 正文是否随键盘收缩；一级列表由上层面板处理键盘，不收缩。
   final bool? avoidKeyboard;
 
   /// 盖在正文和边缘效果之上的定位内容，与正文共用同一套遮挡高度。
   final WidgetBuilder? overlay;
 
   @override
-  Widget build(BuildContext context) {
-    final behindBar = (appBar != null);
-    return GlassBackdropGroup(
-      enabled: true,
-      joinEnclosing: true,
-      child: Scaffold(
-        resizeToAvoidBottomInset: avoidKeyboard ?? true,
-        extendBodyBehindAppBar: behindBar,
-        appBar: appBar,
-        body: Builder(
-          builder: (context) {
-            if (!behindBar) return body(context);
-            // 正文滚到标题栏下方时溶进纸色，不和标题、按钮叠在一起。iOS 再叠一层渐进模糊；
-            // 它每帧多一次整宽的背景采样，Android 机型差异大，只保留不耗 GPU 的纸色渐隐。
-            final fadeHeight = MediaQuery.paddingOf(context).top + 24;
-            final page = body(context);
-            final content = GlassScrollEdgeEffect(
-              fadeBottom: false,
-              topFadeHeight: fadeHeight,
-              fadeColor: context.palette.paper,
-              child: Theme.of(context).platform == TargetPlatform.iOS
-                  ? GlassScrollEdgeEffect(
-                      fadeBottom: false,
-                      topFadeHeight: fadeHeight,
-                      style: GlassScrollEdgeStyle.blur,
-                      child: page,
-                    )
-                  : page,
-            );
-            return overlay == null ? content : Stack(children: [content, overlay!(context)]);
-          },
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) =>
+      AdaptivePageFrame(appBar: appBar, body: body, overlay: overlay, avoidKeyboard: avoidKeyboard);
 }
 
 /// Scaffold 已计算标题栏与安全区；不要在这里再次累加工具栏高度。

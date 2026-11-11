@@ -14,6 +14,7 @@ import 'theme.dart';
 import 'glass.dart';
 import 'widgets.dart';
 import 'list_row.dart';
+import 'workspace_scope.dart';
 
 IconData platformIcon(String p) => switch (p) {
   'android' => Icons.phone_android,
@@ -76,10 +77,14 @@ class _DevicesTabState extends State<DevicesTab> {
                   : '${d.grants.length} 个环境 · ${formatTime(d.lastSeenAt)}活动',
             ),
             trailing: const ListRowChevron(),
-            onTap: () => Navigator.push(
+            selected: WorkspaceScope.maybeOf(context)?.selected[2]?.id == 'device:${d.id}',
+            onTap: () => openWorkspaceEntry(
               context,
-              MaterialPageRoute(
-                builder: (_) => DevicePage(c: c, deviceId: d.id),
+              WorkspaceEntry(
+                tab: 2,
+                id: 'device:${d.id}',
+                title: d.name,
+                page: (_) => DevicePage(c: c, deviceId: d.id),
               ),
             ),
           ),
@@ -135,10 +140,13 @@ class _DevicesTabState extends State<DevicesTab> {
                   subtitle: Text('${platformName(p.platform)} · 请求接入'),
                   trailing: const ListRowChevron(),
                   onTap: () async {
-                    await Navigator.push(
+                    await openWorkspaceEntry(
                       context,
-                      MaterialPageRoute(
-                        builder: (_) => ReviewPairingPage(c: c, request: p, scanned: false),
+                      WorkspaceEntry(
+                        tab: 2,
+                        id: 'pairing:${p.id}',
+                        title: p.name,
+                        page: (_) => ReviewPairingPage(c: c, request: p, scanned: false),
                       ),
                     );
                     _loadPending();

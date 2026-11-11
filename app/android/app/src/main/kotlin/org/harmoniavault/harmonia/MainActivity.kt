@@ -67,6 +67,8 @@ class MainActivity : FlutterFragmentActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        io.flutter.plugin.common.EventChannel(flutterEngine.dartExecutor.binaryMessenger, "harmonia/layout")
+            .setStreamHandler(WindowLayoutChannel(this))
         val keys = LocalKeys(this)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "harmonia/keys").setMethodCallHandler(keys::handle)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "harmonia/push").setMethodCallHandler(push::handle)

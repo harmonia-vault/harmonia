@@ -44,7 +44,6 @@ String formatLeft(DateTime expiresAt) {
 /// 在管理设备上选好有效期后生成配对码并显示，到期后可以重新生成。已有的配对码不受影响。
 Future<void> showPairingCode(BuildContext context, AppController c) => showAppDialog<void>(
   context: context,
-  useRootNavigator: false,
   builder: (_) => _PairingCodeDialog(c: c),
 );
 
@@ -118,7 +117,6 @@ Future<String?> askPairingCode(BuildContext context) {
   final ctl = TextEditingController();
   return showAppDialog<String>(
     context: context,
-    useRootNavigator: false,
     builder: (c) => AppAlertDialog(
       title: const Text('接入这台手机'),
       content: Column(

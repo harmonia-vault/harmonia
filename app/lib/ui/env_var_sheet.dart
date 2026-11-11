@@ -78,11 +78,7 @@ class _EnvVariableSheet extends StatelessWidget {
 
   void _editValue(BuildContext context) {
     Navigator.of(context).pop();
-    pageNav.push(
-      MaterialPageRoute(
-        builder: (_) => VariableEditPage(c: c, vaultId: item.vaultId, name: item.source),
-      ),
-    );
+    editVariable(pageNav.context, c, item.vaultId, name: item.source);
   }
 
   @override

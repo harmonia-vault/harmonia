@@ -9,6 +9,9 @@ import 'glass.dart';
 import 'list_row.dart';
 import 'theme.dart';
 import 'widgets.dart';
+import 'workspace_scope.dart';
+import 'adaptive_presentation.dart';
+import 'glass_overlays.dart';
 
 class EnvironmentsTab extends StatelessWidget {
   const EnvironmentsTab({super.key, required this.c});
@@ -18,7 +21,10 @@ class EnvironmentsTab extends StatelessWidget {
     if (c.vault.vaults.isEmpty) {
       toast(context, '先在“变量库”里新建一个变量库，环境里的变量来自变量库');
     } else {
-      Navigator.push(context, MaterialPageRoute(builder: (_) => EnvEditorPage(c: c)));
+      showAppDialog<void>(
+        context: context,
+        builder: (context) => adaptiveEditor(context, (_) => EnvEditorPage(c: c)),
+      );
     }
   }
 
@@ -67,10 +73,14 @@ class EnvironmentsTab extends StatelessWidget {
                         title: Text(e.name, style: const TextStyle(fontWeight: FontWeight.w600)),
                         subtitle: subtitle(e),
                         trailing: const ListRowChevron(),
-                        onTap: () => Navigator.push(
+                        selected: WorkspaceScope.maybeOf(context)?.selected[1]?.id == 'env:${e.id}',
+                        onTap: () => openWorkspaceEntry(
                           context,
-                          MaterialPageRoute(
-                            builder: (_) => EnvironmentPage(c: c, envId: e.id),
+                          WorkspaceEntry(
+                            tab: 1,
+                            id: 'env:${e.id}',
+                            title: e.name,
+                            page: (_) => EnvironmentPage(c: c, envId: e.id),
                           ),
                         ),
                       ),

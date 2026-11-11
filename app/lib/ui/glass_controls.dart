@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
 import 'glass.dart';
+import 'glass_overlays.dart';
 import 'theme.dart';
+import 'window_layout.dart';
 
 typedef AppOption<T> = ({T value, String label});
 
@@ -27,6 +29,48 @@ class AppSelect<T> extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = context.palette;
     final current = options.firstWhere((o) => o.value == value, orElse: () => options.first).label;
+    Widget trigger(VoidCallback toggle) => TextButton(
+      onPressed: toggle,
+      style: TextButton.styleFrom(
+        foregroundColor: p.mute,
+        textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+        minimumSize: const Size(0, 32),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        shape: const StadiumBorder(),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(current),
+          const SizedBox(width: 4),
+          const Icon(CupertinoIcons.chevron_up_chevron_down, size: 13),
+        ],
+      ),
+    );
+    if (WindowLayoutScope.maybeOf(context)?.fold != null) {
+      return trigger(() async {
+        final selected = await showAppDialog<T>(
+          context: context,
+          builder: (context) => AppSimpleDialog(
+            title: Text(semanticLabel),
+            children: [
+              for (final option in options)
+                SimpleDialogOption(
+                  onPressed: () => Navigator.pop(context, option.value),
+                  child: Row(
+                    children: [
+                      Expanded(child: Text(option.label)),
+                      if (option.value == value) const Icon(CupertinoIcons.checkmark, size: 18),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        );
+        if (context.mounted && selected != null) onChanged(selected);
+      });
+    }
     return GlassMenu(
       autoAdjustToScreen: true,
       morphSpeed: MediaQuery.disableAnimationsOf(context) ? MorphSpeed.instant : MorphSpeed.fast,
@@ -48,26 +92,7 @@ class AppSelect<T> extends StatelessWidget {
             onTap: () => onChanged(o.value),
           ),
       ],
-      triggerBuilder: (context, toggle) => TextButton(
-        onPressed: toggle,
-        style: TextButton.styleFrom(
-          foregroundColor: p.mute,
-          textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-          minimumSize: const Size(0, 32),
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          // 左右各留 8 作按压反馈的余量。
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          shape: const StadiumBorder(),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(current),
-            const SizedBox(width: 4),
-            const Icon(CupertinoIcons.chevron_up_chevron_down, size: 13),
-          ],
-        ),
-      ),
+      triggerBuilder: (context, toggle) => trigger(toggle),
     );
   }
 }

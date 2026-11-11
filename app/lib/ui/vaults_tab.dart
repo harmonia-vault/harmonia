@@ -7,6 +7,7 @@ import 'list_row.dart';
 import 'theme.dart';
 import 'vaults.dart';
 import 'widgets.dart';
+import 'workspace_scope.dart';
 
 class VaultsTab extends StatelessWidget {
   const VaultsTab({super.key, required this.c});
@@ -54,10 +55,14 @@ class VaultsTab extends StatelessWidget {
                         title: Text(v.name, style: const TextStyle(fontWeight: FontWeight.w600)),
                         subtitle: Text(subtitle(v.id), maxLines: 1, overflow: TextOverflow.ellipsis),
                         trailing: const ListRowChevron(),
-                        onTap: () => Navigator.push(
+                        selected: WorkspaceScope.maybeOf(context)?.selected[0]?.id == 'vault:${v.id}',
+                        onTap: () => openWorkspaceEntry(
                           context,
-                          MaterialPageRoute(
-                            builder: (_) => VaultPage(c: c, vaultId: v.id),
+                          WorkspaceEntry(
+                            tab: 0,
+                            id: 'vault:${v.id}',
+                            title: v.name,
+                            page: (_) => VaultPage(c: c, vaultId: v.id),
                           ),
                         ),
                       ),

@@ -12,6 +12,8 @@ import 'list_row.dart';
 import 'theme.dart';
 import 'vaults.dart';
 import 'widgets.dart';
+import 'adaptive_presentation.dart';
+import 'workspace_scope.dart';
 
 /// 引用的范围说明，例如“全部变量”。
 String refSummary(EnvRef r) => r.all ? '全部变量' : '选中 ${r.items.length} 个变量';
@@ -45,11 +47,9 @@ class _EnvironmentPageState extends State<EnvironmentPage> with LeaveWhenGone {
   @override
   bool get exists => c.vault.environments.any((e) => e.id == widget.envId);
 
-  void _editRefs() => Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (_) => EnvEditorPage(c: c, envId: widget.envId),
-    ),
+  void _editRefs() => showAppDialog<void>(
+    context: context,
+    builder: (context) => adaptiveEditor(context, (_) => EnvEditorPage(c: c, envId: widget.envId)),
   );
 
   Future<void> _menu(String action, Environment env) async {
@@ -171,10 +171,13 @@ class _EnvironmentPageState extends State<EnvironmentPage> with LeaveWhenGone {
                       trailing: r.missing ? null : const ListRowChevron(),
                       onTap: r.missing
                           ? null
-                          : () => Navigator.push(
+                          : () => openWorkspaceEntry(
                               context,
-                              MaterialPageRoute(
-                                builder: (_) => VaultPage(c: c, vaultId: r.vaultId),
+                              WorkspaceEntry(
+                                tab: 0,
+                                id: 'vault:${r.vaultId}',
+                                title: c.vault.vaultName(r.vaultId) ?? '',
+                                page: (_) => VaultPage(c: c, vaultId: r.vaultId),
                               ),
                             ),
                     ),

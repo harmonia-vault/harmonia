@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
 import 'glass.dart';
+import 'app_dialog.dart';
 import 'theme.dart';
+import 'window_layout.dart';
 
 export 'app_dialog.dart' show showAppDialog, appDialogRoute;
 
@@ -204,6 +206,33 @@ class AppMenuButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Widget button(VoidCallback open) =>
+        trigger?.call(context, open) ??
+        IconButton(tooltip: '更多操作', icon: const Icon(CupertinoIcons.ellipsis), onPressed: open);
+    if (WindowLayoutScope.maybeOf(context)?.fold != null) {
+      return button(() async {
+        final selected = await showAppDialog<String>(
+          context: context,
+          builder: (context) => AppSimpleDialog(
+            title: Text(semanticLabel),
+            children: [
+              for (final item in items)
+                SimpleDialogOption(
+                  onPressed: () => Navigator.pop(context, item.value),
+                  child: Row(
+                    children: [
+                      Icon(item.icon, color: item.danger ? Theme.of(context).colorScheme.error : null),
+                      const SizedBox(width: 12),
+                      Expanded(child: Text(item.label)),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        );
+        if (context.mounted && selected != null) onSelected(selected);
+      });
+    }
     return GlassMenu(
       autoAdjustToScreen: true,
       morphSpeed: MediaQuery.disableAnimationsOf(context) ? MorphSpeed.instant : MorphSpeed.fast,
@@ -226,9 +255,7 @@ class AppMenuButton extends StatelessWidget {
             onTap: () => onSelected(item.value),
           ),
       ],
-      triggerBuilder: (context, toggle) =>
-          trigger?.call(context, toggle) ??
-          IconButton(tooltip: '更多操作', icon: const Icon(CupertinoIcons.ellipsis), onPressed: toggle),
+      triggerBuilder: (context, toggle) => button(toggle),
     );
   }
 }

@@ -14,6 +14,7 @@ import 'glass_transparency.dart';
 import 'page_debug_catalog.dart';
 import 'stage_page.dart';
 import 'theme.dart';
+import 'window_layout.dart';
 
 class PageDebug extends StatefulWidget {
   const PageDebug({super.key, this.initialColorMode = AppColorMode.system, this.initialGlassOpacity = 0.5});
@@ -212,7 +213,25 @@ class _PageDebugState extends State<PageDebug> {
                         ),
                     ],
                   ),
-                  body: child,
+                  body: LayoutBuilder(
+                    builder: (context, bounds) {
+                      final media = MediaQuery.of(context);
+                      final padding = media.viewPadding.copyWith(top: 0);
+                      return MediaQuery(
+                        data: media.copyWith(size: bounds.biggest, padding: padding, viewPadding: padding),
+                        child: WindowLayoutScope(
+                          navigator: _navigator,
+                          layout: WindowLayout(
+                            width: bounds.maxWidth,
+                            height: bounds.maxHeight,
+                            keyboard: media.viewInsets.bottom,
+                            insets: (left: padding.left, top: 0.0, right: padding.right, bottom: padding.bottom),
+                          ),
+                          child: child!,
+                        ),
+                      );
+                    },
+                  ),
                 ),
               ),
             ),
