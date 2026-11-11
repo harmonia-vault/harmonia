@@ -119,6 +119,10 @@ details p { margin-top: var(--s2); }
 .autolock b { color: var(--ink); font-variant-numeric: tabular-nums; }
 
 .rail { display: flex; flex-direction: column; gap: var(--s2); padding: var(--s4) var(--s3); background: var(--rail); border-right: 1.5px solid var(--line); min-height: 0; }
+.rail-switch { display: flex; gap: var(--s1); padding-bottom: var(--s3); border-bottom: 1.5px solid var(--line); margin-bottom: var(--s1); }
+.rail-switch button { flex: 1; min-width: 0; padding-inline: var(--s2); border-color: transparent; background: transparent; color: var(--mute); }
+.rail-switch button[aria-pressed=true] { border-color: var(--ink); background: var(--card); color: var(--ink); }
+.rail-switch button[aria-pressed=true] .ic { color: var(--accent); }
 .rail-head { display: flex; align-items: center; justify-content: space-between; padding-left: var(--s3); }
 .rail-head h2 { font-size: 13px; color: var(--mute); }
 .env-list { display: grid; gap: 2px; align-content: start; }
@@ -129,7 +133,6 @@ details p { margin-top: var(--s2); }
 .env-name { flex: 1; overflow: hidden; text-overflow: ellipsis; }
 .count { min-width: 22px; padding: 0 6px; border-radius: 999px; background: var(--line); font-size: 12px; font-weight: 600; text-align: center; font-variant-numeric: tabular-nums; }
 .env.on .count { background: var(--yellow); color: #1E1B16; }
-.rail-head + .env-list + .rail-head { margin-top: var(--s3); }
 .rail-empty { padding: 0 var(--s3); }
 .flag { flex: none; width: 18px; height: 18px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 12px; font-weight: 700; line-height: 18px; text-align: center; }
 .me { margin-top: auto; padding: var(--s4) var(--s3) var(--s1); border-top: 1.5px solid var(--line); display: grid; gap: var(--s3); }
@@ -145,7 +148,7 @@ details p { margin-top: var(--s2); }
 .refs { display: grid; gap: var(--s2); }
 .refs-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); }
 .refs-head h2 { font-size: 15px; }
-.ref-list { display: grid; gap: var(--s2); }
+.ref-list { display: grid; gap: var(--s2); margin: 0; padding: 0; list-style: none; }
 .ref-list li { display: flex; gap: var(--s3); align-items: flex-start; padding: 10px var(--s3); border: 1.5px solid var(--line); border-radius: 12px; }
 .ref-list li > .ic { margin-top: 3px; color: var(--mute); }
 .ref-list li > span { display: grid; gap: 2px; min-width: 0; }

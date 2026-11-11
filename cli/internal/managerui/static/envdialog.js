@@ -83,7 +83,7 @@ export function envDialog(vaults, env) {
         mount(preview,
           duplicates.length > 0
             ? h('p', { class: 'error', text: `有重名的变量：${duplicates.join('、')}。给其中一个改名，或取消勾选后才能保存。` })
-            : h('p', { class: 'mute', text: `保存后这个环境里有 ${items.length} 个变量${items.length ? `：${items.map((i) => i.name).join('、')}` : ''}。` }),
+            : h('p', { class: 'mute', text: `保存后这个环境里有 ${items.length} 个变量。` }),
           shadowed.length > 0 && h('p', { class: 'warn small', text: `被遮住的同名变量：${shadowed.map((s) => s.name).join('、')}（排在前面的引用优先）。` }));
       } catch (e) {
         if (!e.fatal) mount(preview, h('p', { class: 'error', text: e.message }));
