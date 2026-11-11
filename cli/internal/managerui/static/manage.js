@@ -1,6 +1,6 @@
-// 解锁后的管理界面：一张“账本”，左栏是环境、变量库和这次会话，右边是所选环境或变量库的详情。
+// 解锁后的管理界面：左栏切换环境与变量库，右边显示所选条目的详情。
 import { call, idleFor } from './api.js';
-import { brand, glyph, h, iconButton, labeled, mount, run, toast } from './dom.js';
+import { brand, glyph, h, labeled, mount, run, toast } from './dom.js';
 import { icon } from './icons.js';
 import { settingsDialog } from './dialogs.js';
 import { envDialog, vaultDialog } from './envdialog.js';
@@ -13,12 +13,19 @@ export function manageView(st, apply) {
   let rev = st.rev;
   let envs = [];
   let vaults = [];
+  let kind = 'env';
+  const remembered = { env: null, vault: null }; // 两类列表分别保留本次会话的选择。
   let sel = null; // { kind: 'env' | 'vault', id }
   let view = null; // 当前详情：{ key, load, render, dropFile? }
   let loaded = false;
 
-  const envList = h('nav', { class: 'env-list', 'aria-label': '环境' });
-  const vaultList = h('nav', { class: 'env-list', 'aria-label': '变量库' });
+  const list = h('nav', { class: 'env-list' });
+  const categories = [
+    labeled('layers', '环境', { onclick: () => switchKind('env') }),
+    labeled('vault', '变量库', { onclick: () => switchKind('vault') }),
+  ];
+  const listTitle = h('h2');
+  const create = labeled('plus', '新建', { class: 'small', onclick: () => kind === 'env' ? createEnv() : createVault() });
   const main = h('section', { class: 'vars' });
   const countdown = h('b', { class: 'mono' });
   const lock = labeled('lock', '锁定', { class: 'small' });
@@ -29,10 +36,9 @@ export function manageView(st, apply) {
       h('span', { class: 'autolock', title: '5 分钟没有操作会自动锁定' }, icon('timer', 16), countdown, h('span', { text: '后自动锁定' })),
       lock),
     h('aside', { class: 'rail' },
-      h('div', { class: 'rail-head' }, h('h2', { text: '环境' }), iconButton('plus', '新建环境', { onclick: () => createEnv() })),
-      envList,
-      h('div', { class: 'rail-head' }, h('h2', { text: '变量库' }), iconButton('plus', '新建变量库', { onclick: () => createVault() })),
-      vaultList,
+      h('div', { class: 'rail-switch', role: 'group', 'aria-label': '管理分类' }, categories),
+      h('div', { class: 'rail-head' }, listTitle, create),
+      list,
       h('div', { class: 'me' },
         h('dl', {},
           h('dt', { text: '账号' }), h('dd', { text: a.email }),
@@ -54,7 +60,13 @@ export function manageView(st, apply) {
   async function refresh() {
     try {
       [envs, vaults] = await Promise.all([call('/api/envs/list').then((r) => r.envs), call('/api/vaults/list').then((r) => r.vaults)]);
-      if (!exists(sel)) sel = envs[0] ? { kind: 'env', id: envs[0].id } : vaults[0] ? { kind: 'vault', id: vaults[0].id } : null;
+      if (!loaded && !envs.length && vaults.length) kind = 'vault';
+      if (!exists(sel)) {
+        const last = { kind, id: remembered[kind] };
+        const first = (kind === 'env' ? envs : vaults)[0];
+        sel = exists(last) ? last : first ? { kind, id: first.id } : null;
+      }
+      if (sel) remembered[kind] = sel.id;
       const key = sel && `${sel.kind}:${sel.id}`;
       if (view?.key !== key) view = sel ? { key, ...(sel.kind === 'env' ? envView : vaultView)(ctx, sel.id) } : null;
       await view?.load();
@@ -68,8 +80,18 @@ export function manageView(st, apply) {
 
   function select(next) {
     sel = next;
+    if (next) {
+      kind = next.kind;
+      remembered[kind] = next.id;
+    }
     view = null;
     refresh();
+  }
+
+  function switchKind(next) {
+    if (kind === next) return;
+    kind = next;
+    select(null);
   }
 
   async function createVault() {
@@ -106,16 +128,23 @@ export function manageView(st, apply) {
   }
 
   function renderRail() {
-    mount(envList, envs.map((e) => item('env', e, 'layers', e.problems > 0 && h('span', { class: 'flag', title: `${e.problems} 个问题需要处理`, text: '!' }))),
-      envs.length === 0 && loaded && h('p', { class: 'mute small rail-empty', text: '还没有环境。' }));
-    mount(vaultList, vaults.map((v) => item('vault', v, 'vault', null)),
-      vaults.length === 0 && loaded && h('p', { class: 'mute small rail-empty', text: '还没有变量库。' }));
+    const isEnv = kind === 'env';
+    const label = isEnv ? '环境' : '变量库';
+    const entries = isEnv ? envs : vaults;
+    categories[0].setAttribute('aria-pressed', String(isEnv));
+    categories[1].setAttribute('aria-pressed', String(!isEnv));
+    listTitle.textContent = `${entries.length} 个${label}`;
+    list.setAttribute('aria-label', label);
+    create.setAttribute('aria-label', `新建${label}`);
+    mount(list, entries.map((x) => item(kind, x, isEnv ? 'layers' : 'vault',
+      isEnv && x.problems > 0 && h('span', { class: 'flag', title: `${x.problems} 个问题需要处理`, text: '!' }))),
+      entries.length === 0 && loaded && h('p', { class: 'mute small rail-empty', text: `还没有${label}。` }));
   }
 
   function renderMain() {
     if (!loaded) return mount(main, h('p', { class: 'mute pad', text: '正在读取……' }));
     if (view) return view.render();
-    if (vaults.length === 0) {
+    if (kind === 'vault') {
       return mount(main, h('div', { class: 'blank' }, glyph('file', 96),
         h('h1', { text: '先建一个变量库' }),
         h('p', { text: '变量库保存变量，例如“OpenAI”“博客生产”。环境引用变量库里的变量，再到手机上决定哪些电脑可以使用哪个环境。' }),
