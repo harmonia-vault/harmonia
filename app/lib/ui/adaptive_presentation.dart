@@ -37,23 +37,24 @@ class AdaptivePresentation extends StatelessWidget {
       if (workspace case final scope?) {
         content = WorkspaceScope(open: scope.open, selected: scope.selected, tools: scope.tools, child: content);
       }
-      return Padding(
-        padding: EdgeInsets.fromLTRB(
-          region.left,
-          region.top,
-          math.max(0, constraints.maxWidth - region.left - region.width),
-          math.max(0, constraints.maxHeight - region.top - region.height),
-        ),
-        child: MediaQuery(
-          data: media.copyWith(
-            size: Size(region.width, region.height),
-            padding: EdgeInsets.zero,
-            viewPadding: EdgeInsets.zero,
-            viewInsets: EdgeInsets.zero,
-            displayFeatures: const [],
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          AnimatedLayoutRegion(
+            viewport: Size(constraints.maxWidth, constraints.maxHeight - media.viewInsets.bottom),
+            rect: flutterRect(region),
+            builder: (context, frame) => MediaQuery(
+              data: media.copyWith(
+                size: frame.size,
+                padding: EdgeInsets.zero,
+                viewPadding: EdgeInsets.zero,
+                viewInsets: EdgeInsets.zero,
+                displayFeatures: const [],
+              ),
+              child: content,
+            ),
           ),
-          child: content,
-        ),
+        ],
       );
     },
   );

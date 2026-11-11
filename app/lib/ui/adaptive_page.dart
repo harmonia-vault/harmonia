@@ -54,7 +54,7 @@ class _AdaptivePageFrameState extends State<AdaptivePageFrame> {
     final nav = Navigator.of(context);
     final leading =
         appBar?.leading ??
-        (nav.canPop()
+        (ModalRoute.canPopOf(context) == true
             ? IconButton(tooltip: '返回', icon: const Icon(CupertinoIcons.chevron_back), onPressed: nav.maybePop)
             : null);
     final toolbar = WorkspaceToolReporter(

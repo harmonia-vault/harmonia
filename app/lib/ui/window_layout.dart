@@ -10,6 +10,36 @@ export '../core/window_layout.dart';
 
 Rect flutterRect(LayoutRect box) => Rect.fromLTWH(box.left, box.top, box.width, box.height);
 
+/// 同一窗口内从当前帧调整区域；旋转交给系统，不在两套坐标系间插值。
+class AnimatedLayoutRegion extends StatefulWidget {
+  const AnimatedLayoutRegion({super.key, required this.viewport, required this.rect, required this.builder});
+  final Size viewport;
+  final Rect rect;
+  final Widget Function(BuildContext, Rect) builder;
+
+  @override
+  State<AnimatedLayoutRegion> createState() => _AnimatedLayoutRegionState();
+}
+
+class _AnimatedLayoutRegionState extends State<AnimatedLayoutRegion> {
+  Size? _viewport;
+
+  @override
+  Widget build(BuildContext context) {
+    final animate = _viewport == widget.viewport && !MediaQuery.disableAnimationsOf(context);
+    _viewport = widget.viewport;
+    return TweenAnimationBuilder<Rect?>(
+      tween: RectTween(begin: widget.rect, end: widget.rect),
+      duration: animate ? const Duration(milliseconds: 360) : Duration.zero,
+      curve: Curves.easeInOutCubic,
+      builder: (context, rect, _) => Positioned.fromRect(
+        rect: rect!,
+        child: ClipRect(child: widget.builder(context, rect)),
+      ),
+    );
+  }
+}
+
 class WindowLayoutScope extends InheritedWidget {
   const WindowLayoutScope({super.key, required this.layout, required this.navigator, required super.child});
   final WindowLayout layout;

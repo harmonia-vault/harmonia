@@ -56,7 +56,12 @@ class DebugPageEntry {
 
 Map<String, List<DebugPageEntry>> debugPages() => {
   '首页与管理': [
-    DebugPageEntry('折叠屏：内外屏、半折叠与左右分屏', (s) => FoldPreviewPage(c: s.c), followStage: false),
+    DebugPageEntry('折叠屏：内外屏、开合过渡与左右分屏', (s) => FoldPreviewPage(c: s.c), followStage: false),
+    DebugPageEntry(
+      '双栏未选择：变量库、环境、设备与设置',
+      (s) => s.vault.paired ? HomePage(c: s.c) : SignInPage(c: s.c),
+      followStage: false,
+    ),
     DebugPageEntry('设置分组与详情', (s) => SettingsCategories(c: s.c)),
     DebugPageEntry('首页、底栏交互动效与系统间距', (s) => s.vault.paired ? HomePage(c: s.c) : SignInPage(c: s.c)),
     DebugPageEntry('玻璃透明度与折射对照', (s) => GlassDebugPage(c: s.c)),

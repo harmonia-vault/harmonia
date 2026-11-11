@@ -15,6 +15,7 @@ import 'theme.dart';
 import 'vaults_tab.dart';
 import 'window_layout.dart';
 import 'workspace_scope.dart';
+import 'workspace_empty.dart';
 
 class Workspace extends StatefulWidget {
   const Workspace({super.key, required this.c, this.initialEntry});
@@ -76,7 +77,6 @@ class _WorkspaceState extends State<Workspace> {
     final layout = WindowLayoutScope.maybeOf(context)!;
     final c = widget.c;
     final masterPages = [VaultsTab(c: c), EnvironmentsTab(c: c), DevicesTab(c: c), SettingsCategories(c: c)];
-    final labels = ['变量库', '环境', '设备', '设置'];
     final navigationHeight = layout.verticalNavigation
         ? 0.0
         : 84.0 + (MediaQuery.textScalerOf(context).scale(11) - 11).clamp(0.0, 40.0);
@@ -142,12 +142,7 @@ class _WorkspaceState extends State<Workspace> {
                                 pages: [
                                   MaterialPage(
                                     key: ValueKey('empty-$i'),
-                                    child: Center(
-                                      child: Text(
-                                        '选择一个${labels[i] == '设置' ? '设置分组' : labels[i]}',
-                                        style: TextStyle(color: context.palette.mute),
-                                      ),
-                                    ),
+                                    child: WorkspaceEmpty(tab: i),
                                   ),
                                   if (_selected[i] case final entry?)
                                     MaterialPage(
@@ -226,12 +221,13 @@ class _WorkspaceState extends State<Workspace> {
       rect.right == full.right ? math.max(insets.right, layout.navigation == NavigationEdge.right ? 84 : 0) : 0,
       rect.bottom == full.bottom ? math.max(insets.bottom, layout.verticalNavigation ? 12 : 0) : 0,
     );
-    return Positioned.fromRect(
+    return AnimatedLayoutRegion(
+      viewport: full.size,
       rect: rect,
-      child: Offstage(
+      builder: (context, frame) => Offstage(
         offstage: !visible,
         child: MediaQuery(
-          data: media.copyWith(size: rect.size, padding: local(media.padding), viewPadding: local(media.viewPadding)),
+          data: media.copyWith(size: frame.size, padding: local(media.padding), viewPadding: local(media.viewPadding)),
           child: child,
         ),
       ),

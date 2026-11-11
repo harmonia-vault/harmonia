@@ -27,7 +27,14 @@ private final class WindowLayoutChannel: NSObject, FlutterStreamHandler {
     channel = FlutterEventChannel(name: "harmonia/layout", binaryMessenger: controller.binaryMessenger)
     super.init()
     probe.onChange = { [weak self] in self?.publish() }
+    probe.translatesAutoresizingMaskIntoConstraints = false
     controller.view.addSubview(probe)
+    NSLayoutConstraint.activate([
+      probe.leadingAnchor.constraint(equalTo: controller.view.leadingAnchor),
+      probe.trailingAnchor.constraint(equalTo: controller.view.trailingAnchor),
+      probe.topAnchor.constraint(equalTo: controller.view.topAnchor),
+      probe.bottomAnchor.constraint(equalTo: controller.view.bottomAnchor)
+    ])
     probe.setNeedsUpdateConstraints()
     channel.setStreamHandler(self)
   }
@@ -78,10 +85,13 @@ private final class WindowLayoutProbe: UIView {
     super.init(frame: frame)
     isUserInteractionEnabled = false
     backgroundColor = .clear
-    autoresizingMask = [.flexibleWidth, .flexibleHeight]
     NotificationCenter.default.addObserver(
       self, selector: #selector(refresh), name: UIApplication.didBecomeActiveNotification, object: nil)
     if #available(iOS 27.1, *) {
+      // 开合不一定改变窗口尺寸，收到铰链更新后重新读取保留区域。
+      addInteraction(UIHingeInteraction { [weak self] _, _ in
+        self?.setNeedsUpdateConstraints()
+      })
       registerForTraitChanges(UITraitCollection.systemTraitsAffectingVerticalBarEdge) {
         (self: WindowLayoutProbe, _: UITraitCollection) in self.onChange?()
       }
@@ -89,7 +99,7 @@ private final class WindowLayoutProbe: UIView {
   }
   required init?(coder: NSCoder) { fatalError("仅从当前 Flutter 视图创建") }
   override func layoutSubviews() { super.layoutSubviews(); onChange?() }
-  // 在约束更新中查询当前视图，UIKit 会在保留区域变化时自动再次调用。
+  // 在约束更新中读取当前视图，几何信息与这一轮窗口布局保持一致。
   override func updateConstraints() { onChange?(); super.updateConstraints() }
   override func safeAreaInsetsDidChange() { super.safeAreaInsetsDidChange(); onChange?() }
   override func didMoveToWindow() { super.didMoveToWindow(); onChange?() }
