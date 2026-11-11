@@ -28,10 +28,11 @@ def export_options(profile):
         raise ValueError("请启用正式环境推送后重新生成描述文件")
     if profile["ExpirationDate"] <= datetime.datetime.now(datetime.UTC).replace(tzinfo=None):
         raise ValueError("描述文件已过期，请重新生成")
+    uuid.UUID(profile["UUID"])
     return {"method": "app-store-connect", "teamID": team, "signingStyle": "manual",
             "signingCertificate": "Apple Distribution", "manageAppVersionAndBuildNumber": False,
             "testFlightInternalTestingOnly": True,
-            "provisioningProfiles": {BUNDLE: str(uuid.UUID(profile["UUID"])).upper()}}
+            "provisioningProfiles": {BUNDLE: profile["UUID"]}}
 
 
 def security(*args):

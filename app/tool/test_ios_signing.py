@@ -21,9 +21,17 @@ class SigningTests(unittest.TestCase):
         # 经 plist 序列化后仍是 Xcode 接受的布尔值及 UUID 映射。
         options = plistlib.loads(plistlib.dumps(export_options(self.profile)))
         self.assertEqual(options["provisioningProfiles"],
-                         {BUNDLE: "C230E9F4-011E-4A45-839E-5E668720CC3A"})
+                         {BUNDLE: "c230e9f4-011e-4a45-839e-5e668720cc3a"})
         self.assertIs(options["testFlightInternalTestingOnly"], True)
         self.assertIs(options["manageAppVersionAndBuildNumber"], False)
+
+    def test_preserves_apple_profile_uuid_case(self):
+        # Xcode 按原始 UUID 匹配描述文件，不能规范化为大写或小写。
+        for identifier in ["baB9b175-75e0-4688-9402-a4e6735107aa", "BAB9B175-75E0-4688-9402-A4E6735107AA"]:
+            self.profile["UUID"] = identifier
+            with self.subTest(identifier=identifier):
+                options = export_options(self.profile)
+                self.assertEqual(options["provisioningProfiles"][BUNDLE], identifier)
 
     def test_rejects_other_app(self):
         self.profile["Entitlements"]["application-identifier"] = "TESTTEAM01.org.example.other"
