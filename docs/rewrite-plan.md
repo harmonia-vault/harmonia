@@ -605,6 +605,7 @@ CI（`ci.yml`，2026-11-09 调整）：
 - 端到端与各单元测试并行，不再等它们结束；无界面管理脚本先编译成可执行文件再调用。
 - 同一分支有新的推送时取消还在跑的旧运行。
 - 工具版本从 `mise.toml` 读取，不在工作流里另写一份；发布流程 `release.yml` 同样如此。Android SDK 用 runner 自带的：`mise.toml` 里的 `ANDROID_HOME` 已经设置时沿用。
+- Xcode 由系统提供，不由 mise 管理。iOS 检查、公开 IPA 与 TestFlight 使用 GitHub 官方 `xcode-27` 镜像，确保包含 Duo 的窗口与铰链 API；不使用仍以 Xcode 26 为默认值的 `macos-latest`。
 - 端到端启动服务端时传入 `DEV_RELAXED_LIMITS=true`（[protocol.md](protocol.md) 3.8），不再为等过每分钟限流而停顿；心跳超时那一步仍然真实等待。
 
 ### F. 最终验收：新用户测试

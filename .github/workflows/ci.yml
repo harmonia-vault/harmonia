@@ -146,7 +146,7 @@ jobs:
   ios:
     needs: changes
     if: needs.changes.outputs.app == 'true'
-    runs-on: macos-latest
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@v4
       - uses: jdx/mise-action@v5
