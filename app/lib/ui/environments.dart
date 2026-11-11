@@ -38,13 +38,7 @@ class EnvironmentsTab extends StatelessWidget {
     return AppTabPage(
       title: '环境',
       actions: [IconButton(tooltip: '新建环境', onPressed: () => _create(context), icon: const Icon(Icons.add))],
-      floatingActionButton: envs.isEmpty
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: () => _create(context),
-              icon: const Icon(Icons.add),
-              label: const Text('新建环境'),
-            ),
+
       onRefresh: c.syncNow,
       padding: envs.isEmpty ? EdgeInsets.zero : const EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, 96),
       children: envs.isEmpty

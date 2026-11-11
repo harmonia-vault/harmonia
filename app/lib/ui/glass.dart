@@ -37,10 +37,8 @@ class GlassRenderingScope extends InheritedWidget {
 }
 
 // 不支持完整折射时直接选 standard，避免插件把 premium 的厚度和光照再次缩小。
-GlassQuality glassQuality(BuildContext context) => GlassRenderingScope.qualityOf(context);
-
-bool usesGlass(BuildContext context) =>
-    (Theme.of(context).extension<AppearanceTheme>()?.liquidGlass ?? false) && !MediaQuery.highContrastOf(context);
+GlassQuality glassQuality(BuildContext context) =>
+    MediaQuery.highContrastOf(context) ? GlassQuality.standard : GlassRenderingScope.qualityOf(context);
 
 /// 位于导航器上方，拖动直接更新所有玻璃表面；不写存储、不重建路由。
 class GlassOpacityPreview extends StatelessWidget {
@@ -68,21 +66,29 @@ class GlassOpacityPreview extends StatelessWidget {
   );
 }
 
-LiquidGlassSettings glassSettings(BuildContext context) => glassMaterial(
-  dark: Theme.of(context).brightness == Brightness.dark,
-  opacity: Theme.of(context).extension<AppearanceTheme>()?.glassOpacity ?? 0.5,
-);
+LiquidGlassSettings glassSettings(BuildContext context) {
+  final material = glassMaterial(
+    dark: Theme.of(context).brightness == Brightness.dark,
+    opacity: Theme.of(context).extension<AppearanceTheme>()?.glassOpacity ?? 0.5,
+  );
+  return MediaQuery.highContrastOf(context)
+      ? material.copyWith(glassColor: context.palette.card, blur: 0, frost: 0, bodyShade: 0)
+      : material;
+}
 
 /// 弹窗、弹层与通知的材质：正文必须可读，透明度滑条只在可读范围内调节。
-LiquidGlassSettings glassPanelSettings(BuildContext context, Color tint) => glassPanelMaterial(
-  dark: Theme.of(context).brightness == Brightness.dark,
-  opacity: Theme.of(context).extension<AppearanceTheme>()?.glassOpacity ?? 0.5,
-  tint: tint,
-  refraction: glassQuality(context) == GlassQuality.premium,
-);
+LiquidGlassSettings glassPanelSettings(BuildContext context, Color tint) => MediaQuery.highContrastOf(context)
+    ? glassSettings(context).copyWith(glassColor: tint)
+    : glassPanelMaterial(
+        dark: Theme.of(context).brightness == Brightness.dark,
+        opacity: Theme.of(context).extension<AppearanceTheme>()?.glassOpacity ?? 0.5,
+        tint: tint,
+        refraction: glassQuality(context) == GlassQuality.premium,
+      );
 
 /// 面板里需要更稳的阅读底时用的雾面：比面板更不透，但仍带着背后的颜色。
-Color glassFrostFill(BuildContext context) => context.palette.card.withValues(alpha: 0.6);
+Color glassFrostFill(BuildContext context) =>
+    MediaQuery.highContrastOf(context) ? context.palette.card : context.palette.card.withValues(alpha: 0.6);
 
 /// 玻璃面板从遮罩后的画面取样，遮罩过深会把面板一起压暗。
 Color glassBarrierColor(BuildContext context) =>
@@ -99,12 +105,6 @@ class AppSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!usesGlass(context)) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(radius),
-        child: ColoredBox(color: color, child: child),
-      );
-    }
     return GlassContainer(
       useOwnLayer: true,
       quality: glassQuality(context),
@@ -135,7 +135,6 @@ class AppBarSurface extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!usesGlass(context)) return AppBar(title: title, leading: leading, actions: actions);
     final p = context.palette;
     final back =
         leading ??
@@ -183,17 +182,9 @@ class AppBarSurface extends StatelessWidget implements PreferredSizeWidget {
 
 /// 正文必须在 Scaffold 的 MediaQuery 之下构建，读取的是实际遮挡高度。
 class AppPage extends StatelessWidget {
-  const AppPage({
-    super.key,
-    this.appBar,
-    required this.body,
-    this.floatingActionButton,
-    this.overlay,
-    this.avoidKeyboard,
-  });
+  const AppPage({super.key, this.appBar, required this.body, this.overlay, this.avoidKeyboard});
   final AppBarSurface? appBar;
   final WidgetBuilder body;
-  final Widget? floatingActionButton;
 
   /// 正文是否随键盘收缩。默认只有不带悬浮按钮的页面收缩：带悬浮按钮的页面自己没有输入框，
   /// 键盘来自上面的弹窗，按钮不该被顶上去。
@@ -204,15 +195,14 @@ class AppPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final behindBar = usesGlass(context) && appBar != null;
+    final behindBar = (appBar != null);
     return GlassBackdropGroup(
-      enabled: usesGlass(context),
+      enabled: true,
       joinEnclosing: true,
       child: Scaffold(
-        resizeToAvoidBottomInset: avoidKeyboard ?? floatingActionButton == null,
+        resizeToAvoidBottomInset: avoidKeyboard ?? true,
         extendBodyBehindAppBar: behindBar,
         appBar: appBar,
-        floatingActionButton: floatingActionButton,
         body: Builder(
           builder: (context) {
             if (!behindBar) return body(context);
@@ -244,10 +234,7 @@ class AppPage extends StatelessWidget {
 /// Scaffold 已计算标题栏与安全区；不要在这里再次累加工具栏高度。
 EdgeInsets pagePadding(BuildContext context, EdgeInsets padding) {
   final insets = MediaQuery.paddingOf(context);
-  return padding.copyWith(
-    top: padding.top + (usesGlass(context) ? insets.top : 0),
-    bottom: padding.bottom + insets.bottom,
-  );
+  return padding.copyWith(top: padding.top + (insets.top), bottom: padding.bottom + insets.bottom);
 }
 
 /// 一级页面。玻璃模式下大标题与右上角操作同在标题栏这一行，正文一滚动就淡出、换成栏内居中小标题；
@@ -259,16 +246,14 @@ class AppTabPage extends StatefulWidget {
     required this.padding,
     required this.children,
     this.actions,
-    this.floatingActionButton,
     this.onRefresh,
   });
   final String title;
   final EdgeInsets padding;
   final List<Widget> children;
 
-  /// 同一个操作的两种放法：玻璃模式放进标题栏，普通模式用悬浮按钮。
+  /// 标题栏中的悬浮操作。
   final List<Widget>? actions;
-  final Widget? floatingActionButton;
   final Future<void> Function()? onRefresh;
 
   @override
@@ -276,83 +261,68 @@ class AppTabPage extends StatefulWidget {
 }
 
 class _AppTabPageState extends State<AppTabPage> {
-  // 只在玻璃模式存在：收放进度跟着滚动位置走，关掉再打开时要从头算。
-  GlassLargeTitleController? _largeTitle;
+  final _largeTitle = GlassLargeTitleController();
 
   @override
   void dispose() {
-    _largeTitle?.dispose();
+    _largeTitle.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final glass = usesGlass(context);
-    if (glass) {
-      _largeTitle ??= GlassLargeTitleController();
-    } else if (_largeTitle case final old?) {
-      _largeTitle = null;
-      WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
-    }
     final largeTitle = _largeTitle;
     return AppPage(
-      appBar: AppBarSurface(title: Text(widget.title), actions: glass ? widget.actions : null, largeTitle: largeTitle),
-      floatingActionButton: glass ? null : widget.floatingActionButton,
+      appBar: AppBarSurface(title: Text(widget.title), actions: widget.actions, largeTitle: largeTitle),
       // 一级页面没有输入框，键盘只会来自弹窗。
       avoidKeyboard: false,
       body: (context) {
         final insets = MediaQuery.paddingOf(context);
-        final list = largeTitle != null
-            ? CustomScrollView(
-                controller: largeTitle.scrollController,
-                physics: const AlwaysScrollableScrollPhysics(),
-                slivers: [
-                  SliverPadding(
-                    padding: widget.padding.copyWith(
-                      top: widget.padding.top + insets.top + Space.sm,
-                      bottom: widget.padding.bottom + insets.bottom,
-                    ),
-                    sliver: SliverList.list(children: widget.children),
-                  ),
-                ],
-              )
-            : ListView(padding: pagePadding(context, widget.padding), children: widget.children);
+        final list = CustomScrollView(
+          controller: largeTitle.scrollController,
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            SliverPadding(
+              padding: widget.padding.copyWith(
+                top: widget.padding.top + insets.top + Space.sm,
+                bottom: widget.padding.bottom + insets.bottom,
+              ),
+              sliver: SliverList.list(children: widget.children),
+            ),
+          ],
+        );
         final onRefresh = widget.onRefresh;
-        return onRefresh == null
-            ? list
-            : RefreshIndicator(onRefresh: onRefresh, edgeOffset: glass ? insets.top : 0, child: list);
+        return onRefresh == null ? list : RefreshIndicator(onRefresh: onRefresh, edgeOffset: insets.top, child: list);
       },
-      overlay: largeTitle == null
-          ? null
-          : (context) => Positioned(
-              top: MediaQuery.paddingOf(context).top - kToolbarHeight,
-              left: 20,
-              right: 20 + 44.0 * (widget.actions?.length ?? 0) + Space.md,
-              height: kToolbarHeight,
-              child: IgnorePointer(
-                child: ListenableBuilder(
-                  listenable: largeTitle,
-                  builder: (context, _) => Opacity(
-                    opacity: Curves.easeIn.transform(1 - largeTitle.collapseProgress),
-                    child: Align(
-                      alignment: AlignmentDirectional.centerStart,
-                      child: Text(
-                        widget.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: context.palette.ink,
-                          fontSize: 34,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: -0.5,
-                          height: 1.1,
-                        ),
-                      ),
-                    ),
+      overlay: (context) => Positioned(
+        top: MediaQuery.paddingOf(context).top - kToolbarHeight,
+        left: 20,
+        right: 20 + 44.0 * (widget.actions?.length ?? 0) + Space.md,
+        height: kToolbarHeight,
+        child: IgnorePointer(
+          child: ListenableBuilder(
+            listenable: largeTitle,
+            builder: (context, _) => Opacity(
+              opacity: Curves.easeIn.transform(1 - largeTitle.collapseProgress),
+              child: Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: Text(
+                  widget.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: context.palette.ink,
+                    fontSize: 34,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.5,
+                    height: 1.1,
                   ),
                 ),
               ),
             ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -372,13 +342,11 @@ class AppSwitchTile extends StatelessWidget {
   final ValueChanged<bool>? onChanged;
 
   @override
-  Widget build(BuildContext context) => usesGlass(context)
-      ? ListTile(
-          leading: icon,
-          title: title,
-          subtitle: subtitle,
-          onTap: onChanged == null ? null : () => onChanged!(!value),
-          trailing: CupertinoSwitch(value: value, activeTrackColor: context.palette.accentFill, onChanged: onChanged),
-        )
-      : SwitchListTile(secondary: icon, title: title, subtitle: subtitle, value: value, onChanged: onChanged);
+  Widget build(BuildContext context) => ListTile(
+    leading: icon,
+    title: title,
+    subtitle: subtitle,
+    onTap: onChanged == null ? null : () => onChanged!(!value),
+    trailing: CupertinoSwitch(value: value, activeTrackColor: context.palette.accentFill, onChanged: onChanged),
+  );
 }

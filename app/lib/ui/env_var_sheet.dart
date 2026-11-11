@@ -7,7 +7,6 @@ import '../core/models.dart';
 import '../core/refs.dart' show removeFromRefs, renameInRefs;
 import 'app_sheet.dart';
 import 'env_editor.dart' show askAlias;
-import 'glass.dart';
 import 'list_row.dart';
 import 'theme.dart';
 import 'variable_edit.dart';
@@ -89,27 +88,22 @@ class _EnvVariableSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
-    final glass = usesGlass(context);
+
     final def = c.vault.envDef(envId);
     final removed = def == null ? null : removeFromRefs(def.refs, item.vaultId, item.source);
     final note = entry?.note ?? '';
     final from = item.name == item.source ? '来自“$_vault”' : '来自“$_vault” · 原名 ${item.source}';
     return SafeArea(
       top: false,
-      bottom: !glass,
+      bottom: false,
       child: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(24, glass ? 4 : 0, 24, glass ? 24 : Space.lg),
+        padding: EdgeInsets.fromLTRB(24, 4, 24, 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
               item.name,
-              style: TextStyle(
-                color: p.ink,
-                fontSize: glass ? 22 : 20,
-                fontWeight: FontWeight.w700,
-                fontFamily: 'monospace',
-              ),
+              style: TextStyle(color: p.ink, fontSize: 22, fontWeight: FontWeight.w700, fontFamily: 'monospace'),
             ),
             const SizedBox(height: 4),
             Text(from, style: TextStyle(color: p.mute, fontSize: 13)),

@@ -61,11 +61,11 @@ class _UpdateSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
-    final glass = usesGlass(context);
+
     final notesBody = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (final (i, n) in notes.indexed) ...[if (i > 0) SizedBox(height: glass ? 14 : Space.md), _NoteLine(n)],
+        for (final (i, n) in notes.indexed) ...[if (i > 0) SizedBox(height: 14), _NoteLine(n)],
       ],
     );
     final heading = Column(
@@ -73,37 +73,29 @@ class _UpdateSheet extends StatelessWidget {
       children: [
         Text(
           '发现新版本',
-          style: TextStyle(color: p.ink, fontSize: glass ? 22 : 20, fontWeight: FontWeight.w700),
+          style: TextStyle(color: p.ink, fontSize: 22, fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 6),
-        if (glass)
-          _VersionChange(current: current, version: version)
-        else
-          Text('Harmonia $version · 当前 $current', style: TextStyle(color: p.mute, fontSize: 13)),
+        _VersionChange(current: current, version: version),
       ],
     );
     final header = Row(
       children: [
-        if (glass) const AppIcon() else const BrandMark(),
+        const AppIcon(),
         const SizedBox(width: Space.md),
         Expanded(child: heading),
-        if (glass)
-          IconButton.filledTonal(
-            tooltip: '以后再说',
-            style: IconButton.styleFrom(backgroundColor: p.ink.withValues(alpha: 0.06), foregroundColor: p.ink),
-            icon: const Icon(Icons.close, size: 20),
-            onPressed: () => Navigator.pop(context),
-          ),
+        IconButton.filledTonal(
+          tooltip: '以后再说',
+          style: IconButton.styleFrom(backgroundColor: p.ink.withValues(alpha: 0.06), foregroundColor: p.ink),
+          icon: const Icon(Icons.close, size: 20),
+          onPressed: () => Navigator.pop(context),
+        ),
       ],
     );
     // 玻璃模式下雾面本身就是滚动窗口：圆角始终完整，说明滚到头也不会被操作区切掉一截。
     Widget notesCard({required bool scrolls}) => Container(
       clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: glass ? glassFrostFill(context) : p.card,
-        borderRadius: BorderRadius.circular(glass ? 24 : 18),
-        border: glass ? null : Border.all(color: p.line, width: 1.2),
-      ),
+      decoration: BoxDecoration(color: glassFrostFill(context), borderRadius: BorderRadius.circular(24), border: null),
       child: scrolls
           // 上下各留一段与内边距等高的渐隐：滚动中的文字淡出，停在两端时不受影响。
           ? ShaderMask(
@@ -121,17 +113,11 @@ class _UpdateSheet extends StatelessWidget {
             )
           : Padding(padding: const EdgeInsets.all(Space.lg), child: notesBody),
     );
-    final hintText = hint == null
-        ? null
-        : Text(tidy(hint!), style: TextStyle(color: glass ? p.ink : p.mute, fontSize: 13, height: 1.5));
+    final hintText = hint == null ? null : Text(tidy(hint!), style: TextStyle(color: p.ink, fontSize: 13, height: 1.5));
     final body = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (notes.isNotEmpty) ...[
-          if (!glass) const SectionTitle('更新内容'),
-          notesCard(scrolls: false),
-          if (hintText != null) const SizedBox(height: 20),
-        ],
+        if (notes.isNotEmpty) ...[notesCard(scrolls: false), if (hintText != null) const SizedBox(height: 20)],
         ?hintText,
       ],
     );
@@ -142,25 +128,21 @@ class _UpdateSheet extends StatelessWidget {
         FilledButton(onPressed: () => Navigator.pop(context, UpdateChoice.primary), child: Text(primary)),
         if (secondary != null) ...[
           const SizedBox(height: Space.sm),
-          if (glass)
-            FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: p.ink.withValues(alpha: 0.06), foregroundColor: p.accent),
-              onPressed: () => Navigator.pop(context, UpdateChoice.secondary),
-              child: Text(secondary!),
-            )
-          else
-            OutlinedButton(onPressed: () => Navigator.pop(context, UpdateChoice.secondary), child: Text(secondary!)),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: p.ink.withValues(alpha: 0.06), foregroundColor: p.accent),
+            onPressed: () => Navigator.pop(context, UpdateChoice.secondary),
+            child: Text(secondary!),
+          ),
         ],
-        if (!glass) TextButton(onPressed: () => Navigator.pop(context), child: const Text('以后再说')),
       ],
     );
     return SafeArea(
       top: false,
-      bottom: !glass,
+      bottom: false,
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * (glass ? 0.72 : 0.8)),
+        constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.72),
         child: Padding(
-          padding: EdgeInsets.fromLTRB(24, glass ? 4 : 0, 24, glass ? 24 : Space.lg),
+          padding: EdgeInsets.fromLTRB(24, 4, 24, 24),
           child: LayoutBuilder(
             builder: (context, constraints) {
               // 常规屏固定操作区；短屏和大字号让整个面板滚动，不能把正文挤成零高。
@@ -179,7 +161,7 @@ class _UpdateSheet extends StatelessWidget {
                       children: [
                         header,
                         const SizedBox(height: 24),
-                        if (glass && notes.isNotEmpty) ...[
+                        if (notes.isNotEmpty) ...[
                           Flexible(child: notesCard(scrolls: true)),
                           if (hintText != null) ...[const SizedBox(height: Space.lg), hintText],
                         ] else

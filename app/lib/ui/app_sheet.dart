@@ -1,26 +1,26 @@
-// 底部面板：普通外观是 Material 底部面板，液态玻璃外观是一块浮起的玻璃面板。发现新版本、环境授权等共用。
+// 发现新版本、环境授权等共用的悬浮玻璃面板。
 import 'package:flutter/material.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
 import 'glass.dart';
 import 'theme.dart';
 
-/// 打开底部面板。内容自己处理底部安全区：普通外观下要留出，玻璃外观下面板已经离开了屏幕边缘。
+/// 面板统一留出系统手势区，内容不再重复累加。
 Future<T?> showAppSheet<T>(BuildContext context, {required WidgetBuilder builder}) {
   final contentKey = GlobalKey();
-  final glass = usesGlass(context);
+
   return showModalBottomSheet<T>(
     context: context,
     isScrollControlled: true,
     // 内容多的时候面板会很高，留出状态栏的位置。
     useSafeArea: true,
-    showDragHandle: !glass,
-    backgroundColor: glass ? Colors.transparent : context.palette.paper,
-    barrierColor: glass ? glassBarrierColor(context) : null,
+    showDragHandle: false,
+    backgroundColor: Colors.transparent,
+    barrierColor: glassBarrierColor(context),
     sheetAnimationStyle: MediaQuery.disableAnimationsOf(context) ? AnimationStyle.noAnimation : null,
     builder: (c) {
       final content = builder(c);
-      if (!usesGlass(c)) return content;
+
       return GlassMaterializeTransition(
         animation: ModalRoute.of(c)!.animation!,
         // 面板已由系统路由滑入，不再叠加缩放；材质与内容同步渐显。

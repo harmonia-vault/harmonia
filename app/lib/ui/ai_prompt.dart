@@ -8,7 +8,6 @@ import '../app/controller.dart';
 import '../core/ai_prompt.dart';
 import '../core/models.dart';
 import 'app_scope.dart';
-import 'glass.dart';
 import 'glass_controls.dart';
 import 'glass_overlays.dart';
 import 'pairing_code.dart';
@@ -73,7 +72,7 @@ class _AiPromptDialogState extends State<_AiPromptDialog> {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
-    final glass = usesGlass(context);
+
     // 选了“含邮箱和配对码”但还没有有效的配对码时，先选有效期再生成，不显示提示词。
     final needsCode = _withCode && !_hasValidCode;
     // 提示词框约显示 5 行，超出部分在框内滚动。
@@ -101,8 +100,8 @@ class _AiPromptDialogState extends State<_AiPromptDialog> {
               constraints: BoxConstraints(maxHeight: lineHeight * 5 + Space.md * 2),
               decoration: BoxDecoration(
                 color: p.card,
-                borderRadius: BorderRadius.circular(glass ? 18 : 12),
-                border: Border.all(color: glass ? p.mute : p.ink, width: glass ? 1 : 1.4),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: p.mute, width: 1),
               ),
               child: Scrollbar(
                 controller: _scroll,

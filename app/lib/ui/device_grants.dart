@@ -169,7 +169,7 @@ class _DeviceGrantsState extends State<DeviceGrants> {
   Widget build(BuildContext context) {
     final grants = _grants;
     final p = context.palette;
-    final glass = usesGlass(context);
+
     final conflicts = _conflicts();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -184,7 +184,7 @@ class _DeviceGrantsState extends State<DeviceGrants> {
                   physics: const NeverScrollableScrollPhysics(),
                   buildDefaultDragHandles: false,
                   onReorderItem: _move,
-                  proxyDecorator: glass ? _glassProxy : null,
+                  proxyDecorator: _glassProxy,
                   children: [
                     for (final (i, g) in grants.indexed)
                       ListTile(
@@ -192,10 +192,7 @@ class _DeviceGrantsState extends State<DeviceGrants> {
                         contentPadding: const EdgeInsetsDirectional.fromSTEB(4, 3, 16, 3),
                         leading: ReorderableDragStartListener(
                           index: i,
-                          child: SizedBox.square(
-                            dimension: 44,
-                            child: Icon(glass ? CupertinoIcons.line_horizontal_3 : Icons.drag_handle),
-                          ),
+                          child: SizedBox.square(dimension: 44, child: Icon(CupertinoIcons.line_horizontal_3)),
                         ),
                         minLeadingWidth: 44,
                         horizontalTitleGap: 4,

@@ -79,7 +79,7 @@ class _VariableListState extends State<VariableList> {
         children: [
           for (final (i, r) in widget.rows.indexed) ...[
             // 这一组没有行首图标，分隔线与文字左缘对齐。
-            if (i > 0) Divider(indent: usesGlass(context) ? listRowPadding.start : null),
+            if (i > 0) Divider(indent: listRowPadding.start),
             ListTile(
               contentPadding: listRowPadding,
               title: Text(
@@ -286,7 +286,7 @@ class _VaultPageState extends State<VaultPage> with LeaveWhenGone {
       appBar: AppBarSurface(
         title: Text(name),
         actions: [
-          if (usesGlass(context)) IconButton(tooltip: '添加变量', icon: const Icon(Icons.add), onPressed: _edit),
+          IconButton(tooltip: '添加变量', icon: const Icon(Icons.add), onPressed: _edit),
           AppMenuButton(
             semanticLabel: '变量库操作',
             onSelected: (a) => _menu(a, name, [for (final e in envs) e.name]),
@@ -297,9 +297,6 @@ class _VaultPageState extends State<VaultPage> with LeaveWhenGone {
           ),
         ],
       ),
-      floatingActionButton: usesGlass(context)
-          ? null
-          : FloatingActionButton.extended(onPressed: _edit, icon: const Icon(Icons.add), label: const Text('添加变量')),
       body: (context) => ListView(
         padding: pagePadding(context, const EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, 96)),
         children: [

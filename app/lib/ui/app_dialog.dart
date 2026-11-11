@@ -11,7 +11,7 @@ RawDialogRoute<T> appDialogRoute<T>({
   bool barrierDismissible = true,
 }) {
   final reduceMotion = MediaQuery.disableAnimationsOf(context);
-  if (usesGlass(context) && !reduceMotion) {
+  if (!reduceMotion) {
     return _AppGlassDialogRoute<T>(
       barrierColor: glassBarrierColor(context),
       barrierDismissible: barrierDismissible,

@@ -34,41 +34,38 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     final c = widget.c;
     final pages = [VaultsTab(c: c), EnvironmentsTab(c: c), DevicesTab(c: c), SettingsTab(c: c)];
-    final glass = usesGlass(context);
+
     final nav = _NavBar(
       selected: _tab,
       onSelect: (i) => setState(() => _tab = i),
       items: [
-        const _NavItem(Icons.inventory_2_outlined, Icons.inventory_2, '变量库'),
-        const _NavItem(Icons.layers_outlined, Icons.layers, '环境'),
-        _NavItem(Icons.devices_outlined, Icons.devices, '设备', badge: c.pendingPairingCount),
-        const _NavItem(Icons.settings_outlined, Icons.settings, '设置'),
+        const _NavItem('变量库'),
+        const _NavItem('环境'),
+        _NavItem('设备', badge: c.pendingPairingCount),
+        const _NavItem('设置'),
       ],
     );
     // 弹窗各自避让键盘，导航外壳不扣键盘高度。
     return GlassBackdropGroup(
-      enabled: glass,
+      enabled: true,
       child: Scaffold(
         resizeToAvoidBottomInset: false,
-        extendBody: glass,
+        extendBody: true,
         body: Builder(
           builder: (context) {
             final media = MediaQuery.of(context);
-            // 离线胶囊浮在正文之上，不占正文的高度。普通模式下只把悬浮按钮抬到它上方：
-            // Scaffold 按 viewPadding 给悬浮按钮留白，正文列表不受影响。
-            // 底栏已经让出系统手势区，在线时这段留白为零，按钮紧贴底栏。
-            final pillExtent = c.online ? 0.0 : media.textScaler.scale(13) * 1.5 + 18 + Space.sm;
+            // 离线胶囊浮在正文之上，不占正文高度。
             return Stack(
               children: [
                 MediaQuery(
-                  data: glass ? media : media.copyWith(viewPadding: media.viewPadding.copyWith(bottom: pillExtent)),
+                  data: media,
                   child: IndexedStack(
                     index: _tab,
                     children: [
                       for (var i = 0; i < pages.length; i++)
                         GlassBackdropGroup(
                           // IndexedStack 保留页面状态；隐藏页不能占用当前页的采样组。
-                          enabled: i == _tab && glass,
+                          enabled: i == _tab,
                           joinEnclosing: true,
                           child: TickerMode(
                             enabled: i == _tab,
@@ -83,7 +80,7 @@ class _HomePageState extends State<HomePage> {
                     left: 0,
                     right: 0,
                     // 玻璃模式下正文延伸到底栏后面，这里的 padding 就是底栏的高度。
-                    bottom: glass ? media.padding.bottom : 0,
+                    bottom: media.padding.bottom,
                     child: const IgnorePointer(child: _OfflinePill()),
                   ),
               ],
@@ -96,7 +93,7 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-/// 离线提示：浮在底栏上方的一枚胶囊，两种外观都不占用页面高度。
+/// 离线提示浮在底栏上方，不占用页面高度。
 class _OfflinePill extends StatelessWidget {
   const _OfflinePill();
 
@@ -135,13 +132,12 @@ class _OfflinePill extends StatelessWidget {
 }
 
 class _NavItem {
-  const _NavItem(this.icon, this.selectedIcon, this.label, {this.badge = 0});
-  final IconData icon, selectedIcon;
+  const _NavItem(this.label, {this.badge = 0});
   final String label;
   final int badge;
 }
 
-// 底部导航：选中项的黄色底同时包住图标和文字。
+// 悬浮玻璃导航。
 class _NavBar extends StatelessWidget {
   const _NavBar({required this.selected, required this.onSelect, required this.items});
   final int selected;
@@ -151,7 +147,7 @@ class _NavBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
-    if (usesGlass(context)) {
+    {
       const icons = [
         CupertinoIcons.archivebox,
         CupertinoIcons.square_stack_3d_up,
@@ -196,64 +192,6 @@ class _NavBar extends StatelessWidget {
         ),
       );
     }
-    return AppSurface(
-      color: p.card,
-      child: Material(
-        color: Colors.transparent,
-        child: _NavSafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(Space.sm, Space.sm, Space.sm, 0),
-            child: Row(
-              children: [
-                for (var i = 0; i < items.length; i++)
-                  Expanded(child: _tile(context, items[i], i == selected, () => onSelect(i))),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _tile(BuildContext context, _NavItem item, bool on, VoidCallback onTap) {
-    final p = context.palette;
-    // 黄色底上深浅模式都用深色。
-    final fg = on ? Palette.light.ink : p.mute;
-    Widget icon = Icon(on ? item.selectedIcon : item.icon, color: fg);
-    if (item.badge > 0) icon = Badge(label: Text('${item.badge}'), child: icon);
-    return Semantics(
-      selected: on,
-      button: true,
-      // heightFactor: 1：只占按钮自身的高度。底部栏的高度上限是整个屏幕，不加会撑满全屏、挤掉页面内容。
-      child: Center(
-        heightFactor: 1,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOut,
-            width: 88,
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            decoration: BoxDecoration(
-              color: on ? p.yellow : Colors.transparent,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                icon,
-                const SizedBox(height: 2),
-                Text(
-                  item.label,
-                  style: TextStyle(fontSize: 12, color: fg, fontWeight: on ? FontWeight.w600 : FontWeight.w500),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
   }
 }
 

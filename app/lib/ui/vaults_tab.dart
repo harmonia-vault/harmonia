@@ -29,13 +29,7 @@ class VaultsTab extends StatelessWidget {
       actions: [
         IconButton(tooltip: '新建变量库', onPressed: () => createVaultFlow(context, c), icon: const Icon(Icons.add)),
       ],
-      floatingActionButton: vaults.isEmpty
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: () => createVaultFlow(context, c),
-              icon: const Icon(Icons.add),
-              label: const Text('新建变量库'),
-            ),
+
       onRefresh: c.syncNow,
       padding: vaults.isEmpty ? EdgeInsets.zero : const EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, 96),
       children: vaults.isEmpty

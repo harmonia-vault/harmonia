@@ -65,7 +65,6 @@ Future<void> main() async {
     platform: hostPlatform,
     identity: identity,
     prepareGlass: GlassResources.prepare,
-    defaultLiquidGlass: await hostDefaultsToGlass(),
   );
   runApp(HarmoniaApp(c: controller));
   await controller.start();
@@ -175,16 +174,8 @@ class _HarmoniaAppState extends State<HarmoniaApp> with WidgetsBindingObserver {
     title: 'Harmonia',
     debugShowCheckedModeBanner: false,
     themeMode: colorThemeMode(widget.c.appearance.colorMode),
-    theme: buildTheme(
-      Brightness.light,
-      liquidGlass: widget.c.appearance.liquidGlass,
-      glassOpacity: widget.c.appearance.glassOpacity,
-    ),
-    darkTheme: buildTheme(
-      Brightness.dark,
-      liquidGlass: widget.c.appearance.liquidGlass,
-      glassOpacity: widget.c.appearance.glassOpacity,
-    ),
+    theme: buildTheme(Brightness.light, glassOpacity: widget.c.appearance.glassOpacity),
+    darkTheme: buildTheme(Brightness.dark, glassOpacity: widget.c.appearance.glassOpacity),
     builder: (context, child) => GlassOpacityPreview(
       preview: widget.c.glassOpacityPreview,
       child: AppScope(

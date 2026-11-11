@@ -20,13 +20,11 @@ String errorText(Object e) {
 }
 
 void toast(BuildContext context, String msg) {
-  final glass = usesGlass(context);
-  final scheme = Theme.of(context).colorScheme;
   ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
     ..showSnackBar(
       // 固定式通知条自带从底部滑入、滑出的动画（悬浮式在 Material 3 下几乎是直接出现）；
-      // 外观自己画：玻璃模式是与底栏等宽的玻璃气泡，普通模式是深色圆角气泡。
+      // 与底栏等宽的悬浮玻璃气泡。
       SnackBar(
         behavior: SnackBarBehavior.fixed,
         backgroundColor: Colors.transparent,
@@ -35,27 +33,17 @@ void toast(BuildContext context, String msg) {
         clipBehavior: Clip.none,
         content: Padding(
           // 玻璃模式左右各留 24，与底栏等宽。
-          padding: EdgeInsets.symmetric(horizontal: glass ? 24 : Space.lg, vertical: Space.sm),
+          padding: EdgeInsets.symmetric(horizontal: 24, vertical: Space.sm),
           child: _ToastReveal(
-            child: glass
-                ? AppSurface(
-                    color: context.palette.card,
-                    radius: 24,
-                    panel: true,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                      child: Text(tidy(msg), style: TextStyle(color: context.palette.ink, height: 1.45)),
-                    ),
-                  )
-                : Material(
-                    color: scheme.inverseSurface,
-                    elevation: 4,
-                    borderRadius: BorderRadius.circular(14),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: Space.lg, vertical: 14),
-                      child: Text(tidy(msg), style: TextStyle(color: scheme.onInverseSurface, height: 1.45)),
-                    ),
-                  ),
+            child: (AppSurface(
+              color: context.palette.card,
+              radius: 24,
+              panel: true,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                child: Text(tidy(msg), style: TextStyle(color: context.palette.ink, height: 1.45)),
+              ),
+            )),
           ),
         ),
       ),
@@ -73,9 +61,7 @@ class _ToastReveal extends StatelessWidget {
   Widget build(BuildContext context) {
     final animation = context.findAncestorWidgetOfExactType<SnackBar>()?.animation;
     if (animation == null) return child;
-    return usesGlass(context)
-        ? GlassMaterializeTransition(animation: animation, scaleFrom: 1, child: child)
-        : FadeTransition(opacity: animation, child: child);
+    return GlassMaterializeTransition(animation: animation, scaleFrom: 1, child: child);
   }
 }
 
@@ -185,14 +171,14 @@ class AuthScaffold extends StatelessWidget {
               leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: onBack),
             ),
       body: (context) => SafeArea(
-        top: !usesGlass(context) || onBack == null,
+        top: onBack == null,
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 520),
             child: ListView(
               padding: EdgeInsets.fromLTRB(
                 Space.xl,
-                Space.xl + (usesGlass(context) && onBack != null ? MediaQuery.paddingOf(context).top : 0),
+                Space.xl + ((onBack != null) ? MediaQuery.paddingOf(context).top : 0),
                 Space.xl,
                 Space.xxl,
               ),
@@ -256,13 +242,13 @@ class Banner2 extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
-    final glass = usesGlass(context);
+
     return Container(
-      padding: EdgeInsets.all(glass ? 14 : Space.md),
+      padding: EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: warn ? p.warnBox : p.card,
-        borderRadius: BorderRadius.circular(glass ? 20 : 14),
-        border: glass ? null : Border.all(color: warn ? p.warnBox : p.line),
+        borderRadius: BorderRadius.circular(20),
+        border: null,
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -295,11 +281,7 @@ class CodeBox extends StatelessWidget {
     final p = context.palette;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: Space.lg, vertical: Space.lg),
-      decoration: BoxDecoration(
-        color: p.card,
-        borderRadius: BorderRadius.circular(usesGlass(context) ? 24 : 16),
-        border: usesGlass(context) ? null : Border.all(color: p.ink, width: 1.4),
-      ),
+      decoration: BoxDecoration(color: p.card, borderRadius: BorderRadius.circular(24), border: null),
       child: Row(
         children: [
           Expanded(

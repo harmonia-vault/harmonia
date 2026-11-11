@@ -166,24 +166,25 @@ class _GlassDialogState extends State<_GlassDialog> {
   }
 }
 
-class AppAlertDialog extends AlertDialog {
-  const AppAlertDialog({super.key, super.title, super.content, super.actions}) : super(scrollable: true);
+class AppAlertDialog extends StatelessWidget {
+  const AppAlertDialog({super.key, this.title, this.content, this.actions});
+  final Widget? title, content;
+  final List<Widget>? actions;
 
   @override
-  Widget build(BuildContext context) =>
-      usesGlass(context) ? _GlassDialog(title: title, content: content, actions: actions) : super.build(context);
+  Widget build(BuildContext context) => _GlassDialog(title: title, content: content, actions: actions);
 }
 
-class AppSimpleDialog extends SimpleDialog {
-  const AppSimpleDialog({super.key, super.title, super.children});
+class AppSimpleDialog extends StatelessWidget {
+  const AppSimpleDialog({super.key, this.title, this.children});
+  final Widget? title;
+  final List<Widget>? children;
 
   @override
-  Widget build(BuildContext context) => usesGlass(context)
-      ? _GlassDialog(
-          title: title,
-          content: Column(mainAxisSize: MainAxisSize.min, children: children ?? []),
-        )
-      : super.build(context);
+  Widget build(BuildContext context) => _GlassDialog(
+    title: title,
+    content: Column(mainAxisSize: MainAxisSize.min, children: children ?? []),
+  );
 }
 
 class AppMenuButton extends StatelessWidget {
@@ -203,26 +204,6 @@ class AppMenuButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!usesGlass(context)) {
-      if (trigger != null) {
-        return MenuAnchor(
-          menuChildren: [
-            for (final item in items)
-              MenuItemButton(
-                leadingIcon: Icon(item.icon),
-                onPressed: () => onSelected(item.value),
-                child: Text(item.label),
-              ),
-          ],
-          builder: (context, controller, _) =>
-              trigger!(context, () => controller.isOpen ? controller.close() : controller.open()),
-        );
-      }
-      return PopupMenuButton<String>(
-        onSelected: onSelected,
-        itemBuilder: (_) => [for (final item in items) PopupMenuItem(value: item.value, child: Text(item.label))],
-      );
-    }
     return GlassMenu(
       autoAdjustToScreen: true,
       morphSpeed: MediaQuery.disableAnimationsOf(context) ? MorphSpeed.instant : MorphSpeed.fast,

@@ -16,13 +16,7 @@ import 'stage_page.dart';
 import 'theme.dart';
 
 class PageDebug extends StatefulWidget {
-  const PageDebug({
-    super.key,
-    this.initialGlass = false,
-    this.initialColorMode = AppColorMode.system,
-    this.initialGlassOpacity = 0.5,
-  });
-  final bool initialGlass;
+  const PageDebug({super.key, this.initialColorMode = AppColorMode.system, this.initialGlassOpacity = 0.5});
   final AppColorMode initialColorMode;
   final double initialGlassOpacity;
   @override
@@ -55,7 +49,7 @@ class _PageDebugState extends State<PageDebug> {
         session.dispose();
         return;
       }
-      await session.c.setLiquidGlass(widget.initialGlass);
+      await session.c.appearance.load();
       await session.c.setColorMode(widget.initialColorMode);
       await session.c.setGlassOpacity(widget.initialGlassOpacity);
       if (!mounted) {
@@ -165,16 +159,8 @@ class _PageDebugState extends State<PageDebug> {
       navigatorKey: _navigator,
       debugShowCheckedModeBanner: false,
       showPerformanceOverlay: _performance,
-      theme: buildTheme(
-        Brightness.light,
-        liquidGlass: session.c.appearance.liquidGlass,
-        glassOpacity: session.c.appearance.glassOpacity,
-      ),
-      darkTheme: buildTheme(
-        Brightness.dark,
-        liquidGlass: session.c.appearance.liquidGlass,
-        glassOpacity: session.c.appearance.glassOpacity,
-      ),
+      theme: buildTheme(Brightness.light, glassOpacity: session.c.appearance.glassOpacity),
+      darkTheme: buildTheme(Brightness.dark, glassOpacity: session.c.appearance.glassOpacity),
       themeMode: colorThemeMode(session.c.appearance.colorMode),
       locale: const Locale('zh', 'CN'),
       supportedLocales: const [Locale('zh', 'CN')],
@@ -245,17 +231,6 @@ class _PageDebugState extends State<PageDebug> {
             value: _performance,
             onChanged: (value) => setState(() => _performance = value),
           ),
-          SwitchListTile(
-            title: const Text('液态玻璃'),
-            value: session.c.appearance.liquidGlass,
-            onChanged: (v) async {
-              try {
-                await session.c.setLiquidGlass(v);
-              } catch (_) {
-                if (mounted) setState(() => _error = '外观未能切换，请重试。');
-              }
-            },
-          ),
           Padding(
             padding: const EdgeInsets.all(16),
             child: DropdownButtonFormField<AppColorMode>(
@@ -271,12 +246,11 @@ class _PageDebugState extends State<PageDebug> {
               },
             ),
           ),
-          if (session.c.appearance.liquidGlass)
-            GlassTransparencyControl(
-              value: session.c.appearance.glassOpacity,
-              onChanged: session.c.setGlassOpacity,
-              onPreview: session.c.previewGlassOpacity,
-            ),
+          GlassTransparencyControl(
+            value: session.c.appearance.glassOpacity,
+            onChanged: session.c.setGlassOpacity,
+            onPreview: session.c.previewGlassOpacity,
+          ),
           SwitchListTile(title: const Text('大字号'), value: _large, onChanged: (v) => setState(() => _large = v)),
           SwitchListTile(title: const Text('高对比度'), value: _contrast, onChanged: (v) => setState(() => _contrast = v)),
           SwitchListTile(

@@ -112,12 +112,7 @@ class _DevicesTabState extends State<DevicesTab> {
           trigger: (context, open) => IconButton(tooltip: '添加设备', onPressed: open, icon: const Icon(Icons.add)),
         ),
       ],
-      floatingActionButton: AddDeviceMenu(
-        c: c,
-        onDone: _refreshAfterAdd,
-        trigger: (context, open) =>
-            FloatingActionButton.extended(onPressed: open, icon: const Icon(Icons.add), label: const Text('添加设备')),
-      ),
+
       onRefresh: () async {
         await c.syncNow();
         await _loadPending();

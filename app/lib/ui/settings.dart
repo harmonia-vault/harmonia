@@ -129,17 +129,6 @@ class _SettingsTabState extends State<SettingsTab> {
     }
   }
 
-  Future<void> _toggleGlass(bool enabled) async {
-    setState(() => _changingAppearance = true);
-    try {
-      await c.setLiquidGlass(enabled);
-    } catch (_) {
-      if (mounted) toast(context, '外观未能切换，请重试。');
-    } finally {
-      if (mounted) setState(() => _changingAppearance = false);
-    }
-  }
-
   Future<void> _pickColorMode() async {
     final picked = await showAppDialog<AppColorMode>(
       context: context,
@@ -177,15 +166,11 @@ class _SettingsTabState extends State<SettingsTab> {
   }
 
   Future<void> _openPageDebug() async {
-    final glass = usesGlass(context);
     c.beginPageDebug();
     try {
       final route = MaterialPageRoute<void>(
-        builder: (_) => PageDebug(
-          initialGlass: glass,
-          initialColorMode: c.appearance.colorMode,
-          initialGlassOpacity: c.appearance.glassOpacity,
-        ),
+        builder: (_) =>
+            PageDebug(initialColorMode: c.appearance.colorMode, initialGlassOpacity: c.appearance.glassOpacity),
       );
       final closed = Navigator.push(context, route);
       // 转场结束、调试页完全盖住之后才停止绘制真实页面；开始返回时立刻恢复。
@@ -202,7 +187,7 @@ class _SettingsTabState extends State<SettingsTab> {
     final p = context.palette;
     return AppTabPage(
       title: '设置',
-      padding: EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, usesGlass(context) ? 96 : Space.xxl),
+      padding: EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, 96),
       children: [
         const SectionTitle('账号'),
         Card(
@@ -238,20 +223,11 @@ class _SettingsTabState extends State<SettingsTab> {
                 onTap: _changingAppearance ? null : _pickColorMode,
               ),
               const Divider(),
-              AppSwitchTile(
-                icon: const Icon(Icons.blur_on_outlined),
-                title: const Text('液态玻璃'),
-                value: c.appearance.liquidGlass,
-                onChanged: _changingAppearance ? null : _toggleGlass,
+              GlassTransparencyControl(
+                value: c.appearance.glassOpacity,
+                onChanged: c.setGlassOpacity,
+                onPreview: c.previewGlassOpacity,
               ),
-              if (c.appearance.liquidGlass) ...[
-                const Divider(),
-                GlassTransparencyControl(
-                  value: c.appearance.glassOpacity,
-                  onChanged: c.setGlassOpacity,
-                  onPreview: c.previewGlassOpacity,
-                ),
-              ],
             ],
           ),
         ),

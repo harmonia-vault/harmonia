@@ -20,13 +20,11 @@ abstract final class Space {
 }
 
 class AppearanceTheme extends ThemeExtension<AppearanceTheme> {
-  const AppearanceTheme(this.liquidGlass, [this.glassOpacity = 0.5]);
-  final bool liquidGlass;
+  const AppearanceTheme([this.glassOpacity = 0.5]);
   final double glassOpacity;
 
   @override
-  AppearanceTheme copyWith({bool? liquidGlass, double? glassOpacity}) =>
-      AppearanceTheme(liquidGlass ?? this.liquidGlass, glassOpacity ?? this.glassOpacity);
+  AppearanceTheme copyWith({double? glassOpacity}) => AppearanceTheme(glassOpacity ?? this.glassOpacity);
 
   @override
   AppearanceTheme lerp(AppearanceTheme? other, double t) => other ?? this;
@@ -91,7 +89,7 @@ extension PaletteX on BuildContext {
   Palette get palette => Theme.of(this).extension<Palette>()!;
 }
 
-ThemeData buildTheme(Brightness brightness, {bool liquidGlass = false, double glassOpacity = 0.5}) {
+ThemeData buildTheme(Brightness brightness, {double glassOpacity = 0.5}) {
   final p = brightness == Brightness.light ? Palette.light : Palette.dark;
   final scheme = ColorScheme.fromSeed(
     seedColor: p.accent,
@@ -108,14 +106,14 @@ ThemeData buildTheme(Brightness brightness, {bool liquidGlass = false, double gl
   );
   // 输入框保留一道细线：浮动标签要落在线上，也用它和不可编辑的卡片区分。
   final border = OutlineInputBorder(
-    borderRadius: BorderRadius.circular(liquidGlass ? 18 : 14),
-    borderSide: BorderSide(color: p.line, width: liquidGlass ? 1 : 1.2),
+    borderRadius: BorderRadius.circular(18),
+    borderSide: BorderSide(color: p.line, width: 1),
   );
   return ThemeData(
     useMaterial3: true,
     colorScheme: scheme,
     scaffoldBackgroundColor: p.paper,
-    extensions: [p, AppearanceTheme(liquidGlass, glassOpacity)],
+    extensions: [p, AppearanceTheme(glassOpacity)],
     appBarTheme: AppBarTheme(
       backgroundColor: p.paper,
       foregroundColor: p.ink,
@@ -123,26 +121,21 @@ ThemeData buildTheme(Brightness brightness, {bool liquidGlass = false, double gl
       scrolledUnderElevation: 0,
       centerTitle: false,
     ),
-    listTileTheme: liquidGlass
-        ? ListTileThemeData(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 3),
-            minLeadingWidth: 24,
-            horizontalTitleGap: 14,
-            iconColor: p.mute,
-            titleTextStyle: TextStyle(inherit: false, color: p.ink, fontSize: 16, fontWeight: FontWeight.w500),
-            subtitleTextStyle: TextStyle(inherit: false, color: p.mute, fontSize: 13, height: 1.5),
-          )
-        : null,
+    listTileTheme: ListTileThemeData(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 3),
+      minLeadingWidth: 24,
+      horizontalTitleGap: 14,
+      iconColor: p.mute,
+      titleTextStyle: TextStyle(inherit: false, color: p.ink, fontSize: 16, fontWeight: FontWeight.w500),
+      subtitleTextStyle: TextStyle(inherit: false, color: p.mute, fontSize: 13, height: 1.5),
+    ),
     cardTheme: CardThemeData(
       color: p.card,
       elevation: 0,
       margin: EdgeInsets.zero,
       // 裁到圆角内，里面列表项的按压高亮才不会露出直角。
       clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(liquidGlass ? 24 : 18),
-        side: liquidGlass ? BorderSide.none : BorderSide(color: p.line, width: 1.2),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24), side: BorderSide.none),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
@@ -161,26 +154,17 @@ ThemeData buildTheme(Brightness brightness, {bool liquidGlass = false, double gl
         textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
       ),
     ),
-    floatingActionButtonTheme: FloatingActionButtonThemeData(
-      backgroundColor: p.accentFill,
-      foregroundColor: Colors.white,
-    ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
         minimumSize: const Size(64, 52),
         shape: const StadiumBorder(),
         foregroundColor: p.ink,
-        backgroundColor: liquidGlass ? p.card : null,
-        side: liquidGlass ? BorderSide.none : BorderSide(color: p.ink.withValues(alpha: 0.6), width: 1.2),
+        backgroundColor: p.card,
+        side: BorderSide.none,
       ),
     ),
     snackBarTheme: const SnackBarThemeData(behavior: SnackBarBehavior.floating),
     dialogTheme: DialogThemeData(backgroundColor: p.card, surfaceTintColor: Colors.transparent),
-    dividerTheme: DividerThemeData(
-      color: p.line,
-      thickness: liquidGlass ? 0.5 : 1,
-      space: 1,
-      indent: liquidGlass ? 56 : null,
-    ),
+    dividerTheme: DividerThemeData(color: p.line, thickness: 0.5, space: 1, indent: 56),
   );
 }
