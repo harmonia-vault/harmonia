@@ -17,7 +17,13 @@ class ConnectPage extends StatefulWidget {
 }
 
 class _ConnectPageState extends State<ConnectPage> {
-  final _url = TextEditingController();
+  final _url = TextEditingController(text: 'https://harmonia.zzz.sd');
+
+  @override
+  void dispose() {
+    _url.dispose();
+    super.dispose();
+  }
 
   Future<void> _connect() async {
     if (_url.text.trim().isEmpty) {
@@ -37,7 +43,7 @@ class _ConnectPageState extends State<ConnectPage> {
   @override
   Widget build(BuildContext context) => AuthScaffold(
     title: '连接服务器',
-    subtitle: '输入你部署的 Harmonia 服务地址，或者扫描服务器首页上的二维码。\n环境变量在手机上加密后才会上传，服务器只保存密文。',
+    subtitle: '可直接连接，也可修改地址或扫描服务器首页上的二维码。',
     children: [
       TextField(
         autofillHints: null,

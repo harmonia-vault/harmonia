@@ -159,7 +159,7 @@ Map<String, List<DebugPageEntry>> debugPages() => {
     ),
   ],
   '账号接入': [
-    DebugPageEntry('连接服务器', (s) => ConnectPage(c: s.c), stage: Stage.connect),
+    DebugPageEntry('连接服务器：默认地址、手动修改与模拟连接', (s) => ConnectPage(c: s.c), stage: Stage.connect),
     DebugPageEntry('扫描服务器', (_) => const ScanServerPage()),
     DebugPageEntry('输入邮箱、注册与重新设置确认', (s) => SignInPage(c: s.c), stage: Stage.signedOut),
     DebugPageEntry(
