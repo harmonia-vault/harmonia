@@ -18,6 +18,7 @@ import 'core/crypto.dart';
 import 'core/account.dart';
 import 'core/push.dart';
 import 'core/vault.dart';
+import 'ui/navigation_shell.dart';
 import 'ui/approval.dart';
 import 'ui/app_scope.dart';
 import 'core/keyring.dart';
@@ -183,7 +184,10 @@ class _HarmoniaAppState extends State<HarmoniaApp> with WidgetsBindingObserver {
         identity: widget.c.identity,
         child: AppWindowLayout(
           navigator: _navigator,
-          child: LiquidGlassWidgets.wrap(brightnessResolver: Theme.maybeBrightnessOf, child: child!),
+          child: LiquidGlassWidgets.wrap(
+            brightnessResolver: Theme.maybeBrightnessOf,
+            child: AppNavigationShell(child: child!),
+          ),
         ),
       ),
     ),

@@ -206,3 +206,17 @@ run = "flutter build ipa --release --dart-define=APPLE_DISTRIBUTION=true"
 description = "构建无签名 iOS App，用于验证分发配置"
 dir = "app"
 run = "flutter build ios --release --no-codesign"
+
+[tasks.build-ios-device]
+description = "构建本机签名的 iOS 真机测试包"
+dir = "app"
+run = "flutter build ios --release --dart-define=APPLE_DISTRIBUTION=true"
+
+[tasks.install-ios-device]
+description = "安装已构建的 iOS 真机测试包，使用 --device 指定手机"
+run = "xcrun devicectl device install app app/build/ios/iphoneos/Runner.app"
+
+[tasks.run-app-preview]
+description = "在设备窗口中运行独立模拟账号，检查正式布局与交互"
+dir = "app"
+run = "flutter run --target=lib/main_preview.dart"

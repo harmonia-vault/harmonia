@@ -1,10 +1,13 @@
-// 一个环境的授权面板（权限；“高级”里是无人值守使用和它的期限），以及“添加环境”时选择环境的面板（设计文档 5.9、17.2、19.3）。
-// 设备详情和扫码批准设备共用；保存时做什么由调用方决定。
+// 环境授权与环境选择使用底部弹层；保存时做什么由设备详情或扫码批准流程决定。
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../core/models.dart';
-import 'app_sheet.dart';
+
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
+
+import 'window_layout.dart';
+import 'glass.dart';
 import 'glass_controls.dart';
 import 'list_row.dart';
 import 'theme.dart';
@@ -87,7 +90,7 @@ Widget grantSummary(BuildContext context, GrantDraft d, {bool active = true}) {
   );
 }
 
-/// 打开一个环境的授权面板。[onSave] 在面板之上执行（可以再验证身份），返回 true 时关闭面板；
+/// 打开环境授权底部弹层；保存成功后关闭面板。
 /// [onRemove] 为 null 表示这是新添加的环境，不显示“取消对这个环境的授权”。
 Future<void> showGrantSheet(
   BuildContext context, {
@@ -96,7 +99,7 @@ Future<void> showGrantSheet(
   required GrantDraft initial,
   required Future<bool> Function(BuildContext, GrantDraft) onSave,
   Future<bool> Function(BuildContext)? onRemove,
-}) => showAppSheet<void>(
+}) => _showGrantPanel<void>(
   context,
   builder: (_) =>
       _GrantSheet(envName: envName, deviceName: deviceName, initial: initial, onSave: onSave, onRemove: onRemove),
@@ -156,171 +159,185 @@ class _GrantSheetState extends State<_GrantSheet> {
     final p = context.palette;
 
     final expiryOptions = {..._expiryChoices.keys, _d.expiry, if (widget.initial.local) widget.initial.expiry};
-    return SafeArea(
-      top: false,
-      bottom: false,
-      child: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(24, 4, 24, 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              widget.envName,
-              style: TextStyle(color: p.ink, fontSize: 22, fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 4),
-            Text('授权给“${widget.deviceName}”', style: TextStyle(color: p.mute, fontSize: 13)),
-            const SizedBox(height: Space.xl),
-            const Text('权限'),
-            const SizedBox(height: Space.sm),
-            AppSegmented<String>(
-              options: const [(value: 'ro', label: '只读'), (value: 'rw', label: '读写')],
-              value: _d.role,
-              onChanged: (v) => setState(() => _d = (role: v, expiry: _d.expiry, local: _d.local)),
-            ),
-            const SizedBox(height: Space.lg),
-            Semantics(
-              button: true,
-              expanded: _advanced,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(8),
-                onTap: () => setState(() => _advanced = !_advanced),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: Space.sm),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(24, 4, 24, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            widget.envName,
+            style: TextStyle(color: p.ink, fontSize: 22, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 4),
+          Text('授权给“${widget.deviceName}”', style: TextStyle(color: p.mute, fontSize: 13)),
+          const SizedBox(height: Space.xl),
+          const Text('权限'),
+          const SizedBox(height: Space.sm),
+          AppSegmented<String>(
+            options: const [(value: 'ro', label: '只读'), (value: 'rw', label: '读写')],
+            value: _d.role,
+            onChanged: (v) => setState(() => _d = (role: v, expiry: _d.expiry, local: _d.local)),
+          ),
+          const SizedBox(height: Space.lg),
+          ExpansionTile(
+            title: Text('高级', style: TextStyle(color: p.mute)),
+            expansionAnimationStyle: MediaQuery.disableAnimationsOf(context) ? AnimationStyle.noAnimation : null,
+            initiallyExpanded: _advanced,
+            onExpansionChanged: (expanded) => _advanced = expanded,
+            maintainState: true,
+            tilePadding: EdgeInsets.zero,
+            childrenPadding: EdgeInsets.zero,
+            expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
+            iconColor: p.mute,
+            collapsedIconColor: p.mute,
+            shape: const Border(),
+            collapsedShape: const Border(),
+            children: [
+              const SizedBox(height: Space.sm),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('无人值守使用（本机解密）'),
+                        const SizedBox(height: 2),
+                        Text(
+                          tidy(_d.local ? localDecryptOn : localDecryptOff),
+                          style: TextStyle(color: p.mute, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: Space.md),
+                  AppSwitch(value: _d.local, onChanged: _setLocal),
+                ],
+              ),
+              if (_d.local) ...[
+                const SizedBox(height: Space.lg),
+                SizedBox(
+                  height: 32,
                   child: Row(
                     children: [
-                      Expanded(
-                        child: Text('高级', style: TextStyle(color: p.mute)),
-                      ),
-                      AnimatedRotation(
-                        turns: _advanced ? 0.5 : 0,
-                        duration: const Duration(milliseconds: 200),
-                        child: Icon(Icons.expand_more, color: p.mute),
+                      const Expanded(child: Text('期限')),
+                      // 玻璃菜单的触发处左右各有 8 的按压余量，向右挪回，让文字与开关的右边缘对齐。
+                      Transform.translate(
+                        offset: Offset(8, 0),
+                        child: AppSelect<String>(
+                          semanticLabel: '“${widget.envName}”无人值守使用的期限',
+                          value: _d.expiry,
+                          options: [for (final k in expiryOptions) (value: k, label: k)],
+                          onChanged: (v) => setState(() => _d = (role: _d.role, expiry: v, local: _d.local)),
+                        ),
                       ),
                     ],
                   ),
                 ),
-              ),
-            ),
-            AnimatedSize(
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeOutCubic,
-              alignment: Alignment.topCenter,
-              child: !_advanced
-                  ? const SizedBox(width: double.infinity)
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        const SizedBox(height: Space.sm),
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text('无人值守使用（本机解密）'),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    tidy(_d.local ? localDecryptOn : localDecryptOff),
-                                    style: TextStyle(color: p.mute, fontSize: 13),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: Space.md),
-                            AppSwitch(value: _d.local, onChanged: _setLocal),
-                          ],
-                        ),
-                        if (_d.local) ...[
-                          const SizedBox(height: Space.lg),
-                          SizedBox(
-                            height: 32,
-                            child: Row(
-                              children: [
-                                const Expanded(child: Text('期限')),
-                                // 玻璃菜单的触发处左右各有 8 的按压余量，向右挪回，让文字与开关的右边缘对齐。
-                                Transform.translate(
-                                  offset: Offset(8, 0),
-                                  child: AppSelect<String>(
-                                    semanticLabel: '“${widget.envName}”无人值守使用的期限',
-                                    value: _d.expiry,
-                                    options: [for (final k in expiryOptions) (value: k, label: k)],
-                                    onChanged: (v) => setState(() => _d = (role: _d.role, expiry: v, local: _d.local)),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text('到期后这台电脑不能再使用这个环境', style: TextStyle(color: p.mute, fontSize: 13)),
-                        ],
-                      ],
-                    ),
-            ),
-            const SizedBox(height: Space.xl),
-            FilledButton(onPressed: _adding || _d != widget.initial ? _save : null, child: Text(_adding ? '添加' : '保存')),
-            if (!_adding) ...[
-              const SizedBox(height: Space.sm),
-              TextButton(
-                style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error),
-                onPressed: _remove,
-                child: const Text('取消对这个环境的授权'),
-              ),
+                const SizedBox(height: 2),
+                Text('到期后这台电脑不能再使用这个环境', style: TextStyle(color: p.mute, fontSize: 13)),
+              ],
             ],
+          ),
+          const SizedBox(height: Space.xl),
+          FilledButton(onPressed: _adding || _d != widget.initial ? _save : null, child: Text(_adding ? '添加' : '保存')),
+          if (!_adding) ...[
+            const SizedBox(height: Space.sm),
+            TextButton(
+              style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error),
+              onPressed: _remove,
+              child: const Text('取消对这个环境的授权'),
+            ),
           ],
-        ),
+        ],
       ),
     );
   }
 }
 
-/// 从还没授权的环境中选一个；取消时返回 null。
-Future<Environment?> pickEnvironment(BuildContext context, List<Environment> envs) => showAppSheet<Environment>(
+/// 从还没授权的环境中选一个，选择与编辑均使用底部弹层。
+Future<Environment?> pickEnvironment(BuildContext context, List<Environment> envs) => _showGrantPanel<Environment>(
   context,
-  builder: (c) {
-    final p = c.palette;
-
-    return SafeArea(
-      top: false,
-      bottom: false,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(c).height * 0.7),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+  builder: (context) => Column(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(24, 4, 24, Space.sm),
+        child: Text('添加环境', style: Theme.of(context).textTheme.titleLarge),
+      ),
+      Flexible(
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.fromLTRB(Space.sm, 0, Space.sm, Space.lg),
           children: [
-            Padding(
-              padding: EdgeInsets.fromLTRB(24, 4, 24, Space.sm),
-              child: Text(
-                '添加环境',
-                style: TextStyle(color: p.ink, fontSize: 22, fontWeight: FontWeight.w700),
+            for (final e in envs)
+              ListTile(
+                contentPadding: listRowPadding,
+                leading: const Icon(CupertinoIcons.square_stack_3d_up),
+                title: Text(e.name),
+                subtitle: Text('${e.items.length} 个变量'),
+                trailing: const ListRowChevron(),
+                onTap: () => Navigator.pop(context, e),
               ),
-            ),
-            Flexible(
-              child: ListView(
-                shrinkWrap: true,
-                padding: EdgeInsets.fromLTRB(Space.sm, 0, Space.sm, Space.lg),
-                children: [
-                  for (final e in envs)
-                    ListTile(
-                      contentPadding: listRowPadding,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      leading: Icon(CupertinoIcons.square_stack_3d_up),
-                      title: Text(e.name),
-                      subtitle: Text('${e.items.length} 个变量'),
-                      trailing: const ListRowChevron(),
-                      onTap: () => Navigator.pop(c, e),
-                    ),
-                ],
-              ),
-            ),
           ],
         ),
       ),
-    );
-  },
+    ],
+  ),
 );
+
+/// 复用框架的底部面板路由、拖拽关闭与安全区，玻璃表面不再额外缩放。
+Future<T?> _showGrantPanel<T>(BuildContext context, {required WidgetBuilder builder}) {
+  final navigator = WindowLayoutScope.navigatorOf(context);
+  final themes = InheritedTheme.capture(from: context, to: navigator.context);
+  final region = WindowLayoutScope.maybeOf(context)!.presentation;
+  final contentKey = GlobalKey();
+  return showModalBottomSheet<T>(
+    context: navigator.context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    anchorPoint: flutterRect(region).center,
+    constraints: const BoxConstraints(maxWidth: 560),
+    backgroundColor: Colors.transparent,
+    barrierColor: glassBarrierColor(context),
+    sheetAnimationStyle: MediaQuery.disableAnimationsOf(context) ? AnimationStyle.noAnimation : null,
+    builder: (context) => themes.wrap(
+      GlassMaterializeTransition(
+        animation: ModalRoute.of(context)!.animation!,
+        scaleFrom: 1,
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(12, 12, 12, MediaQuery.paddingOf(context).bottom + 12),
+          child: AppSurface(
+            color: context.palette.card,
+            radius: 36,
+            panel: true,
+            child: RepaintBoundary(
+              key: contentKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    child: Container(
+                      width: 32,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: context.palette.mute.withValues(alpha: .4),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  Flexible(child: Builder(builder: builder)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
 
 /// 卡片末尾的“添加环境”一行。
 class AddEnvironmentRow extends StatelessWidget {

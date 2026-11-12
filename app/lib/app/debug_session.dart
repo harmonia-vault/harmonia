@@ -112,6 +112,14 @@ class DebugSession {
     );
   }
 
+  /// 长列表用于检查普通手机滚动后打开弹窗时，标题、首行及滚动位置是否保持。
+  Future<void> prepareLongVaultList() async {
+    for (var i = 1; i <= 16; i++) {
+      await vault.createVault('示例变量库 $i');
+    }
+    c.refresh();
+  }
+
   void cancelPendingFlow() {
     c.pendingPairing?.cancel();
     c.pendingPairing = null;

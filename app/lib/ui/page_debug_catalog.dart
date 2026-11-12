@@ -12,7 +12,7 @@ import '../core/debug_account.dart';
 import '../core/debug_approvals.dart';
 import '../core/debug_push.dart';
 import '../core/debug_vault.dart' show debugEnvironmentId;
-import '../core/vault.dart' show ApprovalRequest;
+import '../core/vault.dart' show ApprovalRequest, AuthorizationInfo, scopeAll, scopeTerminal;
 import 'about.dart';
 import 'ai_prompt.dart';
 import 'approval.dart';
@@ -38,7 +38,6 @@ import 'recovery_actions.dart';
 import 'recovery_pages.dart';
 import 'scanner.dart';
 import 'settings.dart';
-import 'settings_categories.dart';
 import 'widgets.dart';
 import 'theme.dart';
 import 'variable_edit.dart';
@@ -57,16 +56,21 @@ class DebugPageEntry {
 Map<String, List<DebugPageEntry>> debugPages() => {
   '首页与管理': [
     DebugPageEntry('折叠屏：内外屏、开合过渡与左右分屏', (s) => FoldPreviewPage(c: s.c), followStage: false),
-    DebugPageEntry('单栏详情返回：变量库、环境、设备与设置', (s) => FoldPreviewPage(c: s.c, startOnOuterScreen: true), followStage: false),
+    DebugPageEntry('多层返回：关联引用、编辑草稿、手势完成与取消', (s) => FoldPreviewPage(c: s.c, initialPose: 2), followStage: false),
     DebugPageEntry(
-      '双栏未选择：变量库、环境、设备与设置',
+      '双栏选择：默认首项、切换淡入、删除与空数据',
       (s) => s.vault.paired ? HomePage(c: s.c) : SignInPage(c: s.c),
       followStage: false,
     ),
-    DebugPageEntry('设置分组与详情', (s) => SettingsCategories(c: s.c)),
+    DebugPageEntry('设置总览：左栏默认选中、点击回到总览与开合保持', (s) => FoldPreviewPage(c: s.c, initialTab: 3), followStage: false),
+    DebugPageEntry('编辑页面：单栏整页、双栏详情区、开合保留草稿', (s) => FoldPreviewPage(c: s.c, initialPose: 2), followStage: false),
+    DebugPageEntry('内屏竖向：正文与输入框避开顶部模糊', (s) => FoldPreviewPage(c: s.c, initialPose: 1), followStage: false),
+    DebugPageEntry('外屏横向：库内导航收起、操作溢出与菜单开合', (s) => FoldPreviewPage(c: s.c, initialPose: 3), followStage: false),
+    DebugPageEntry('内屏横向：统一侧栏、正文对齐、默认添加按钮与菜单边界', (s) => FoldPreviewPage(c: s.c), followStage: false),
     DebugPageEntry('首页、底栏交互动效与系统间距', (s) => s.vault.paired ? HomePage(c: s.c) : SignInPage(c: s.c)),
     DebugPageEntry('玻璃透明度与折射对照', (s) => GlassDebugPage(c: s.c)),
-    DebugPageEntry('通知默认动效与下载进度', (_) => const FeedbackDebugPage()),
+    DebugPageEntry('通知：库内显隐与下载进度', (_) => const FeedbackDebugPage()),
+    DebugPageEntry('普通手机：同栏大标题、顶部磨砂、滚动收起与弹窗保持', (s) => HomePage(c: s.c), prepare: (s) => s.prepareLongVaultList()),
     DebugPageEntry('变量库列表、新建按钮与行尾间距', (s) => VaultsTab(c: s.c)),
     DebugPageEntry('环境列表、新建按钮与行尾间距', (s) => EnvironmentsTab(c: s.c)),
     DebugPageEntry('设备列表、添加设备菜单与行尾间距', (s) => s.vault.paired ? DevicesTab(c: s.c) : SignInPage(c: s.c)),
@@ -78,7 +82,7 @@ Map<String, List<DebugPageEntry>> debugPages() => {
     DebugPageEntry('环境变量面板：选中的变量（已改名），可以改名、移除、编辑值和备注', (s) => _envVariable(s, 'debug-env-2', 'LLM_KEY')),
     DebugPageEntry('环境变量面板：来自“全部变量”，不能单独移除的提示', (s) => _envVariable(s, 'debug-env-1', null)),
     DebugPageEntry('新建环境：添加变量库、勾选与改名、实时预览', (s) => EnvEditorPage(c: s.c)),
-    DebugPageEntry('编辑引用：顺序、选择变量库和变量、重名时不能保存', (s) {
+    DebugPageEntry('编辑引用：顶部间距、选择变量、重名时不能保存', (s) {
       final id = _problemEnv(s);
       return id == null ? _none('环境') : EnvEditorPage(c: s.c, envId: id);
     }),
@@ -94,14 +98,14 @@ Map<String, List<DebugPageEntry>> debugPages() => {
     ),
     DebugPageEntry('设备详情：已授权的环境、无人值守标记、激活开关与拖动排序', (s) => _devicePage(s, 'debug-computer')),
     DebugPageEntry(
-      '环境授权面板：需手机批准，“高级”默认收起；展开后开启无人值守的确认与期限',
+      '环境授权底部弹层：需手机批准，“高级”默认收起；展开后开启无人值守的确认与期限',
       (s) => DebugOverlay(
         background: _devicePage(s, 'debug-computer'),
         show: (c) => editDeviceGrant(c, s.c, 'debug-computer', 'debug-env-4'),
       ),
     ),
     DebugPageEntry(
-      '环境授权面板：已开启无人值守，“高级”默认展开、期限与取消授权',
+      '环境授权底部弹层：已开启无人值守，“高级”默认展开、期限与取消授权',
       (s) => DebugOverlay(
         background: _devicePage(s, 'debug-computer'),
         show: (c) => editDeviceGrant(c, s.c, 'debug-computer', 'debug-env-1'),
@@ -137,7 +141,37 @@ Map<String, List<DebugPageEntry>> debugPages() => {
     DebugPageEntry('批准使用变量：Windows 电脑只能授权给所有程序', (s) => _approval(s, debugApproval(deviceId: 'debug-computer'))),
     DebugPageEntry('批准写入变量：新增和删除、值默认遮住', (s) => _approval(s, debugApproval(write: true))),
     DebugPageEntry('批准请求已失效（电脑已取消或超时）', (s) => _approval(s, debugApproval(), expire: true)),
-    DebugPageEntry('设备详情：正在生效的授权与结束', (s) => _devicePage(s, 'debug-mac')),
+    DebugPageEntry('设备详情：正在生效的授权、信息层级与结束', (s) => _devicePage(s, 'debug-mac')),
+    DebugPageEntry(
+      '设备详情：长变量名、多环境授权与窄屏换行',
+      (s) => _devicePage(s, 'debug-mac'),
+      prepare: (s) async {
+        s.vault.auths
+          ..clear()
+          ..addAll([
+            AuthorizationInfo({
+              'id': 'debug-auth-long',
+              'deviceId': 'debug-mac',
+              'scope': scopeAll,
+              'expiresAt': 0,
+              'items': [
+                {'environmentId': 'debug-env-2', 'name': 'EXAMPLE_AUTOMATION_ACCESS_KEY_SECRET'},
+              ],
+            }),
+            AuthorizationInfo({
+              'id': 'debug-auth-multiple',
+              'deviceId': 'debug-mac',
+              'scope': scopeTerminal,
+              'expiresAt': DateTime.now().add(const Duration(minutes: 90)).millisecondsSinceEpoch,
+              'items': [
+                {'environmentId': 'debug-env-2', 'name': 'LLM_KEY'},
+                {'environmentId': 'debug-env-2', 'name': 'MODEL'},
+                {'environmentId': 'debug-env-3', 'name': 'OLD_SERVICE_URL'},
+              ],
+            }),
+          ]);
+      },
+    ),
   ],
   '后台通知': [
     DebugPageEntry('设置：后台通知正常', (s) => SettingsTab(c: s.c), prepare: (s) => s.setPush(DebugPushScenario.ok)),
@@ -258,7 +292,7 @@ Map<String, List<DebugPageEntry>> debugPages() => {
   ],
   '弹窗与弹层': [
     DebugPageEntry(
-      '首页新建变量库、遮罩与键盘弹出避让',
+      '首页新建变量库：窗口居中、横竖切换与键盘弹出避让',
       (s) => DebugOverlay(
         background: HomePage(c: s.c),
         show: (c) => askName(c, title: '新建变量库', label: '变量库名称'),
@@ -281,7 +315,7 @@ Map<String, List<DebugPageEntry>> debugPages() => {
         },
       ),
     ),
-    DebugPageEntry('身份验证与 PIN 错误提示', (_) => DebugOverlay(show: (c) => verifyIdentity(c, '验证模拟身份后继续'))),
+    DebugPageEntry('身份验证：PIN 弹窗居中、键盘避让与错误提示', (_) => DebugOverlay(show: (c) => verifyIdentity(c, '验证模拟身份后继续'))),
     DebugPageEntry(
       '新 PIN 弹窗',
       (s) => DebugOverlay(

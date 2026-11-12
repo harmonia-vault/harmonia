@@ -48,7 +48,7 @@ Future<void> createVaultFlow(BuildContext context, AppController c) async {
     await c.guard(() async => id = await c.vault.createVault(name));
   }, done: '已创建变量库');
   if (ok && id != null && context.mounted) {
-    await openWorkspaceEntry(
+    await selectWorkspaceEntry(
       context,
       WorkspaceEntry(
         tab: 0,
@@ -207,9 +207,10 @@ mixin LeaveWhenGone<T extends StatefulWidget> on State<T> {
     final route = ModalRoute.of(context);
     if (route == null || !route.isActive) return;
     _left = true;
-    Navigator.of(context)
-      ..popUntil((r) => r == route)
-      ..pop();
+    final nav = Navigator.of(context);
+    nav.popUntil((r) => r == route);
+    // 双栏详情本身就是起始页，删除后由工作台选择剩余条目。
+    if (!route.isFirst) nav.pop();
   }
 
   /// 执行删除；成功后离开本页。
@@ -284,8 +285,8 @@ class _VaultPageState extends State<VaultPage> with LeaveWhenGone {
       appBar: AppBarSurface(
         title: Text(name),
         actions: [
-          IconButton(tooltip: '添加变量', icon: const Icon(Icons.add), onPressed: _edit),
-          AppMenuButton(
+          GlassBarItem.icon(id: '添加变量', label: '添加变量', icon: const Icon(Icons.add), onTap: _edit),
+          appBarMenu(
             semanticLabel: '变量库操作',
             onSelected: (a) => _menu(a, name, [for (final e in envs) e.name]),
             items: const [

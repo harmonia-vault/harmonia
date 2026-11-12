@@ -1,7 +1,17 @@
 // 视觉：沿用“砂岩”配色——暖纸米色底、深墨描边、陶橙主色。
 import 'package:flutter/material.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart' show GlassPageTransitionsBuilder;
 
 import '../core/appearance.dart';
+
+/// 沿用库的原生页面与手势转场，只缩短频繁编辑时的等待。
+class _AppPageTransitions extends GlassPageTransitionsBuilder {
+  const _AppPageTransitions();
+  @override
+  Duration get transitionDuration => const Duration(milliseconds: 300);
+  @override
+  Duration get reverseTransitionDuration => const Duration(milliseconds: 240);
+}
 
 String colorModeLabel(AppColorMode mode) => switch (mode) {
   AppColorMode.system => '跟随系统',
@@ -110,6 +120,9 @@ ThemeData buildTheme(Brightness brightness, {double glassOpacity = 0.5}) {
     borderSide: BorderSide(color: p.line, width: 1),
   );
   return ThemeData(
+    pageTransitionsTheme: PageTransitionsTheme(
+      builders: {...const PageTransitionsTheme().builders, TargetPlatform.iOS: const _AppPageTransitions()},
+    ),
     useMaterial3: true,
     colorScheme: scheme,
     scaffoldBackgroundColor: p.paper,

@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 
 import '../app/controller.dart';
 import '../core/models.dart';
-import 'glass.dart';
 import 'glass_controls.dart';
 import 'grant_sheet.dart';
 import 'list_row.dart';
@@ -150,21 +149,6 @@ class _DeviceGrantsState extends State<DeviceGrants> {
     );
   }
 
-  /// 玻璃布局下拖动中的那一行是一块浮起的玻璃面板：随拖动略微放大，圆角与卡片一致。
-  Widget _glassProxy(Widget child, int index, Animation<double> animation) => AnimatedBuilder(
-    animation: animation,
-    child: child,
-    builder: (context, child) => Transform.scale(
-      scale: 1 + 0.03 * Curves.easeOut.transform(animation.value),
-      child: AppSurface(
-        color: context.palette.card,
-        radius: 24,
-        panel: true,
-        child: Material(type: MaterialType.transparency, child: child),
-      ),
-    ),
-  );
-
   @override
   Widget build(BuildContext context) {
     final grants = _grants;
@@ -184,7 +168,6 @@ class _DeviceGrantsState extends State<DeviceGrants> {
                   physics: const NeverScrollableScrollPhysics(),
                   buildDefaultDragHandles: false,
                   onReorderItem: _move,
-                  proxyDecorator: _glassProxy,
                   children: [
                     for (final (i, g) in grants.indexed)
                       ListTile(

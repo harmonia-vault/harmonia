@@ -47,10 +47,7 @@ class _EnvironmentPageState extends State<EnvironmentPage> with LeaveWhenGone {
   @override
   bool get exists => c.vault.environments.any((e) => e.id == widget.envId);
 
-  void _editRefs() => showAppDialog<void>(
-    context: context,
-    builder: (context) => adaptiveEditor(context, (_) => EnvEditorPage(c: c, envId: widget.envId)),
-  );
+  void _editRefs() => openEditorPage(context, (_) => EnvEditorPage(c: c, envId: widget.envId));
 
   Future<void> _menu(String action, Environment env) async {
     if (action == 'refs') {
@@ -101,7 +98,7 @@ class _EnvironmentPageState extends State<EnvironmentPage> with LeaveWhenGone {
       appBar: AppBarSurface(
         title: Text(env.name),
         actions: [
-          AppMenuButton(
+          appBarMenu(
             onSelected: (a) => _menu(a, env),
             items: const [
               (value: 'refs', label: '编辑引用', icon: Icons.tune, danger: false),

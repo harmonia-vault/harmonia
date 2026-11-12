@@ -15,47 +15,54 @@ RawDialogRoute<T> appDialogRoute<T>({
   bool barrierDismissible = true,
 }) {
   final reduceMotion = MediaQuery.disableAnimationsOf(context);
-  if (!reduceMotion) {
-    return _AppGlassDialogRoute<T>(
-      barrierColor: glassBarrierColor(context),
-      barrierDismissible: barrierDismissible,
-      barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
-      pageBuilder: (context, _, _) => AdaptivePresentation(
-        workspace: workspace,
-        child: themes?.wrap(Builder(builder: builder)) ?? Builder(builder: builder),
-      ),
-    );
-  }
-  return RawDialogRoute<T>(
-    pageBuilder: (context, _, _) => AdaptivePresentation(
+  return _AppDialogRoute<T>(
+    reduceMotion: reduceMotion,
+    pageBuilder: (context, _, _) => AdaptiveDialogPresentation(
       workspace: workspace,
       child: themes?.wrap(Builder(builder: builder)) ?? Builder(builder: builder),
     ),
     barrierColor: glassBarrierColor(context),
     barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
     barrierDismissible: barrierDismissible,
-    traversalEdgeBehavior: TraversalEdgeBehavior.closedLoop,
-    transitionDuration: Duration.zero,
-    transitionBuilder: (context, animation, secondary, child) => child,
   );
 }
 
-class _AppGlassDialogRoute<T> extends RawDialogRoute<T> {
-  _AppGlassDialogRoute({required super.pageBuilder, super.barrierColor, super.barrierDismissible, super.barrierLabel})
-    : super(
-        traversalEdgeBehavior: TraversalEdgeBehavior.closedLoop,
-        transitionDuration: GlassDefaults.materializeDuration,
-        // 与系统提醒框相同（Flutter 的 CupertinoDialogRoute 照此实现）：出现时从 1.3 倍收拢并淡入，
-        // 关闭时原地淡出、不缩放。淡入淡出交给组件库在着色器里做，玻璃不会在动画首尾突然出现。
-        transitionBuilder: (context, animation, _, child) => GlassMaterializeTransition(
-          animation: animation,
-          scaleFrom: animation.status == AnimationStatus.reverse ? 1 : 1.3,
-          child: child,
-        ),
+class _AppDialogRoute<T> extends RawDialogRoute<T> {
+  _AppDialogRoute({
+    required super.pageBuilder,
+    required this.reduceMotion,
+    super.barrierColor,
+    super.barrierDismissible,
+    super.barrierLabel,
+  }) : _pageBuilder = pageBuilder,
+       super(
+         traversalEdgeBehavior: TraversalEdgeBehavior.closedLoop,
+         transitionDuration: reduceMotion ? Duration.zero : GlassDefaults.materializeDuration,
+         // 与系统提醒框相同（Flutter 的 CupertinoDialogRoute 照此实现）：出现时从 1.3 倍收拢并淡入，
+         // 关闭时原地淡出、不缩放。淡入淡出交给组件库在着色器里做，玻璃不会在动画首尾突然出现。
+         transitionBuilder: (context, animation, _, child) => reduceMotion
+             ? child
+             : GlassMaterializeTransition(
+                 animation: animation,
+                 scaleFrom: animation.status == AnimationStatus.reverse ? 1 : 1.3,
+                 child: child,
+               ),
+       );
+
+  final RoutePageBuilder _pageBuilder;
+  final bool reduceMotion;
+
+  // 分区由 AdaptiveDialogPresentation 随窗口变化选择，避免 RawDialogRoute 再套一层分区。
+  @override
+  Widget buildPage(BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation) =>
+      Semantics(
+        scopesRoute: true,
+        explicitChildNodes: true,
+        child: _pageBuilder(context, animation, secondaryAnimation),
       );
 
   @override
-  Duration get reverseTransitionDuration => GlassDefaults.dematerializeDuration;
+  Duration get reverseTransitionDuration => reduceMotion ? Duration.zero : GlassDefaults.dematerializeDuration;
 }
 
 Future<T?> showAppDialog<T>({

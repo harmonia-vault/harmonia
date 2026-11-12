@@ -14,6 +14,7 @@ import 'glass_transparency.dart';
 import 'page_debug_catalog.dart';
 import 'stage_page.dart';
 import 'theme.dart';
+import 'navigation_shell.dart';
 import 'window_layout.dart';
 
 class PageDebug extends StatefulWidget {
@@ -227,7 +228,7 @@ class _PageDebugState extends State<PageDebug> {
                             keyboard: media.viewInsets.bottom,
                             insets: (left: padding.left, top: 0.0, right: padding.right, bottom: padding.bottom),
                           ),
-                          child: child!,
+                          child: AppNavigationShell(child: child!),
                         ),
                       );
                     },

@@ -171,11 +171,7 @@ class AuthScaffold extends StatelessWidget {
       color: p.paper,
       child: AdaptivePresentation(
         child: AppPage(
-          appBar: onBack == null
-              ? null
-              : AppBarSurface(
-                  leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: onBack),
-                ),
+          appBar: onBack == null ? null : AppBarSurface(onBack: onBack),
           body: (context) => SafeArea(
             top: onBack == null,
             child: Center(
@@ -332,12 +328,13 @@ class CodeBox extends StatelessWidget {
 }
 
 class SectionTitle extends StatelessWidget {
-  const SectionTitle(this.text, {super.key, this.trailing});
+  const SectionTitle(this.text, {super.key, this.trailing, this.topPadding = Space.lg});
   final String text;
   final Widget? trailing;
+  final double topPadding;
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(Space.xs, Space.lg, Space.xs, Space.sm),
+    padding: EdgeInsets.fromLTRB(Space.xs, topPadding, Space.xs, Space.sm),
     child: Row(
       children: [
         Expanded(

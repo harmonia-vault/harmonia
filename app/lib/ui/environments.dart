@@ -11,7 +11,6 @@ import 'theme.dart';
 import 'widgets.dart';
 import 'workspace_scope.dart';
 import 'adaptive_presentation.dart';
-import 'glass_overlays.dart';
 
 class EnvironmentsTab extends StatelessWidget {
   const EnvironmentsTab({super.key, required this.c});
@@ -21,10 +20,7 @@ class EnvironmentsTab extends StatelessWidget {
     if (c.vault.vaults.isEmpty) {
       toast(context, '先在“变量库”里新建一个变量库，环境里的变量来自变量库');
     } else {
-      showAppDialog<void>(
-        context: context,
-        builder: (context) => adaptiveEditor(context, (_) => EnvEditorPage(c: c)),
-      );
+      openEditorPage(context, (_) => EnvEditorPage(c: c));
     }
   }
 
@@ -43,7 +39,9 @@ class EnvironmentsTab extends StatelessWidget {
 
     return AppTabPage(
       title: '环境',
-      actions: [IconButton(tooltip: '新建环境', onPressed: () => _create(context), icon: const Icon(Icons.add))],
+      actions: [
+        GlassBarItem.icon(id: '新建环境', label: '新建环境', onTap: () => _create(context), icon: const Icon(Icons.add)),
+      ],
 
       onRefresh: c.syncNow,
       padding: envs.isEmpty ? EdgeInsets.zero : const EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, 96),
@@ -57,7 +55,6 @@ class EnvironmentsTab extends StatelessWidget {
               ),
             ]
           : [
-              const SizedBox(height: Space.md),
               Card(
                 child: Column(
                   children: [
@@ -74,7 +71,7 @@ class EnvironmentsTab extends StatelessWidget {
                         subtitle: subtitle(e),
                         trailing: const ListRowChevron(),
                         selected: WorkspaceScope.maybeOf(context)?.selected[1]?.id == 'env:${e.id}',
-                        onTap: () => openWorkspaceEntry(
+                        onTap: () => selectWorkspaceEntry(
                           context,
                           WorkspaceEntry(
                             tab: 1,

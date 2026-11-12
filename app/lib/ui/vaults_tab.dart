@@ -28,7 +28,12 @@ class VaultsTab extends StatelessWidget {
     return AppTabPage(
       title: '变量库',
       actions: [
-        IconButton(tooltip: '新建变量库', onPressed: () => createVaultFlow(context, c), icon: const Icon(Icons.add)),
+        GlassBarItem.icon(
+          id: '新建变量库',
+          label: '新建变量库',
+          onTap: () => createVaultFlow(context, c),
+          icon: const Icon(Icons.add),
+        ),
       ],
 
       onRefresh: c.syncNow,
@@ -43,7 +48,6 @@ class VaultsTab extends StatelessWidget {
               ),
             ]
           : [
-              const SizedBox(height: Space.md),
               Card(
                 child: Column(
                   children: [
@@ -56,7 +60,7 @@ class VaultsTab extends StatelessWidget {
                         subtitle: Text(subtitle(v.id), maxLines: 1, overflow: TextOverflow.ellipsis),
                         trailing: const ListRowChevron(),
                         selected: WorkspaceScope.maybeOf(context)?.selected[0]?.id == 'vault:${v.id}',
-                        onTap: () => openWorkspaceEntry(
+                        onTap: () => selectWorkspaceEntry(
                           context,
                           WorkspaceEntry(
                             tab: 0,

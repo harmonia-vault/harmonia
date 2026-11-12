@@ -7,7 +7,7 @@ import 'approval.dart' show AuthorizationsSection;
 import 'approval_list.dart';
 import 'device_grants.dart';
 import 'device_update.dart';
-import 'vaults.dart' show askName;
+import 'vaults.dart' show askName, LeaveWhenGone;
 import 'lock.dart';
 import 'pairing.dart';
 import 'theme.dart';
@@ -68,7 +68,7 @@ class _DevicesTabState extends State<DevicesTab> {
         for (final (i, d) in devices.indexed) ...[
           if (i > 0) const Divider(),
           ListTile(
-            contentPadding: listRowPadding,
+            contentPadding: listRowPadding.copyWith(top: Space.xs, bottom: Space.xs),
             leading: Icon(platformIcon(d.platform)),
             title: Text(d.id == me ? '${d.name}（本机）' : d.name),
             subtitle: Text(
@@ -78,7 +78,7 @@ class _DevicesTabState extends State<DevicesTab> {
             ),
             trailing: const ListRowChevron(),
             selected: WorkspaceScope.maybeOf(context)?.selected[2]?.id == 'device:${d.id}',
-            onTap: () => openWorkspaceEntry(
+            onTap: () => selectWorkspaceEntry(
               context,
               WorkspaceEntry(
                 tab: 2,
@@ -108,15 +108,10 @@ class _DevicesTabState extends State<DevicesTab> {
         if (!d.isManager) d,
     ];
     final me = c.vault.config!.deviceId;
+    final hasPending = _pending.isNotEmpty || c.approvals.isNotEmpty;
     return AppTabPage(
       title: '设备',
-      actions: [
-        AddDeviceMenu(
-          c: c,
-          onDone: _refreshAfterAdd,
-          trigger: (context, open) => IconButton(tooltip: '添加设备', onPressed: open, icon: const Icon(Icons.add)),
-        ),
-      ],
+      actions: [addDeviceMenu(context, c, onDone: _refreshAfterAdd)],
 
       onRefresh: () async {
         await c.syncNow();
@@ -125,8 +120,8 @@ class _DevicesTabState extends State<DevicesTab> {
       },
       padding: const EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, 96),
       children: [
-        if (_pending.isNotEmpty || c.approvals.isNotEmpty) ...[
-          const SectionTitle('等待批准'),
+        if (hasPending) ...[
+          const SectionTitle('等待批准', topPadding: 0),
           PendingApprovals(c: c),
           for (final p in _pending)
             Padding(
@@ -134,7 +129,7 @@ class _DevicesTabState extends State<DevicesTab> {
               child: Card(
                 color: context.palette.yellow.withValues(alpha: 0.35),
                 child: ListTile(
-                  contentPadding: listRowPadding,
+                  contentPadding: listRowPadding.copyWith(top: Space.xs, bottom: Space.xs),
                   leading: Icon(platformIcon(p.platform)),
                   title: Text(p.name),
                   subtitle: Text('${platformName(p.platform)} · 请求接入'),
@@ -155,12 +150,12 @@ class _DevicesTabState extends State<DevicesTab> {
               ),
             ),
         ],
-        const SectionTitle('管理设备'),
+        SectionTitle('管理设备', topPadding: hasPending ? Space.lg : 0),
         _deviceList(managers, me),
         if (clients.isNotEmpty) ...[const SectionTitle('CLI'), _deviceList(clients, me)],
         const SizedBox(height: Space.md),
         Text(
-          tidy('在电脑上运行 harmonia login 后，点击“添加设备”扫描终端里的二维码；也可以先在“添加设备”中生成配对码，用配对码发起的请求会出现在上面的“等待批准”中。'),
+          tidy('在电脑上运行 harmonia login，通过“添加设备”扫描终端二维码。'),
           style: TextStyle(color: context.palette.mute, height: 1.5),
         ),
       ],
@@ -176,10 +171,14 @@ class DevicePage extends StatefulWidget {
   State<DevicePage> createState() => _DevicePageState();
 }
 
-class _DevicePageState extends State<DevicePage> {
+class _DevicePageState extends State<DevicePage> with LeaveWhenGone {
+  @override
   AppController get c => widget.c;
 
   DeviceInfo? get _device => c.vault.devices.where((d) => d.id == widget.deviceId).firstOrNull;
+
+  @override
+  bool get exists => _device != null;
 
   Future<void> _revoke(DeviceInfo d) async {
     final me = d.id == c.vault.config!.deviceId;
@@ -196,9 +195,7 @@ class _DevicePageState extends State<DevicePage> {
     if (!ok || !mounted) return;
     if (!await confirmIdentity(context, '验证身份以移除“${d.name}”')) return;
     if (!mounted) return;
-    final nav = Navigator.of(context);
-    final done = await runBusy(context, () => c.guard(() => c.vault.revokeDevice(d.id)), done: '已移除');
-    if (done) nav.pop();
+    await runDelete(() => c.vault.revokeDevice(d.id), '已移除');
   }
 
   Future<void> _setSystemVars(DeviceInfo d, bool on) async {
@@ -226,10 +223,11 @@ class _DevicePageState extends State<DevicePage> {
       appBar: AppBarSurface(
         title: Text(d.name),
         actions: [
-          IconButton(
-            tooltip: '重命名',
+          GlassBarItem.icon(
+            id: '重命名设备',
+            label: '重命名',
             icon: const Icon(Icons.edit_outlined),
-            onPressed: () async {
+            onTap: () async {
               final name = await askName(context, title: '重命名设备', initial: d.name);
               if (name == null || !context.mounted) return;
               await runBusy(context, () => c.guard(() => c.vault.renameDevice(d.id, name)));

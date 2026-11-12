@@ -4,9 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
 import 'glass.dart';
-import 'app_dialog.dart';
 import 'theme.dart';
-import 'window_layout.dart';
 
 export 'app_dialog.dart' show showAppDialog, appDialogRoute;
 
@@ -189,73 +187,24 @@ class AppSimpleDialog extends StatelessWidget {
   );
 }
 
-class AppMenuButton extends StatelessWidget {
-  const AppMenuButton({
-    super.key,
-    required this.items,
-    required this.onSelected,
-    this.trigger,
-    this.semanticLabel = '环境操作',
-  });
-  final List<({String value, String label, IconData icon, bool danger})> items;
-  final ValueChanged<String> onSelected;
-
-  /// 自定义触发按钮（例如悬浮按钮），菜单从它展开；不给时是“更多操作”图标按钮。
-  final Widget Function(BuildContext context, VoidCallback open)? trigger;
-  final String semanticLabel;
-
-  @override
-  Widget build(BuildContext context) {
-    Widget button(VoidCallback open) =>
-        trigger?.call(context, open) ??
-        IconButton(tooltip: '更多操作', icon: const Icon(CupertinoIcons.ellipsis), onPressed: open);
-    if (WindowLayoutScope.maybeOf(context)?.fold != null) {
-      return button(() async {
-        final selected = await showAppDialog<String>(
-          context: context,
-          builder: (context) => AppSimpleDialog(
-            title: Text(semanticLabel),
-            children: [
-              for (final item in items)
-                SimpleDialogOption(
-                  onPressed: () => Navigator.pop(context, item.value),
-                  child: Row(
-                    children: [
-                      Icon(item.icon, color: item.danger ? Theme.of(context).colorScheme.error : null),
-                      const SizedBox(width: 12),
-                      Expanded(child: Text(item.label)),
-                    ],
-                  ),
-                ),
-            ],
-          ),
-        );
-        if (context.mounted && selected != null) onSelected(selected);
-      });
-    }
-    return GlassMenu(
-      autoAdjustToScreen: true,
-      morphSpeed: MediaQuery.disableAnimationsOf(context) ? MorphSpeed.instant : MorphSpeed.fast,
-      menuWidth: 240,
-      menuBorderRadius: 28,
-      itemBorderRadius: 20,
-      menuPadding: const EdgeInsets.all(6),
-      // 菜单上是文字，与弹窗用同一种面板材质，背后的标题和按钮不会透出字形。
-      settings: glassPanelSettings(context, context.palette.card),
-      quality: glassQuality(context),
-      semanticLabel: semanticLabel,
-      items: [
-        for (final item in items)
-          GlassMenuItem(
-            title: item.label,
-            icon: Icon(item.icon),
-            isDestructive: item.danger,
-            height: 48,
-            enablePressScale: !MediaQuery.disableAnimationsOf(context),
-            onTap: () => onSelected(item.value),
-          ),
-      ],
-      triggerBuilder: (context, toggle) => button(toggle),
-    );
-  }
-}
+/// 菜单作为栏项目声明，库可把条目直接合并到空间不足时的更多菜单。
+GlassBarItem appBarMenu({
+  required List<({String value, String label, IconData icon, bool danger})> items,
+  required ValueChanged<String> onSelected,
+  String semanticLabel = '更多操作',
+  IconData icon = CupertinoIcons.ellipsis,
+}) => GlassBarItem.menu(
+  icon: Icon(icon),
+  id: semanticLabel,
+  label: semanticLabel,
+  menuWidth: 240,
+  menuItems: [
+    for (final item in items)
+      GlassMenuItem(
+        title: item.label,
+        icon: Icon(item.icon),
+        isDestructive: item.danger,
+        onTap: () => onSelected(item.value),
+      ),
+  ],
+);
