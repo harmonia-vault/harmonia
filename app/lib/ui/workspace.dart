@@ -58,7 +58,9 @@ class _WorkspaceState extends State<Workspace> {
   }
 
   void _removed(int tab, Page<Object?> page) {
-    if (page.key != ValueKey(_selected[tab]?.id)) return;
+    final entry = _selected[tab];
+    // ValueKey 的泛型也参与比较，必须与详情页的 ValueKey<String> 一致。
+    if (entry == null || page.key != ValueKey(entry.id)) return;
     setState(() => _selected.remove(tab));
     _waiting.remove(tab)?.complete();
   }

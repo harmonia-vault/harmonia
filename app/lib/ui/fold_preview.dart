@@ -73,8 +73,9 @@ final _poses = <_Pose>[
 ];
 
 class FoldPreviewPage extends StatefulWidget {
-  const FoldPreviewPage({super.key, required this.c});
+  const FoldPreviewPage({super.key, required this.c, this.startOnOuterScreen = false});
   final AppController c;
+  final bool startOnOuterScreen;
   @override
   State<FoldPreviewPage> createState() => _FoldPreviewPageState();
 }
@@ -82,6 +83,12 @@ class FoldPreviewPage extends StatefulWidget {
 class _FoldPreviewPageState extends State<FoldPreviewPage> {
   final _navigator = GlobalKey<NavigatorState>();
   int _pose = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _pose = widget.startOnOuterScreen ? 2 : 0;
+  }
 
   @override
   Widget build(BuildContext context) {
