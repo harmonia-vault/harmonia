@@ -57,6 +57,7 @@ class DebugPageEntry {
 Map<String, List<DebugPageEntry>> debugPages() => {
   '首页与管理': [
     DebugPageEntry('折叠屏：内外屏、开合过渡与左右分屏', (s) => FoldPreviewPage(c: s.c), followStage: false),
+    DebugPageEntry('单栏详情返回：变量库、环境、设备与设置', (s) => FoldPreviewPage(c: s.c, startOnOuterScreen: true), followStage: false),
     DebugPageEntry(
       '双栏未选择：变量库、环境、设备与设置',
       (s) => s.vault.paired ? HomePage(c: s.c) : SignInPage(c: s.c),
