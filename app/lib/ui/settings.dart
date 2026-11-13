@@ -12,6 +12,7 @@ import 'page_debug.dart';
 import 'app_scope.dart';
 import 'devices.dart' show platformIcon;
 import 'lock.dart';
+import 'list_row.dart';
 import 'recovery_pages.dart';
 import 'theme.dart';
 import 'window_layout.dart';
@@ -20,10 +21,32 @@ import 'glass.dart';
 import 'glass_transparency.dart';
 import 'widgets.dart';
 
+class SettingsSidebar extends StatelessWidget {
+  const SettingsSidebar({super.key, required this.onSelected});
+  final VoidCallback onSelected;
+
+  @override
+  Widget build(BuildContext context) => AppTabPage(
+    title: '设置',
+    padding: const EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, 96),
+    children: [
+      Card(
+        child: ListTile(
+          contentPadding: listRowPadding.copyWith(top: Space.xs, bottom: Space.xs),
+          leading: const Icon(Icons.settings_outlined),
+          title: const Text('设置', style: TextStyle(fontWeight: FontWeight.w600)),
+          trailing: const ListRowChevron(),
+          selected: true,
+          onTap: onSelected,
+        ),
+      ),
+    ],
+  );
+}
+
 class SettingsTab extends StatefulWidget {
-  const SettingsTab({super.key, required this.c, this.section});
+  const SettingsTab({super.key, required this.c});
   final AppController c;
-  final String? section;
   @override
   State<SettingsTab> createState() => _SettingsTabState();
 }
@@ -186,7 +209,7 @@ class _SettingsTabState extends State<SettingsTab> {
     final cfg = c.vault.config!;
     final p = context.palette;
     final allSections = <Widget>[
-      const SectionTitle('账号'),
+      const SectionTitle('账号', topPadding: 0),
       Card(
         child: Column(
           children: [
@@ -345,22 +368,6 @@ class _SettingsTabState extends State<SettingsTab> {
         ),
       ],
     ];
-    if (widget.section case final section?) {
-      var include = false;
-      final selected = <Widget>[];
-      for (final child in allSections) {
-        if (child is SectionTitle) {
-          include = child.text == section;
-          continue;
-        }
-        if (include) selected.add(child);
-      }
-      return AppPage(
-        appBar: AppBarSurface(title: Text(section)),
-        body: (context) =>
-            ListView(padding: pagePadding(context, const EdgeInsets.fromLTRB(16, 12, 16, 96)), children: selected),
-      );
-    }
     return AppTabPage(title: '设置', padding: const EdgeInsets.fromLTRB(16, 0, 16, 96), children: allSections);
   }
 }

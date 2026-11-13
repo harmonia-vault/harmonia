@@ -7,12 +7,9 @@ import 'glass.dart';
 import 'theme.dart';
 import 'widgets.dart';
 import 'adaptive_presentation.dart';
-import 'glass_overlays.dart';
 
-Future<void> editVariable(BuildContext context, AppController c, String vaultId, {String? name}) => showAppDialog<void>(
-  context: context,
-  builder: (context) => adaptiveEditor(context, (_) => VariableEditPage(c: c, vaultId: vaultId, name: name)),
-);
+Future<void> editVariable(BuildContext context, AppController c, String vaultId, {String? name}) =>
+    openEditorPage(context, (_) => VariableEditPage(c: c, vaultId: vaultId, name: name));
 
 final _varName = RegExp(r'^[A-Za-z_][A-Za-z0-9_]{0,127}$');
 
@@ -82,7 +79,10 @@ class _VariableEditPageState extends State<VariableEditPage> {
   Widget build(BuildContext context) => AppPage(
     appBar: AppBarSurface(
       title: Text(_editing ? '编辑变量' : '添加变量'),
-      actions: [if (_editing) IconButton(tooltip: '删除', icon: const Icon(Icons.delete_outline), onPressed: _delete)],
+      actions: [
+        if (_editing)
+          GlassBarItem.icon(id: '删除变量', label: '删除变量', icon: const Icon(Icons.delete_outline), onTap: _delete),
+      ],
     ),
     body: (context) => Form(
       key: _form,

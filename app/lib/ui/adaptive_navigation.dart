@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
 import 'glass.dart';
+import 'compact_tabs.dart';
 import 'theme.dart';
-import 'window_layout.dart';
 
 class AdaptiveNavigation extends StatelessWidget {
   const AdaptiveNavigation({super.key, required this.selected, required this.onSelected, this.badge = 0});
@@ -13,7 +13,6 @@ class AdaptiveNavigation extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final layout = WindowLayoutScope.maybeOf(context)!;
     final p = context.palette;
     const icons = [
       CupertinoIcons.archivebox,
@@ -22,6 +21,9 @@ class AdaptiveNavigation extends StatelessWidget {
       CupertinoIcons.gear_alt,
     ];
     const labels = ['变量库', '环境', '设备', '设置'];
+    if (GlassVerticalBar.maybeOf(context)?.collapsesTabBar == true) {
+      return CompactTabs(selected: selected, onSelected: onSelected, icons: icons, labels: labels, badge: badge);
+    }
     final height = 60 + (MediaQuery.textScalerOf(context).scale(11) - 11).clamp(0, 40) * 1.5;
     final bar = GlassTabBar.bottom(
       tabs: [
@@ -52,14 +54,11 @@ class AdaptiveNavigation extends StatelessWidget {
           ? GlassInteractionBehavior.none
           : GlassInteractionBehavior.full,
     );
-    return GlassVerticalBar(
-      data: verticalBarData(layout),
-      child: layout.verticalNavigation
-          ? bar
-          : Align(
-              alignment: Alignment.bottomCenter,
-              child: SafeArea(top: false, minimum: const EdgeInsets.only(bottom: 8), child: bar),
-            ),
-    );
+    return GlassVerticalBar.maybeOf(context) != null
+        ? bar
+        : Align(
+            alignment: Alignment.bottomCenter,
+            child: SafeArea(top: false, minimum: const EdgeInsets.only(bottom: 8), child: bar),
+          );
   }
 }

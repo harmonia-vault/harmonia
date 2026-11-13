@@ -28,13 +28,17 @@ class _AnimatedLayoutRegionState extends State<AnimatedLayoutRegion> {
   Widget build(BuildContext context) {
     final animate = _viewport == widget.viewport && !MediaQuery.disableAnimationsOf(context);
     _viewport = widget.viewport;
-    return TweenAnimationBuilder<Rect?>(
-      tween: RectTween(begin: widget.rect, end: widget.rect),
+    return AnimatedPositioned.fromRect(
+      rect: widget.rect,
       duration: animate ? const Duration(milliseconds: 360) : Duration.zero,
       curve: Curves.easeInOutCubic,
-      builder: (context, rect, _) => Positioned.fromRect(
-        rect: rect!,
-        child: ClipRect(child: widget.builder(context, rect)),
+      child: ClipRect(
+        child: LayoutBuilder(
+          builder: (context, constraints) => widget.builder(
+            context,
+            Rect.fromLTWH(widget.rect.left, widget.rect.top, constraints.maxWidth, constraints.maxHeight),
+          ),
+        ),
       ),
     );
   }
@@ -119,4 +123,26 @@ GlassVerticalBarData? verticalBarData(WindowLayout layout) {
     collapsesTabBar: layout.compactNavigation,
     systemInset: false,
   );
+}
+
+/// 菜单的屏幕边界与全局锚点使用同一坐标系，不使用详情栏的局部尺寸。
+class WindowMenuViewport extends StatelessWidget {
+  const WindowMenuViewport({super.key, required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final layout = WindowLayoutScope.maybeOf(context)!;
+    final insets = EdgeInsets.fromLTRB(
+      layout.insets.left,
+      layout.insets.top,
+      layout.insets.right,
+      layout.insets.bottom,
+    );
+    return MediaQuery(
+      data: MediaQuery.of(context)
+          .copyWith(size: Size(layout.width, layout.height), padding: insets, viewPadding: insets),
+      child: child,
+    );
+  }
 }

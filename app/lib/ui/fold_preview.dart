@@ -6,6 +6,7 @@ import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import '../app/controller.dart';
 import 'app_scope.dart';
 import 'glass.dart';
+import 'navigation_shell.dart';
 import 'window_layout.dart';
 import 'workspace.dart';
 import 'workspace_scope.dart';
@@ -29,7 +30,7 @@ final _poses = <_Pose>[
       width: 678,
       height: 466,
       insets: (left: 0, top: 0, right: 84, bottom: 0),
-      occlusions: [layoutRect(630, 210, 48, 46)],
+      occlusions: [layoutRect(630, 384, 48, 82)],
     ),
   ),
   (
@@ -73,9 +74,10 @@ final _poses = <_Pose>[
 ];
 
 class FoldPreviewPage extends StatefulWidget {
-  const FoldPreviewPage({super.key, required this.c, this.startOnOuterScreen = false});
+  const FoldPreviewPage({super.key, required this.c, this.initialPose = 0, this.initialTab = 0});
   final AppController c;
-  final bool startOnOuterScreen;
+  final int initialPose;
+  final int initialTab;
   @override
   State<FoldPreviewPage> createState() => _FoldPreviewPageState();
 }
@@ -87,7 +89,7 @@ class _FoldPreviewPageState extends State<FoldPreviewPage> {
   @override
   void initState() {
     super.initState();
-    _pose = widget.startOnOuterScreen ? 2 : 0;
+    _pose = widget.initialPose;
   }
 
   @override
@@ -162,7 +164,7 @@ class _FoldPreviewPageState extends State<FoldPreviewPage> {
                                 preview: widget.c.glassOpacityPreview,
                                 child: LiquidGlassWidgets.wrap(
                                   brightnessResolver: Theme.maybeBrightnessOf,
-                                  child: child!,
+                                  child: AppNavigationShell(child: child!),
                                 ),
                               ),
                             ),
@@ -171,7 +173,8 @@ class _FoldPreviewPageState extends State<FoldPreviewPage> {
                       },
                       home: Workspace(
                         c: widget.c,
-                        initialEntry: vault != null
+                        initialTab: widget.initialTab,
+                        initialEntry: widget.initialPose == 2 && widget.initialTab == 0 && vault != null
                             ? WorkspaceEntry(
                                 tab: 0,
                                 id: 'vault:${vault.id}',

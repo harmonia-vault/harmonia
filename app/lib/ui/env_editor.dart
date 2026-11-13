@@ -180,7 +180,7 @@ class _EnvEditorPageState extends State<EnvEditorPage> {
         page: (_) => EnvironmentPage(c: c, envId: created!),
       );
       if (workspace != null) {
-        workspace.open(entry);
+        workspace.select(entry);
       } else {
         nav.push(MaterialPageRoute(builder: entry.page));
       }
@@ -302,7 +302,18 @@ class _EnvEditorPageState extends State<EnvEditorPage> {
     return AppPage(
       appBar: AppBarSurface(
         title: Text(widget.envId == null ? '新建环境' : '编辑引用'),
-        actions: [TextButton(onPressed: preview.duplicates.isEmpty ? _save : null, child: const Text('保存'))],
+        actions: [
+          GlassBarItem.custom(
+            id: '保存环境引用',
+            label: '保存',
+            enabled: preview.duplicates.isEmpty,
+            onTap: _save,
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 18),
+              child: Center(widthFactor: 1, child: Text('保存', maxLines: 1, softWrap: false)),
+            ),
+          ),
+        ],
       ),
       body: (context) => ListView(
         padding: pagePadding(context, const EdgeInsets.fromLTRB(Space.lg, Space.sm, Space.lg, 96)),

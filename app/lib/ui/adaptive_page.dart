@@ -1,11 +1,7 @@
-import 'dart:math' as math;
-
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
 import 'glass.dart';
-import 'adaptive_tools.dart';
 import 'theme.dart';
 import 'window_layout.dart';
 import 'workspace_scope.dart';
@@ -22,15 +18,17 @@ class AdaptivePageFrame extends StatefulWidget {
     super.key,
     this.appBar,
     required this.body,
-    this.overlay,
     this.avoidKeyboard,
     this.controls,
+    this.header,
+    this.headerScrollController,
   });
   final AppBarSurface? appBar;
   final WidgetBuilder body;
-  final WidgetBuilder? overlay;
   final bool? avoidKeyboard;
   final Widget? controls;
+  final Widget? header;
+  final ScrollController? headerScrollController;
 
   @override
   State<AdaptivePageFrame> createState() => _AdaptivePageFrameState();
@@ -46,110 +44,70 @@ class _AdaptivePageFrameState extends State<AdaptivePageFrame> {
 
   @override
   Widget build(BuildContext context) {
-    final appBar = widget.appBar, overlay = widget.overlay;
-    final layout = WindowLayoutScope.maybeOf(context);
     final pane = WorkspacePane.maybeOf(context);
     final presentation = PresentationScope.contains(context);
-    final side = !presentation && layout?.verticalNavigation == true && pane?.master != true;
-    final nav = Navigator.of(context);
-    final leading =
-        appBar?.leading ??
-        (ModalRoute.canPopOf(context) == true
-            ? IconButton(tooltip: '返回', icon: const Icon(CupertinoIcons.chevron_back), onPressed: nav.maybePop)
-            : null);
-    final toolbar = WorkspaceToolReporter(
-      leading: leading,
-      actions: appBar?.actions,
-      child: GlassBackdropGroup(
+    Widget frame(BuildContext context) {
+      final media = MediaQuery.of(context);
+      final bar = widget.appBar?.bar(context);
+      final barHeight = widget.appBar?.preferredSize.height ?? kToolbarHeight;
+      final vertical = GlassVerticalBar.maybeOf(context);
+      final layout = WindowLayoutScope.maybeOf(context);
+      final navigation = presentation ? 0.0 : pane?.navigationHeight ?? 0;
+      final top = bar == null
+          ? media.padding.top
+          : vertical == null
+          ? media.padding.top + barHeight + Space.xl
+          : vertical.rowTop + GlassVerticalBarMetrics.rowHeight + Space.xl;
+      final scaffoldMedia = vertical == null ? media : media.copyWith(padding: media.padding.copyWith(top: 0));
+      return MediaQuery(
+        data: scaffoldMedia,
         child: Scaffold(
-          backgroundColor: presentation ? Colors.transparent : null,
-          resizeToAvoidBottomInset: widget.avoidKeyboard ?? true,
-          extendBodyBehindAppBar: !side && appBar != null,
-          appBar: side ? null : appBar,
-          body: widget.controls != null && layout?.tabletop == true && WorkspaceScope.maybeOf(context) == null
-              ? _tabletop(context, layout!)
-              : side
-              ? _side(context, layout!, leading)
-              : Builder(
-                  builder: (context) {
-                    final media = MediaQuery.of(context);
-                    final bottom = presentation ? 0.0 : pane?.navigationHeight ?? 0;
-                    return Padding(
-                      padding: EdgeInsets.only(left: media.padding.left, right: media.padding.right),
-                      child: MediaQuery(
-                        data: media.copyWith(
-                          padding: media.padding.copyWith(left: 0, right: 0, bottom: media.padding.bottom + bottom),
-                        ),
-                        child: Builder(
-                          builder: (context) {
-                            final content = _content();
-                            if (appBar == null) return content;
-                            final fadeHeight = MediaQuery.paddingOf(context).top + 24;
-                            final faded = GlassScrollEdgeEffect(
-                              fadeBottom: false,
-                              topFadeHeight: fadeHeight,
-                              fadeColor: context.palette.paper,
-                              child: GlassScrollEdgeEffect(
-                                fadeBottom: false,
-                                topFadeHeight: fadeHeight,
-                                style: GlassScrollEdgeStyle.blur,
-                                child: content,
-                              ),
-                            );
-                            return overlay == null ? faded : Stack(children: [faded, overlay(context)]);
-                          },
-                        ),
-                      ),
-                    );
-                  },
-                ),
-        ),
-      ),
-    );
-    return toolbar;
-  }
-
-  Widget _side(BuildContext context, WindowLayout layout, Widget? leading) {
-    final appBar = widget.appBar;
-    final media = MediaQuery.of(context);
-    final workspace = WorkspaceScope.maybeOf(context);
-    final left = layout.navigation == NavigationEdge.left;
-    final tools = [?leading, ...?appBar?.actions];
-    return Stack(
-      children: [
-        Padding(
-          padding: EdgeInsets.fromLTRB(
-            left && workspace == null ? math.max(media.padding.left, 84) : media.padding.left,
-            media.padding.top,
-            !left && workspace == null ? math.max(media.padding.right, 84) : media.padding.right,
-            media.padding.bottom,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (appBar?.title case final title?)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
-                  child: DefaultTextStyle(
-                    style: Theme.of(context).textTheme.titleLarge!.copyWith(fontWeight: FontWeight.w600),
-                    child: title,
-                  ),
-                ),
-              Expanded(
+          backgroundColor: Colors.transparent,
+          resizeToAvoidBottomInset: false,
+          body: GlassScaffold(
+            appBar: bar,
+            header: widget.header,
+            headerScrollController: widget.headerScrollController,
+            headerFadeDistance: 52,
+            settings: glassSettings(context),
+            enableBackgroundSampling: false,
+            backgroundColor: presentation ? Colors.transparent : context.palette.paper,
+            statusBarStyle: GlassStatusBarStyle.auto,
+            resizeToAvoidBottomInset: widget.avoidKeyboard ?? true,
+            appBarHeight: vertical == null ? barHeight : vertical.rowTop + GlassVerticalBarMetrics.rowHeight,
+            topEdgeFadeExtent: Space.xl,
+            // 与外层的纸色渐隐叠加，滚动内容在标题后方逐渐磨砂，不使用实色遮板。
+            body: GlassScrollEdgeEffect(
+              fadeTop: bar != null,
+              fadeBottom: false,
+              topFadeHeight: top,
+              style: GlassScrollEdgeStyle.blur,
+              child: Padding(
+                padding: EdgeInsets.only(left: media.padding.left, right: media.padding.right),
                 child: MediaQuery(
-                  data: media.copyWith(padding: EdgeInsets.zero, viewPadding: EdgeInsets.zero),
-                  child: _content(),
+                  data: media.copyWith(
+                    padding: EdgeInsets.only(
+                      top: top,
+                      bottom:
+                          (widget.avoidKeyboard == false ? media.viewPadding.bottom : media.padding.bottom) +
+                          navigation,
+                    ),
+                    viewPadding: media.viewPadding.copyWith(left: 0, right: 0),
+                  ),
+                  child: widget.controls != null && layout?.tabletop == true && WorkspaceScope.maybeOf(context) == null
+                      ? _tabletop(context, layout!)
+                      : _content(),
                 ),
               ),
-            ],
+            ),
           ),
         ),
-        if (workspace == null)
-          Positioned.fill(
-            child: AdaptiveTools(layout: layout, tools: tools),
-          ),
-      ],
-    );
+      );
+    }
+
+    return pane?.master == true || presentation
+        ? GlassVerticalBar.disabled(child: Builder(builder: frame))
+        : Builder(builder: frame);
   }
 
   Widget _tabletop(BuildContext context, WindowLayout layout) {

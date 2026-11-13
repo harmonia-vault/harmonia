@@ -48,7 +48,8 @@ class AppSelect<T> extends StatelessWidget {
         ],
       ),
     );
-    if (WindowLayoutScope.maybeOf(context)?.fold != null) {
+    final layout = WindowLayoutScope.maybeOf(context)!;
+    if (layout.fold != null) {
       return trigger(() async {
         final selected = await showAppDialog<T>(
           context: context,
@@ -71,28 +72,35 @@ class AppSelect<T> extends StatelessWidget {
         if (context.mounted && selected != null) onChanged(selected);
       });
     }
-    return GlassMenu(
-      autoAdjustToScreen: true,
-      morphSpeed: MediaQuery.disableAnimationsOf(context) ? MorphSpeed.instant : MorphSpeed.fast,
-      menuWidth: 200,
-      menuBorderRadius: 24,
-      itemBorderRadius: 18,
-      menuPadding: const EdgeInsets.all(6),
-      // 与弹窗、浮动菜单用同一种面板材质，背后的文字不会透出字形。
-      settings: glassPanelSettings(context, p.card),
-      quality: glassQuality(context),
-      semanticLabel: semanticLabel,
-      items: [
-        for (final o in options)
-          GlassMenuItem(
-            title: o.label,
-            trailing: o.value == value ? Icon(CupertinoIcons.checkmark, size: 18, color: p.accent) : null,
-            height: 44,
-            enablePressScale: !MediaQuery.disableAnimationsOf(context),
-            onTap: () => onChanged(o.value),
-          ),
-      ],
-      triggerBuilder: (context, toggle) => trigger(toggle),
+    return WindowMenuViewport(
+      child: GlassMenu(
+        menuAlignment: switch (layout.navigation) {
+          NavigationEdge.left => GlassMenuAlignment.centerLeft,
+          NavigationEdge.right => GlassMenuAlignment.centerRight,
+          NavigationEdge.bottom => null,
+        },
+        autoAdjustToScreen: true,
+        morphSpeed: MediaQuery.disableAnimationsOf(context) ? MorphSpeed.instant : MorphSpeed.fast,
+        menuWidth: 200,
+        menuBorderRadius: 24,
+        itemBorderRadius: 18,
+        menuPadding: const EdgeInsets.all(6),
+        // 与弹窗、浮动菜单用同一种面板材质，背后的文字不会透出字形。
+        settings: glassPanelSettings(context, p.card),
+        quality: glassQuality(context),
+        semanticLabel: semanticLabel,
+        items: [
+          for (final o in options)
+            GlassMenuItem(
+              title: o.label,
+              trailing: o.value == value ? Icon(CupertinoIcons.checkmark, size: 18, color: p.accent) : null,
+              height: 44,
+              enablePressScale: !MediaQuery.disableAnimationsOf(context),
+              onTap: () => onChanged(o.value),
+            ),
+        ],
+        triggerBuilder: (context, toggle) => trigger(toggle),
+      ),
     );
   }
 }

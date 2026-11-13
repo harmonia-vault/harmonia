@@ -4,12 +4,16 @@ import 'dart:ui' as ui;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
 import 'theme.dart';
 import 'adaptive_page.dart';
 import 'glass_material.dart';
+import 'workspace_scope.dart';
+import 'workspace_detail.dart';
+import 'window_layout.dart';
+
+export 'package:liquid_glass_widgets/liquid_glass_widgets.dart' show GlassBarItem;
 
 abstract final class GlassResources {
   static bool _ready = false;
@@ -121,92 +125,128 @@ class AppSurface extends StatelessWidget {
   }
 }
 
-/// 布局交给组件库的 GlassAppBar：栏本身透明，只有返回和操作按钮是玻璃。
+/// 操作以语义项交给库，统一分组、溢出和返回转场。
 class AppBarSurface extends StatelessWidget implements PreferredSizeWidget {
-  const AppBarSurface({super.key, this.title, this.leading, this.actions, this.largeTitle});
+  const AppBarSurface({
+    super.key,
+    this.title,
+    this.actions = const [],
+    this.onBack,
+    this.largeTitle,
+    this.toolbarHeight = kToolbarHeight,
+  });
+  // 库默认操作组为 46 点，返回按钮另由库计算。
+  static const double actionExtent = 46;
   final Widget? title;
-  final Widget? leading;
-  final List<Widget>? actions;
-
-  /// 一级页面的大标题在正文里，由它带着栏内小标题一起收放；见 [AppTabPage]。
+  final List<GlassBarItem> actions;
+  final VoidCallback? onBack;
   final GlassLargeTitleController? largeTitle;
+  final double toolbarHeight;
 
   @override
-  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
+  Size get preferredSize => Size.fromHeight(toolbarHeight);
 
-  @override
-  Widget build(BuildContext context) {
-    final p = context.palette;
-    final back =
-        leading ??
-        (largeTitle == null && Navigator.of(context).canPop()
-            ? IconButton(
-                tooltip: MaterialLocalizations.of(context).backButtonTooltip,
-                onPressed: () => Navigator.maybePop(context),
-                icon: const Icon(CupertinoIcons.chevron_back, size: 22),
-              )
-            : null);
-    Widget controls(List<Widget> children) => AppSurface(
-      color: p.card,
-      radius: 24,
-      child: Material(
-        type: MaterialType.transparency,
-        child: IconButtonTheme(
-          data: IconButtonThemeData(
-            style: IconButton.styleFrom(minimumSize: const Size(44, 44), foregroundColor: p.ink),
-          ),
-          child: Row(mainAxisSize: MainAxisSize.min, children: children),
-        ),
-      ),
-    );
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: Theme.of(context).brightness == Brightness.dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
-      child: GlassAppBar(
-        toolbarHeight: kToolbarHeight,
-        padding: const EdgeInsets.symmetric(horizontal: 20),
+  Widget bar(BuildContext context) {
+    final pane = WorkspacePane.maybeOf(context);
+    final presentation = PresentationScope.contains(context);
+    if (pane?.active == false && !presentation) return const SizedBox(height: kToolbarHeight);
+    final heading = title == null
+        ? null
+        : DefaultTextStyle(
+            style: Theme.of(context).textTheme.titleMedium!
+                .copyWith(color: context.palette.ink, fontSize: 17, fontWeight: FontWeight.w700, letterSpacing: 0),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            child: title!,
+          );
+    final leading = [
+      if (onBack != null) GlassBarItem.icon(icon: const Icon(CupertinoIcons.chevron_back), label: '返回', onTap: onBack!),
+    ];
+    final page = ModalRoute.of(context)?.settings;
+    final rootSelection = page is WorkspaceDetailPage && page.selection && WindowLayoutScope.maybeOf(context)!.twoPanes;
+    final shell = GlassNavigationShell.maybeOf(context);
+    final localStrip = GlassVerticalBar.maybeOf(context) != null && shell?.verticalBar == null;
+    // 紧凑横屏的操作随页面原生转场，避免把两页含义不同的加号与更多组融合。
+    final compact = WindowLayoutScope.maybeOf(context)!.compactNavigation;
+    if (pane?.master == true || compact || localStrip || presentation) {
+      final bar = GlassPinnedBarChrome(
+        enabled: false,
+        leading: leading,
+        backButton: pane?.master != true && !rootSelection,
+        actions: actions,
+        buttonSettings: glassSettings(context),
+        horizontalInset: 20,
         largeTitleController: largeTitle,
-        leading: back == null ? null : controls([back]),
-        actions: actions?.isNotEmpty == true ? [controls(actions!)] : null,
-        title: title == null
-            ? null
-            : DefaultTextStyle(
-                style: Theme.of(context).textTheme.titleMedium!
-                    .copyWith(color: p.ink, fontSize: 17, fontWeight: FontWeight.w700, letterSpacing: 0),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                child: title!,
-              ),
-      ),
+        builder: (context, chrome) => GlassAppBar(
+          title: heading,
+          centerTitle: largeTitle != null,
+          largeTitleController: largeTitle,
+          toolbarHeight: toolbarHeight,
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          leading: chrome.leading,
+          actions: pane?.master == true
+              ? [for (final action in chrome.actions) WindowMenuViewport(child: action)]
+              : chrome.actions,
+        ),
+      );
+      if (pane?.master == true) return GlassVerticalBar.disabled(child: bar);
+      return localStrip ? WindowMenuViewport(child: bar) : bar;
+    }
+    return GlassAppBar.pinned(
+      title: heading,
+      centerTitle: largeTitle != null,
+      largeTitleController: largeTitle,
+      leading: leading,
+      actions: actions,
+      backButton: !rootSelection,
+      toolbarHeight: toolbarHeight,
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      buttonSettings: glassSettings(context),
     );
   }
+
+  @override
+  Widget build(BuildContext context) => bar(context);
 }
 
-/// 正文必须在 Scaffold 的 MediaQuery 之下构建，读取的是实际遮挡高度。
+/// 正文在页面容器提供的安全区下构建。
 class AppPage extends StatelessWidget {
-  const AppPage({super.key, this.appBar, required this.body, this.overlay, this.avoidKeyboard, this.controls});
+  const AppPage({
+    super.key,
+    this.appBar,
+    required this.body,
+    this.avoidKeyboard,
+    this.controls,
+    this.header,
+    this.headerScrollController,
+  });
   final AppBarSurface? appBar;
   final WidgetBuilder body;
   final Widget? controls;
+  final Widget? header;
+  final ScrollController? headerScrollController;
 
   /// 正文是否随键盘收缩；一级列表由上层面板处理键盘，不收缩。
   final bool? avoidKeyboard;
 
-  /// 盖在正文和边缘效果之上的定位内容，与正文共用同一套遮挡高度。
-  final WidgetBuilder? overlay;
-
   @override
-  Widget build(BuildContext context) =>
-      AdaptivePageFrame(appBar: appBar, body: body, overlay: overlay, avoidKeyboard: avoidKeyboard, controls: controls);
+  Widget build(BuildContext context) => AdaptivePageFrame(
+    appBar: appBar,
+    body: body,
+    avoidKeyboard: avoidKeyboard,
+    controls: controls,
+    header: header,
+    headerScrollController: headerScrollController,
+  );
 }
 
-/// Scaffold 已计算标题栏与安全区；不要在这里再次累加工具栏高度。
+/// 页面容器已计算标题栏与安全区，不重复累加工具栏高度。
 EdgeInsets pagePadding(BuildContext context, EdgeInsets padding) {
   final insets = MediaQuery.paddingOf(context);
   return padding.copyWith(top: padding.top + (insets.top), bottom: padding.bottom + insets.bottom);
 }
 
-/// 一级页面。玻璃模式下大标题与右上角操作同在标题栏这一行，正文一滚动就淡出、换成栏内居中小标题；
-/// 收放进度由组件库的 GlassLargeTitleController 给出。大标题不放进正文，否则会被标题栏下的边缘效果一起模糊。
+/// 普通手机与双栏列表的大标题和操作同一行，滚动后交接为居中小标题。
 class AppTabPage extends StatefulWidget {
   const AppTabPage({
     super.key,
@@ -219,9 +259,7 @@ class AppTabPage extends StatefulWidget {
   final String title;
   final EdgeInsets padding;
   final List<Widget> children;
-
-  /// 标题栏中的悬浮操作。
-  final List<Widget>? actions;
+  final List<GlassBarItem>? actions;
   final Future<void> Function()? onRefresh;
 
   @override
@@ -239,58 +277,68 @@ class _AppTabPageState extends State<AppTabPage> {
 
   @override
   Widget build(BuildContext context) {
-    final largeTitle = _largeTitle;
+    final layout = WindowLayoutScope.maybeOf(context)!;
+    final master = WorkspacePane.maybeOf(context)?.master == true;
+    final largeTitle = master || !layout.verticalNavigation && !layout.regularWidth ? _largeTitle : null;
+    final strip = GlassVerticalBar.maybeOf(context);
+    final toolbarHeight = master && strip != null
+        ? strip.rowTop + GlassVerticalBarMetrics.rowHeight - MediaQuery.paddingOf(context).top
+        : kToolbarHeight;
     return AppPage(
-      appBar: AppBarSurface(title: Text(widget.title), actions: widget.actions, largeTitle: largeTitle),
-      // 一级页面没有输入框，键盘只会来自弹窗。
+      appBar: AppBarSurface(
+        title: Text(widget.title),
+        actions: widget.actions ?? const [],
+        largeTitle: largeTitle,
+        toolbarHeight: toolbarHeight,
+      ),
+      headerScrollController: largeTitle?.scrollController,
+      header: largeTitle == null
+          ? null
+          : IgnorePointer(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: 20,
+                  right: 20 + AppBarSurface.actionExtent * (widget.actions?.length ?? 0) + Space.md,
+                ),
+                child: SizedBox(
+                  height: toolbarHeight,
+                  child: Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: Text(
+                      widget.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: context.palette.ink,
+                        fontSize: master ? 28 : 34,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -.5,
+                        height: 1.1,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
       avoidKeyboard: false,
       body: (context) {
         final insets = MediaQuery.paddingOf(context);
         final list = CustomScrollView(
-          controller: largeTitle.scrollController,
+          controller: _largeTitle.scrollController,
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
             SliverPadding(
               padding: widget.padding.copyWith(
-                top: widget.padding.top + insets.top + Space.sm,
+                top: widget.padding.top + insets.top + Space.lg,
                 bottom: widget.padding.bottom + insets.bottom,
               ),
               sliver: SliverList.list(children: widget.children),
             ),
           ],
         );
-        final onRefresh = widget.onRefresh;
-        return onRefresh == null ? list : RefreshIndicator(onRefresh: onRefresh, edgeOffset: insets.top, child: list);
+        final refresh = widget.onRefresh;
+        return refresh == null ? list : RefreshIndicator(onRefresh: refresh, edgeOffset: insets.top, child: list);
       },
-      overlay: (context) => Positioned(
-        top: MediaQuery.paddingOf(context).top - kToolbarHeight,
-        left: 20,
-        right: 20 + 44.0 * (widget.actions?.length ?? 0) + Space.md,
-        height: kToolbarHeight,
-        child: IgnorePointer(
-          child: ListenableBuilder(
-            listenable: largeTitle,
-            builder: (context, _) => Opacity(
-              opacity: Curves.easeIn.transform(1 - largeTitle.collapseProgress),
-              child: Align(
-                alignment: AlignmentDirectional.centerStart,
-                child: Text(
-                  widget.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: context.palette.ink,
-                    fontSize: 34,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.5,
-                    height: 1.1,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
     );
   }
 }
