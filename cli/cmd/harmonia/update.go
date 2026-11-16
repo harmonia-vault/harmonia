@@ -123,7 +123,7 @@ func cmdUpdate(ctx context.Context, args []string) error {
 		return nil
 	}
 	fmt.Println("正在下载……")
-	bin, err := installVersion(ctx, m)
+	bin, err := installVersion(ctx, m, func(format string, args ...any) { fmt.Printf(format+"\n", args...) })
 	if err != nil {
 		return err
 	}

@@ -104,15 +104,6 @@ func Targets(home, sh string) ([]Target, error) {
 	return nil, fmt.Errorf("暂不支持 %s，目前支持 zsh 和 bash", sh)
 }
 
-// Detect 根据 $SHELL 猜测当前 shell。
-func Detect() string {
-	base := filepath.Base(os.Getenv("SHELL"))
-	if base == "bash" || base == "zsh" {
-		return base
-	}
-	return "zsh"
-}
-
 func block(envFile string) string {
 	file := Quote(IntegrationFile(envFile))
 	return fmt.Sprintf("%s\n[ -f %s ] && . %s\n%s\n", beginMark, file, file, endMark)
@@ -138,6 +129,10 @@ func Install(path, envFile string) error {
 		return err
 	}
 	if fi, err := os.Lstat(path); err == nil && fi.Mode()&os.ModeSymlink != 0 {
+		// 手动添加的入口已就绪时只更新上面的集成脚本，不改写链接目标。
+		if Installed(path, envFile) {
+			return nil
+		}
 		return ErrSymlink
 	}
 	data, err := os.ReadFile(path)
