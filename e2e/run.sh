@@ -8,6 +8,10 @@ set -euo pipefail
 # shellcheck source=e2e/setup.sh
 source "$(dirname "$0")/setup.sh"
 
+# CLI 启动会自动准备 Shell 集成，所有启动文件也放在合成目录。
+mkdir -p "$TMP/home"
+export HOME="$TMP/home" ZDOTDIR="$TMP/home" SHELL="$(command -v bash)"
+
 step "J1 注册、验证邮箱、首次初始化（没有密码）"
 expect_eq "$(manager phone lookup --server "$SERVER" --email "$EMAIL")" "not-registered" "注册前查询"
 REG=$(manager phone register --server "$SERVER" --email "$EMAIL")

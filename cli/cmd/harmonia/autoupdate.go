@@ -45,8 +45,8 @@ func saveChecked(ch update.Channel, latest string) {
 	saveUpdateCache(c)
 }
 
-// installVersion 下载新版本，验证签名和哈希，运行它的 version 自检，再替换当前程序。返回程序路径。
-func installVersion(ctx context.Context, m *update.Manifest) (string, error) {
+// installVersion 验证并替换新程序，再由新程序准备 Shell 集成。返回程序路径。
+func installVersion(ctx context.Context, m *update.Manifest, logf func(string, ...any)) (string, error) {
 	key := fmt.Sprintf("cli-%s-%s", runtime.GOOS, runtime.GOARCH)
 	asset, ok := m.Assets[key]
 	if !ok {
@@ -71,6 +71,9 @@ func installVersion(ctx context.Context, m *update.Manifest) (string, error) {
 	}
 	if err := swapProgram(tmp, bin); err != nil {
 		return "", fmt.Errorf("替换程序失败：%w", err)
+	}
+	if err := prepareUpdatedShell(ctx, bin); err != nil {
+		logf("程序已更新，但 Shell 集成尚未准备好：%v", err)
 	}
 	return bin, nil
 }
@@ -122,7 +125,7 @@ func backgroundCheck(ctx context.Context, logf func(string, ...any), force bool)
 		return false
 	}
 	logf("%s：开始升级到 %s（当前 %s）", reason, m.Version, version)
-	if _, err := installVersion(ctx, m); err != nil {
+	if _, err := installVersion(ctx, m, logf); err != nil {
 		c := loadUpdateCache()
 		c.Failed, c.FailedAt = err.Error(), time.Now().UnixMilli()
 		saveUpdateCache(c)

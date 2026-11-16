@@ -62,6 +62,11 @@ func cmdShell(ctx context.Context, args []string) error {
 		return err
 	}
 	on := f.args[0] == "on"
+	if on {
+		if err := ensureShellIntegration(); err != nil {
+			return err
+		}
+	}
 	if on && !f.bools["yes"] {
 		fmt.Println(shellCost)
 		if !confirm("开启 Shell 集成？") {
@@ -85,23 +90,26 @@ func prepareShell(sh string) error {
 	if err != nil {
 		return err
 	}
+	unlock, err := d.Lock()
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	if sh == "" {
-		sh = shell.Detect()
+		err = shell.Ensure(d.EnvFile())
+	} else {
+		home, homeErr := os.UserHomeDir()
+		if homeErr != nil {
+			return homeErr
+		}
+		targets, targetErr := shell.Targets(home, sh)
+		if targetErr != nil {
+			return targetErr
+		}
+		err = shell.Prepare(d.EnvFile(), targets)
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return err
-	}
-	targets, err := shell.Targets(home, sh)
-	if err != nil {
-		return err
-	}
-	err = shell.Prepare(d.EnvFile(), targets)
 	if errors.Is(err, shell.ErrSymlink) {
 		fmt.Println("启动文件是符号链接，请在对应文件中添加以下加载设置：")
-		for _, target := range targets {
-			fmt.Println("  " + target.Path)
-		}
 		fmt.Print(shell.SourceLine(d.EnvFile()) + "\n")
 	}
 	if err != nil {

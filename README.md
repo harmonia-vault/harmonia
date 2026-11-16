@@ -90,7 +90,7 @@ harmonia login https://你的服务器地址
 <details>
 <summary>Shell 集成（不推荐）</summary>
 
-安装 CLI 时会准备好 Shell 集成，默认关闭。在手机的设备详情中开启后，终端会自动加载已允许本机解密的环境中的变量；按一次空回车即可应用变化。支持 Bash 5.1 及以上、Zsh 5.0 及以上。也可以用 `harmonia shell on` 开启、`harmonia shell off` 关闭。
+安装或升级 CLI 后会自动准备好 Shell 集成，默认关闭。在手机的设备详情中开启后，终端会自动加载已允许本机解密的环境中的变量；按一次空回车即可应用变化。支持 Bash 5.1 及以上、Zsh 5.0 及以上。也可以用 `harmonia shell on` 开启、`harmonia shell off` 关闭。
 
 </details>
 

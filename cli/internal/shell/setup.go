@@ -28,6 +28,35 @@ func configuredTargets(envFile string) ([]Target, error) {
 	return targets, err
 }
 
+// Ensure 补齐当前程序的加载设置，优先沿用安装时记录的位置。
+// 它不读取设备开关或变量，不会开启集成。
+func Ensure(envFile string) error {
+	targets, err := configuredTargets(envFile)
+	if err != nil {
+		return err
+	}
+	if len(targets) == 0 {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return err
+		}
+		sh, err := Detect()
+		if err != nil {
+			return err
+		}
+		targets, err = Targets(home, sh)
+		if err != nil {
+			return err
+		}
+	}
+	for _, target := range targets {
+		if !Installed(target.Path, envFile) {
+			return Prepare(envFile, targets)
+		}
+	}
+	return nil
+}
+
 // Prepare 只安装加载入口并记住路径；后台服务不会重新猜测终端配置位置。
 func Prepare(envFile string, targets []Target) error {
 	saved, err := configuredTargets(envFile)

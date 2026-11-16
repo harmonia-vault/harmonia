@@ -249,18 +249,7 @@ func TestInstallerPersistsInheritedPath(t *testing.T) {
 
 // 使用真实 CLI 验证安装器确实预装加载入口，而不只是调用了准备命令。
 func TestInstallerPreparesDisabledIntegration(t *testing.T) {
-	binaryPath := os.Getenv("HARMONIA_INSTALL_TEST_BINARY")
-	if binaryPath == "" {
-		binaryPath = filepath.Join(t.TempDir(), "harmonia")
-		build := exec.Command("go", "build", "-o", binaryPath, "./cmd/harmonia")
-		if out, err := build.CombinedOutput(); err != nil {
-			t.Fatalf("构建测试 CLI：%v\n%s", err, out)
-		}
-	}
-	binary, err := os.ReadFile(binaryPath)
-	if err != nil {
-		t.Fatal(err)
-	}
+	binary := installerBinary(t)
 	for _, name := range []string{"bash", "zsh"} {
 		t.Run(name, func(t *testing.T) {
 			shellPath, err := exec.LookPath(name)
@@ -308,4 +297,22 @@ func TestInstallerPreparesDisabledIntegration(t *testing.T) {
 			}
 		})
 	}
+}
+
+func installerBinary(t *testing.T) []byte {
+	t.Helper()
+	binaryPath := os.Getenv("HARMONIA_INSTALL_TEST_BINARY")
+	if binaryPath == "" {
+		binaryPath = filepath.Join(t.TempDir(), "harmonia")
+		build := exec.Command("go", "build", "-o", binaryPath, "./cmd/harmonia")
+		if out, err := build.CombinedOutput(); err != nil {
+			t.Fatalf("构建测试 CLI：%v\n%s", err, out)
+		}
+	}
+	binary, err := os.ReadFile(binaryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return binary
 }

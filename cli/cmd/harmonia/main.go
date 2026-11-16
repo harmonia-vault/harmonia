@@ -177,6 +177,11 @@ func main() {
 		printCommandHelp(os.Stdout, args[0])
 		return
 	}
+	if preparesShell(args) {
+		if err := ensureShellIntegration(); err != nil {
+			fmt.Fprintln(os.Stderr, "Shell 集成尚未准备好："+sentence(err.Error()))
+		}
+	}
 	err := fn(ctx, args[1:])
 	dailyHint(args[0])
 	if err != nil {
