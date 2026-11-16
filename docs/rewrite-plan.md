@@ -261,7 +261,7 @@ harmonia lock                       （结束这台电脑上正在生效的批�
 harmonia override set|rm|list
 harmonia exec [--env a,b,c:KEY] -- <cmd...>
 harmonia export --all | --env a,b,c:KEY [--format sh|dotenv|json]
-harmonia shell install|uninstall
+harmonia shell install|on|off
 harmonia service install|uninstall|status
 harmonia update [--check] | channel stable|beta | auto on|off
 harmonia skill [install [--dir 目录]]
@@ -304,20 +304,15 @@ harmonia uninstall
 
 - **命令路径**：macOS、Linux 的安装脚本自动把安装目录加入 PATH，独立于可选的变量加载和后台服务，`HARMONIA_YES=0` 也会配置。Zsh 写入 `${ZDOTDIR:-$HOME}/.zshrc`；Bash 写入 `~/.bashrc` 和按 `.bash_profile`、`.bash_login`、`.profile` 顺序实际生效的登录配置，无现有文件时创建 `.profile`；POSIX sh 写入 `.profile`。保留原文件内容，重复安装不重复追加，加载配置不重复添加 PATH 条目。安装结束时明确提示当前终端需执行的 PATH 命令，之后再提示登录；新终端自动生效。
 - 开启 Shell 集成后，后台服务和 CLI 把合并结果原子写入 `~/.harmonia/env.sh`（0600），内容是普通的 `export KEY='value'`，值一律使用单引号字面量安全转义。
-- **没有开启时不生成 `env.sh`**（2026-10-15）：以 `~/.harmonia/shell.sh` 是否存在作为是否开启的标记（`shell install` 写入，`shell uninstall` 删除）；不检查 rc 文件，因为 rc 可能是手动添加的符号链接，后台服务看到的 `ZDOTDIR` 也可能和终端里不同。没有开启时，同步不写 `env.sh`，已有的在下一次同步时删除，只用 `harmonia exec` 的机器上不留变量的明文副本。本机缓存 `cache.json` 里是服务端下发的密文。
-- **默认不开启，也不推荐**（2026-11-09 用户调整）：多数场景用 `harmonia exec` 就够了；Shell 集成让变量出现在每个终端的环境里，同一用户的任何程序都能读到，还要在磁盘上留一份明文 `env.sh`。所以：
-  - 安装脚本不再询问、也不安装 Shell 集成，`HARMONIA_YES=1` 只安装后台服务；安装结束的提示介绍 `harmonia exec`。
-  - `harmonia login` 完成后的“接下来”推荐 `harmonia exec -- <命令>`，不再提 Shell 集成；`harmonia env activate` 也不再提示开启。
-  - `harmonia status` 里 Shell 集成未开启时只写“未开启”，不附开启命令；已开启时附一句说明：变量对这个用户的所有程序可见，本机留有明文变量文件，可以用 `harmonia shell uninstall` 关闭。
-  - 已经开启的电脑升级后保持原样，不自动关闭。
+- **预装与开关分离**（2026-11-16）：安装 CLI 时为当前 Bash/Zsh 写入加载入口和 `shell.sh`，默认关闭；关闭状态仍注册提示符刷新，不生成 `env.sh`。开关 `shellEnabled` 保存在服务端，管理设备在设备详情页修改，CLI 用 `harmonia shell on|off` 修改同一个开关。手机开启前确认一次变量会自动提供给这台电脑运行的程序。
+- 只注入授权有效、已激活且允许本机解密的环境；开关不改变环境授权和本机解密许可，也不使用临时批准的变量。
+- 同步后应用开关并上报 `shellState`；手机区分等待同步、已开启、已关闭和执行失败。离线设置等下次同步执行；报告只表示本机加载文件或用户环境变量已更新，不表示所有进程已刷新。
+- 关闭时删除 `env.sh`，保留加载入口和 `shell.sh`；已经加载集成的交互终端在下次提示符刷新时恢复原值，再开启也无需重新加载入口。安装前已打开的终端需重新打开或手动加载一次。
+- 不从旧版脚本存在与否推断开关，设备开关默认关闭；已使用新开关的设备重装或更新不改变服务端设置。
 - **安装时询问**：安装脚本装好 `harmonia` 后，如果有终端可以交互，询问是否安装后台服务，直接回车即安装（默认 Y）；没有终端（例如在脚本或 CI 中运行）时跳过询问，只提示对应命令。设置 `HARMONIA_YES=1` 时不询问，直接安装后台服务（2026-10-13）。设置 `HARMONIA_YES=0` 时不询问，不装后台服务，只提示对应命令（2026-10-13，供 AI 助手使用，见 5.13）。后台服务在接入账号之前安装也没问题，它在接入前等待（2026-10-07 用户确认）。
 - `harmonia login` 完成后，只提示还没有安装的后台服务。
-- `harmonia shell install` 先说明代价（变量对这个用户的所有程序可见、本机留有明文变量文件，多数场景用 `harmonia exec` 即可），再列出要修改的文件和内容，确认后才写入（默认 N，2026-11-09）；`--yes` 跳过确认。已存在的 Harmonia 标记块直接更新，不重复添加：
-  - zsh 写入 `~/.zshenv`，这样非交互的 zsh 也能读到。
-  - bash 写入 `~/.bashrc`，并确保 `~/.bash_profile` 或 `~/.profile` 会加载它。
-  - 写入带标记的加载代码，交互式 Shell 同时注册提示符刷新函数；首次安装后，已有终端需按安装提示手动加载一次，或新开终端。
-  - 如果 rc 文件是符号链接，不自动修改，只提示用户自己添加。
-- `harmonia shell uninstall` 移除加载设置；zsh 和 bash 的加载设置都已移除时，删除 `shell.sh` 和 `env.sh`（2026-10-15）。已开启集成的终端在下一次提示符出现时发现文件不存在，把托管的变量恢复原状。
+- `harmonia shell install [--shell zsh|bash]` 仅准备本机加载设置，不修改开关；安装脚本调用它，手动安装二进制时也可调用。Zsh 使用 `${ZDOTDIR:-$HOME}/.zshenv`，Bash 使用 `.bashrc` 和按 `.bash_profile`、`.bash_login`、`.profile` 顺序实际生效的登录配置。记录本次配置的路径，后台服务据此检查加载入口，不依赖服务进程的 `SHELL`、`ZDOTDIR`。符号链接不自动改写，提示手动添加；未准备好时删除已有 `env.sh`，手机显示失败和电脑上的处理命令。
+- `harmonia shell on [--yes]` 开启前确认（默认 N）；`harmonia shell off` 关闭，均需要已登录且联网。完整卸载 CLI 时才移除加载入口和脚本；符号链接保留并提示手动清理其中的加载设置，不阻断其他卸载操作。
 - **提示符刷新**：支持 Bash 5.1 及以上、Zsh 5.0 及以上的交互式 Shell。Bash 使用 `PROMPT_COMMAND`，Zsh 使用 `precmd` 钩子；每次主提示符显示前检查本地变量，有变化才应用，不联网、不启动 Harmonia CLI。保留已有提示符功能和命令退出状态，重复加载不重复注册。
 - **变量清理**：仅处理 Harmonia 托管的变量；新增和修改使用最新合并值，不再托管时恢复本终端接管前的状态，原来不存在则移除。
 - **生效边界**：停留在提示符时收到更新，按一次空回车即可刷新；直接执行的第一条命令可能使用旧值。正在运行的程序不受影响。
@@ -497,7 +492,7 @@ harmonia uninstall
   - 作用：后台服务保持与服务器的连接，变量、授权和撤销几秒内同步，授权到期及时停用，每天检查更新。
   - 不开启时怎么用：`harmonia exec -- <命令>` 每次启动先同步一次，只是在运行这类命令时才同步。
   - 区别：后台服务让变量始终最新、撤销最快生效，代价是一个常驻进程。
-  - AI 助手不主动提出 Shell 集成。用户自己要求“终端里自动带上变量”时，先说明代价（变量对这个用户的所有程序可见、本机留有明文变量文件，Windows 上明文存在注册表）和替代办法 `harmonia exec`，用户坚持才运行 `harmonia shell install --yes`。
+  - AI 助手不主动提出 Shell 集成。用户自己要求“终端里自动带上变量”时，先说明代价（变量对这个用户的所有程序可见、本机留有明文变量文件，Windows 上明文存在注册表）和替代办法 `harmonia exec`，用户坚持才运行 `harmonia shell on --yes`。
   - Linux 上开启后台服务后提示的 `sudo loginctl enable-linger`，由 AI 助手转告用户并说明原因，不自己运行 sudo。
 - **使用说明（技能）**：内容是一份 `SKILL.md`（带 `name`、`description` 头部），放在 `cli/internal/skill/SKILL.md`，编译进 CLI，不单独发布。开头写明对应的 harmonia 版本。内容包括：读取最新说明（会话中途程序可能被后台升级，命令报用法错误时重新运行 `harmonia skill` 或 `--help`）、安装、接入账号要用户在手机上批准（用 `--email`、`--code` 参数，等待最长 5 分钟）、用 `harmonia exec` 使用变量、不把变量值打印到对话里、通过标准输入写入变量值、哪些命令需要用户明确同意才能运行。
 - **`harmonia skill`**：把使用说明输出到标准输出，AI 助手直接读取。
@@ -738,7 +733,7 @@ CI（`ci.yml`，2026-11-09 调整）：
 | 版本归属 | Windows CLI 放在 v0.3.0，作为里程碑 M11；v0.2.0 的范围不变 |
 | 变量怎么生效 | 写入 Windows 的用户环境变量，新启动的任何程序都能读到；不做 PowerShell 配置文件注入和提示符刷新。代价（值明文留在注册表、已打开的终端不更新、会盖住自己设的同名变量）已知并接受 |
 | 后台服务 | 当前用户的计划任务，登录后运行，安装、升级、卸载都不需要管理员权限；不做开机未登录即运行的 Windows 服务 |
-| 开关命令 | 沿用 `harmonia shell install｜uninstall`；Windows 上的帮助和提示写“用户环境变量” |
+| 开关命令 | 沿用 `harmonia shell on｜off`；Windows 上的帮助和提示写“用户环境变量” |
 | 安装位置 | `%LOCALAPPDATA%\Programs\Harmonia`，卸载时连同 `Path` 条目一起清理 |
 | 系统变量 | `Path`、`TEMP` 这类系统自身使用的名字默认不写入；每台设备一个“写入系统变量”开关，存在服务端，App 和 CLI 都能改。为此协议和服务端增加一个设备字段 |
 | 测试 | 我在本机的 Windows 11 虚拟机中实测，用完关机；真机验收由你进行 |
@@ -928,7 +923,7 @@ Windows 上的 CLI 与 macOS、Linux 是同一份代码（`cli/`）：命令、�
 | 程序位置 | `~/.local/bin/harmonia` | `%LOCALAPPDATA%\Programs\Harmonia\harmonia.exe`，安装脚本把这个目录加入用户的 `Path` |
 | 数据目录 | `~/.harmonia`，目录 0700、文件 0600 | `%USERPROFILE%\.harmonia`，访问控制列表只允许本人、系统和管理员访问，不继承上级目录的权限 |
 | 变量怎么生效 | `env.sh` + rc 文件注入 + 提示符刷新（5.8） | 写入用户环境变量（15.3）；不生成 `env.sh` |
-| `harmonia shell install｜uninstall` | 修改 rc 文件 | 开启、关闭“写入用户环境变量” |
+| `harmonia shell on｜off` | 开启、关闭自动加载变量 | 开启、关闭“写入用户环境变量” |
 | `harmonia shell system-vars on｜off` | 不需要：rc 注入对所有名字一视同仁 | 是否写入 `Path`、`TEMP` 这类系统变量（15.3） |
 | 后台服务 | `systemd --user`、LaunchAgent | 当前用户的计划任务（15.4） |
 | `harmonia exec` | 用要运行的命令替换自身 | 启动命令并等它结束，退出码与它相同；Ctrl+C 交给它处理。cmd 和 PowerShell 自带的命令要写成 `cmd /c …` 或 `powershell -Command …` |
@@ -943,7 +938,7 @@ Windows 上的 CLI 与 macOS、Linux 是同一份代码（`cli/`）：命令、�
 Windows 没有每个终端都会读取的 rc 文件；系统自己的办法是“用户环境变量”，新启动的程序都会带上。Harmonia 在 Windows 上用它代替 5.8 的 rc 注入。
 
 - **位置**：注册表 `HKCU\Environment`，也就是“系统属性 → 环境变量”上半部分的“用户变量”，在那里可以直接看到 Harmonia 写入的内容。写入后通知系统“环境变量已变化”。
-- **开关**：`harmonia shell install` 开启，`harmonia shell uninstall` 关闭并恢复原状。开启前先说明将要做什么和代价，确认后才执行（默认 N，2026-11-09）；安装脚本不询问、不开启（5.8）。没有开启时，Harmonia 不碰用户环境变量，变量只能通过 `harmonia exec`、`harmonia export` 使用。命令沿用 `shell` 这个名字，是为了三个平台的命令和文档一致；Windows 上的帮助、提示和 `harmonia status` 写的是“用户环境变量”。
+- **开关**：手机设备详情页的“写入用户环境变量”和 `harmonia shell on|off` 共用服务端 `shellEnabled`，默认关闭。Windows 无需准备 Shell 加载文件；开启时写入用户环境变量，关闭时恢复原值。只使用允许本机解密的环境。
 - **写入时机**：与另外两个平台重写 `env.sh` 的时机相同：后台服务或 CLI 命令每次同步之后，以及激活、顺序、授权、本地覆盖变化之后。只写有变化的变量，没有变化时不通知系统。
 - **生效边界**：
   - 新启动的程序读到新值：从开始菜单、任务栏、资源管理器启动的程序，Windows Terminal 新开的标签页。
@@ -966,7 +961,7 @@ Windows 没有每个终端都会读取的 rc 文件；系统自己的办法是�
   - 与 rc 注入不同的是，本用户之后启动的**所有**程序都会带上这些变量，包括图形界面程序。
   - 使用漫游用户配置文件的域环境里，注册表会同步到域服务器，不建议开启。
   - “写入系统变量”开关没有加密，服务端可以改动它，但改不了变量的值：它只决定账号里已有的同名变量是否写入这台电脑。
-  - 直接删除程序或数据目录不会清理已经写入的变量，要用 `harmonia shell uninstall` 或 `harmonia uninstall`。
+  - 直接删除程序或数据目录不会清理已经写入的变量，要用 `harmonia shell off` 或 `harmonia uninstall`。
 
 ### 15.4 后台服务
 

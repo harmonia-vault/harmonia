@@ -255,7 +255,8 @@ DEK  = 32 字节随机数，设置管理口令时生成
 | `DELETE /environments/{id}` | device（管理设备） | 删除环境和对它的全部授权（同样清理不再用到的封装），变量库不受影响 |
 | `PUT /devices/{id}/grants` | 管理设备 | `{grants:[{environmentId, role, expiresAt, localDecrypt}], envelopes:[{vaultId, keyVersion, sealed, sig}]}`，整体替换。`localDecrypt` 为 true 的授权，它引用到的每个变量库都必须有给这台设备的封装（已有的不用重复附带），否则返回 `conflict`；不再用到的封装由服务端删除。已有授权保留激活状态和顺序，新授权默认激活并排在最后 |
 | `PUT /devices/{id}/activation` | 管理设备；或设备本身，此时 `{id}` 为 `self` | `{envs:[{environmentId, active}]}`，按顺序从前到后排列（排在前面的覆盖后面的同名变量），必须包含该设备全部未到期的授权环境（可以带上已到期的），不能有未授权的环境，否则返回 `conflict`；没有列出的已到期授权保持原有相对顺序，排在后面。只修改激活状态和顺序 |
-| `PATCH /devices/{id}` | 管理设备；或设备本身，此时 `{id}` 为 `self` | `{name, systemVars, autoUpdate}`，各项都可以省略，但至少要有一项。`systemVars`（布尔）表示这台设备是否把系统自身使用的变量名写入系统环境，目前只有 Windows 上的 CLI 使用，默认 false。`autoUpdate`（布尔）表示这台设备的后台服务发现新版本时是否自动升级，只有 CLI 使用，默认 false。设备本身只能修改 `systemVars` 和 `autoUpdate` |
+| `PATCH /devices/{id}` | 管理设备；或设备本身，此时 `{id}` 为 `self` | `{name, systemVars, autoUpdate, shellEnabled}`，各项都可以省略，但至少要有一项。`systemVars`（布尔）表示这台设备是否把系统自身使用的变量名写入系统环境，目前只有 Windows 上的 CLI 使用，默认 false。`autoUpdate`（布尔）表示这台设备的后台服务发现新版本时是否自动升级，只有 CLI 使用，默认 false。设备本身只能修改 `systemVars`、`autoUpdate` 和 `shellEnabled`；`shellEnabled` 是仅用于 CLI 设备的自动注入开关，默认 false，值变化时清空执行结果 `shellState` |
+| `POST /devices/self/shell-state` | CLI 设备本身 | `{enabled: boolean, error: string|null}`，表示对该开关值的执行结果；error 为面向用户的处理提示（最多 500 字符），成功为 null。只接受与当前 shellEnabled 相符的结果，否则忽略；结果不变不递增序号，变化时通知管理设备 |
 | `POST /devices/{id}/update` | 管理设备 | 无请求体 → `{}`。让这台设备的后台服务现在检查更新并升级（设计文档 5.11），服务端向它推送 `{"type":"update"}`。只能用于 `kind` 为 `client` 的设备，否则返回 `invalid_request`；这台设备当前没有推送连接时返回 `device_offline` |
 | `POST /devices/{id}/revoke` | 管理设备 | 撤销。不能撤销最后一台管理设备 |
 | `POST /devices/self/revoke` | device | 本机退出。最后一台管理设备需要带上 `{confirmLast:true}` |
@@ -324,7 +325,7 @@ DEK  = 32 字节随机数，设置管理口令时生成
 {
   "seq": 42,
   "full": false,
-  "self": {"id": "...", "kind": "client", "name": "...", "rotationRequired": false, "systemVars": false, "autoUpdate": false},
+  "self": {"id": "...", "kind": "client", "name": "...", "rotationRequired": false, "systemVars": false, "autoUpdate": false, "shellEnabled": false, "shellState": null},
   "environments": [{
     "id": "...", "name": "...", "role": "rw", "expiresAt": 0, "localDecrypt": false, "active": true, "position": 0,
     "items": [{"name": "LLM_KEY", "vaultId": "...", "source": "OPENAI_API_KEY"}],
@@ -341,7 +342,7 @@ DEK  = 32 字节随机数，设置管理口令时生成
     "recovery": {"generation": "1", "boxPub": "..."},
     "vaults": [{"id": "...", "name": "...", "keyVersion": "1"}],
     "environments": [{"id": "...", "name": "...", "refs": [{"vaultId": "...", "scope": "all", "items": [], "missing": false}]}],
-    "devices": [{"id": "...", "name": "...", "platform": "...", "kind": "...", "signPub": "...", "boxPub": "...", "cert": "...", "createdAt": 0, "lastSeenAt": 0, "version": "0.4.5", "systemVars": false, "autoUpdate": false, "grants": [{"environmentId": "...", "role": "...", "expiresAt": 0, "localDecrypt": false, "active": true, "position": 0}]}]
+    "devices": [{"id": "...", "name": "...", "platform": "...", "kind": "...", "signPub": "...", "boxPub": "...", "cert": "...", "createdAt": 0, "lastSeenAt": 0, "version": "0.4.5", "systemVars": false, "autoUpdate": false, "shellEnabled": false, "shellState": null, "grants": [{"environmentId": "...", "role": "...", "expiresAt": 0, "localDecrypt": false, "active": true, "position": 0}]}]
   }
 }
 ```
@@ -355,6 +356,7 @@ DEK  = 32 字节随机数，设置管理口令时生成
 - `version` 是这台设备最近一次同步时上报的客户端版本（见第 3 节开头的 `X-Harmonia-Version`），由设备自己上报，服务端不校验真伪；设备还没有上报过时是空字符串，响应里没有这个字段时（较旧的服务端）同样按未知处理。
 - `systemVars` 是设备上的“写入系统变量”开关，见 `PATCH /devices/{id}`；响应里没有这个字段时（较旧的服务端）按 false 处理。
 - `autoUpdate` 是设备上的“自动更新”开关，见 `PATCH /devices/{id}`；没有这个字段时按 false 处理。
+- `shellEnabled` 是设备的自动注入开关；`shellState` 为 null 表示尚未收到执行结果，否则为 `{enabled: boolean, error: string|null}`。CLI 先应用设置再上报；管理端仅在收到成功结果后显示已生效。
 - 设备同步时上报的 `version` 与记录的不同时，服务端更新记录、`head_seq + 1`，并向管理设备推送 `changed`，让设备列表显示新版本。
 - `active` 和 `position` 是授权上的激活状态和顺序，`position` 从 0 开始，越小越靠前。管理设备的 `environments` 中 `active` 恒为 true，`position` 按环境创建先后排列。
 

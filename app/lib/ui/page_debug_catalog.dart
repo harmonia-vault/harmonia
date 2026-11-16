@@ -18,6 +18,7 @@ import 'ai_prompt.dart';
 import 'approval.dart';
 import 'auth_pages.dart';
 import 'device_grants.dart';
+import 'device_shell_debug.dart';
 import 'devices.dart';
 import 'device_review.dart';
 import 'env_editor.dart';
@@ -118,6 +119,7 @@ Map<String, List<DebugPageEntry>> debugPages() => {
         show: (c) => addDeviceGrant(c, s.c, 'debug-computer'),
       ),
     ),
+    ...shellDebugPages(),
     DebugPageEntry('电脑版本与更新：有新版本、让电脑更新、自动更新', (s) => _devicePage(s, 'debug-computer')),
     DebugPageEntry('电脑版本与更新：已是最新、后台服务不在线', (s) => _devicePage(s, 'debug-linux')),
     DebugPageEntry('电脑版本与更新：版本未知、不支持在手机上更新', (s) => _devicePage(s, 'debug-mac')),

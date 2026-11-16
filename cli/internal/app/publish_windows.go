@@ -16,7 +16,7 @@ func publish(d *state.Dir, cache *state.Cache, vars map[string]string) (bool, er
 		return false, err
 	}
 	var want map[string]string
-	if rec.Enabled {
+	if cache.ShellEnabled {
 		want, _ = sysenv.Select(vars, cache.SystemVars)
 	}
 	changed, err := sysenv.Apply(sysenv.User, rec, want, func() error { return rec.Save(sysenvFile(d)) })
@@ -42,11 +42,7 @@ type SystemEnv struct {
 
 // SystemEnv 返回开关状态，以及按当前生效的变量会写入多少个、哪些不会写入。
 func (a *App) SystemEnv() (*SystemEnv, error) {
-	rec, err := sysenv.Load(sysenvFile(a.Dir))
-	if err != nil {
-		return nil, err
-	}
-	out := &SystemEnv{Enabled: rec.Enabled}
+	out := &SystemEnv{}
 	if a.Keys == nil {
 		return out, nil
 	}
@@ -54,6 +50,7 @@ func (a *App) SystemEnv() (*SystemEnv, error) {
 	if err != nil {
 		return nil, err
 	}
+	out.Enabled = cache.ShellEnabled
 	vars, _, err := a.Effective()
 	if err != nil {
 		return nil, err
@@ -63,32 +60,6 @@ func (a *App) SystemEnv() (*SystemEnv, error) {
 	return out, nil
 }
 
-// SetSystemEnv 开启或关闭“写入用户环境变量”。关闭时把写入的变量恢复原状；还没有接入账号时只记下开关。
-func (a *App) SetSystemEnv(on bool) error {
-	unlock, err := a.Dir.Lock()
-	if err != nil {
-		return err
-	}
-	defer unlock()
-	rec, err := sysenv.Load(sysenvFile(a.Dir))
-	if err != nil {
-		return err
-	}
-	rec.Enabled = on
-	if err := rec.Save(sysenvFile(a.Dir)); err != nil {
-		return err
-	}
-	if a.Keys == nil {
-		return unpublish(a.Dir)
-	}
-	cache, err := a.Dir.Cache()
-	if err != nil {
-		return err
-	}
-	_, err = a.writeEnvLocked(cache)
-	return err
-}
-
 // SetSystemVars 修改这台设备的“写入系统变量”开关（保存在服务端，需要联网），再同步一次让它生效。
 func (a *App) SetSystemVars(ctx context.Context, on bool) error {
 	return a.patchSelf(ctx, map[string]any{"systemVars": on})
@@ -96,3 +67,6 @@ func (a *App) SetSystemVars(ctx context.Context, on bool) error {
 
 // systemVariable 判断变量是否是 Windows 自带的，导入时不列出。
 func systemVariable(name string) bool { return sysenv.IsSystem(name) }
+
+// ClearSystemEnv 在完整卸载时恢复用户环境变量，不修改设备设置。
+func (a *App) ClearSystemEnv() error { return unpublish(a.Dir) }

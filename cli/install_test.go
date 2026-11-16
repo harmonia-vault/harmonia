@@ -246,3 +246,66 @@ func TestInstallerPersistsInheritedPath(t *testing.T) {
 		})
 	}
 }
+
+// 使用真实 CLI 验证安装器确实预装加载入口，而不只是调用了准备命令。
+func TestInstallerPreparesDisabledIntegration(t *testing.T) {
+	binaryPath := os.Getenv("HARMONIA_INSTALL_TEST_BINARY")
+	if binaryPath == "" {
+		binaryPath = filepath.Join(t.TempDir(), "harmonia")
+		build := exec.Command("go", "build", "-o", binaryPath, "./cmd/harmonia")
+		if out, err := build.CombinedOutput(); err != nil {
+			t.Fatalf("构建测试 CLI：%v\n%s", err, out)
+		}
+	}
+	binary, err := os.ReadFile(binaryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"bash", "zsh"} {
+		t.Run(name, func(t *testing.T) {
+			shellPath, err := exec.LookPath(name)
+			if err != nil {
+				t.Skip(err)
+			}
+			f := newInstallFixture(t, shellPath, true)
+			f.env = append(f.env, "HARMONIA_HOME="+filepath.Join(f.home, ".harmonia"))
+			asset := filepath.Join(f.root, "harmonia")
+			old, err := os.ReadFile(asset)
+			if err != nil {
+				t.Fatal(err)
+			}
+			manifestPath := filepath.Join(f.root, "stable.json")
+			manifest, err := os.ReadFile(manifestPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			updated := strings.ReplaceAll(string(manifest), fmt.Sprintf("%x", sha256.Sum256(old)), fmt.Sprintf("%x", sha256.Sum256(binary)))
+			if err := os.WriteFile(asset, binary, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(manifestPath, []byte(updated), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			f.run(t)
+			f.run(t)
+			rc := filepath.Join(f.home, ".bashrc")
+			if name == "zsh" {
+				rc = filepath.Join(f.zdot, ".zshenv")
+			}
+			content, err := os.ReadFile(rc)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Count(string(content), "# >>> harmonia >>>") != 1 {
+				t.Fatalf("加载入口缺失或重复：%s", content)
+			}
+			integration, err := os.ReadFile(filepath.Join(f.home, ".harmonia", "shell.sh"))
+			if err != nil || !strings.Contains(string(integration), "__HARMONIA_refresh") {
+				t.Fatalf("未预装刷新脚本：%v", err)
+			}
+			if _, err := os.Stat(filepath.Join(f.home, ".harmonia", "env.sh")); !os.IsNotExist(err) {
+				t.Fatal("默认关闭时不应留下明文变量文件")
+			}
+		})
+	}
+}

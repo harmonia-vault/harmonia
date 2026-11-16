@@ -81,18 +81,46 @@ export function deviceRoutes(app: Hono, deps: Deps) {
     if (param !== "self" && d.kind !== "manager") throw forbidden("只有管理设备可以修改其他设备。");
     const t = param === "self" ? d : target(sql, id(param, "设备 ID"));
     const body = await readJson(c);
-    if (body.name === undefined && body.systemVars === undefined && body.autoUpdate === undefined) throw bad("没有要修改的内容。");
+    if (body.name === undefined && body.systemVars === undefined && body.autoUpdate === undefined && body.shellEnabled === undefined) throw bad("没有要修改的内容。");
     if (body.name !== undefined && d.kind !== "manager") throw forbidden("只有管理设备可以修改设备名。");
     if (body.systemVars !== undefined && typeof body.systemVars !== "boolean") throw bad("systemVars 只能是 true 或 false。");
     if (body.autoUpdate !== undefined && typeof body.autoUpdate !== "boolean") throw bad("autoUpdate 只能是 true 或 false。");
+    if (body.shellEnabled !== undefined) {
+      if (typeof body.shellEnabled !== "boolean") throw bad("shellEnabled 只能是 true 或 false。");
+      if (t.kind !== "client") throw bad("只能为电脑设置自动加载变量。");
+    }
     const name = body.name === undefined ? t.name : label(body.name, "设备名");
     const systemVars = body.systemVars === undefined ? t.system_vars : Number(body.systemVars);
     const autoUpdate = body.autoUpdate === undefined ? t.auto_update : Number(body.autoUpdate);
+    const shellEnabled = body.shellEnabled === undefined ? t.shell_enabled : Number(body.shellEnabled);
     sql.transaction(() => {
-      sql.run(`UPDATE devices SET name = ?, system_vars = ?, auto_update = ? WHERE id = ?`, name, systemVars, autoUpdate, t.id);
+      sql.run(`UPDATE devices SET name = ?, system_vars = ?, auto_update = ?, shell_enabled = ?, shell_state = ? WHERE id = ?`,
+        name, systemVars, autoUpdate, shellEnabled, shellEnabled === t.shell_enabled ? t.shell_state : null, t.id);
       bump(sql);
     });
     deps.notifier.send("all", { type: "changed", seq: headSeq(sql) });
+    return c.json({ ok: true });
+  });
+
+  // 执行结果只能由这台电脑报告；开关变化后的旧结果不覆盖等待状态。
+  app.post("/api/v1/devices/self/shell-state", async (c) => {
+    const d = await requireDevice(c, deps);
+    if (d.kind !== "client") throw forbidden("只有电脑可以报告执行结果。");
+    const body = await readJson(c);
+    if (typeof body.enabled !== "boolean" ||
+        !(body.error === null || (typeof body.error === "string" && body.error.length > 0 && body.error.length <= 500))) {
+      throw bad("执行结果不完整，请更新电脑上的 Harmonia 后重试。");
+    }
+    // 读取请求体期间开关可能已经改变，使用当前记录判断。
+    const current = target(sql, d.id);
+    const state = JSON.stringify({ enabled: body.enabled, error: body.error });
+    if (Number(body.enabled) === current.shell_enabled && state !== current.shell_state) {
+      sql.transaction(() => {
+        sql.run(`UPDATE devices SET shell_state = ? WHERE id = ?`, state, d.id);
+        bump(sql);
+      });
+      deps.notifier.send("managers", { type: "changed", seq: headSeq(sql) });
+    }
     return c.json({ ok: true });
   });
 

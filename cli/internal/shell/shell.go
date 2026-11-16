@@ -90,9 +90,14 @@ func Targets(home, sh string) ([]Target, error) {
 	case "bash":
 		t := []Target{{"bash", filepath.Join(home, ".bashrc")}}
 		// 登录 shell 读 ~/.bash_profile（或 ~/.profile），确保它也会加载 env.sh。
-		profile := filepath.Join(home, ".bash_profile")
-		if _, err := os.Stat(profile); err != nil {
-			profile = filepath.Join(home, ".profile")
+		profile := filepath.Join(home, ".profile")
+		for _, name := range []string{".bash_profile", ".bash_login", ".profile"} {
+			candidate := filepath.Join(home, name)
+			if f, err := os.Open(candidate); err == nil {
+				f.Close()
+				profile = candidate
+				break
+			}
 		}
 		return append(t, Target{"bash", profile}), nil
 	}

@@ -4,6 +4,7 @@ package app
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/harmonia-vault/harmonia/cli/internal/shell"
@@ -21,16 +22,23 @@ func TestPublishOnlyWithShellIntegration(t *testing.T) {
 	if err := os.WriteFile(d.EnvFile(), shell.Render(vars), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := publish(d, nil, vars); err != nil {
+	if _, err := publish(d, &state.Cache{}, vars); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(d.EnvFile()); !os.IsNotExist(err) {
 		t.Fatal("没有开启 Shell 集成时留下了 env.sh")
 	}
-	if err := os.WriteFile(shell.IntegrationFile(d.EnvFile()), []byte("# x\n"), 0o600); err != nil {
+	if err := shell.Prepare(d.EnvFile(), []shell.Target{{Shell: "zsh", Path: filepath.Join(t.TempDir(), ".zshenv")}}); err != nil {
 		t.Fatal(err)
 	}
-	if changed, err := publish(d, nil, vars); err != nil || !changed {
+	if _, err := publish(d, &state.Cache{}, vars); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(d.EnvFile()); !os.IsNotExist(err) {
+		t.Fatal("预装不能开启集成")
+	}
+
+	if changed, err := publish(d, &state.Cache{ShellEnabled: true}, vars); err != nil || !changed {
 		t.Fatalf("开启后应写出 env.sh：%v %v", changed, err)
 	}
 	if err := unpublish(d); err != nil {

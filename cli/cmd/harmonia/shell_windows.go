@@ -14,14 +14,14 @@ import (
 // 各处提到这项功能时用的文字。
 const (
 	shellLabel       = "用户环境变量"
-	shellOnNote      = "已开启写入用户环境变量：变量明文存在注册表里，这台电脑上你运行的任何程序都能读到。不需要时运行 harmonia shell uninstall 关闭，改用 harmonia exec -- <命令>。"
+	shellOnNote      = "已开启写入用户环境变量：变量明文存在注册表里，这台电脑上你运行的任何程序都能读到。不需要时运行 harmonia shell off 关闭，改用 harmonia exec -- <命令>。"
 	logoutNotice     = "写入用户环境变量的内容已经恢复原状。已经打开的终端和程序里还留有旧值，关闭后即消失。"
 	uninstallSummary = "退出账号、移除后台服务、把写入的用户环境变量恢复原状，并删除 harmonia"
 )
 
 var shellHelp = [][2]string{
-	{"shell install [--yes]", "把变量写入 Windows 的用户环境变量（变量对所有程序可见，一般用 exec 即可）；--yes 不再确认"},
-	{"shell uninstall", "停止写入，把用户环境变量恢复原状"},
+	{"shell on [--yes]", "把变量写入 Windows 的用户环境变量（变量对所有程序可见，一般用 exec 即可）；--yes 不再确认"},
+	{"shell off", "停止写入，把用户环境变量恢复原状"},
 	{"shell system-vars [on|off] [--yes]", "查看或设置是否写入 Path、TEMP 这类系统自身使用的变量（默认不写入）"},
 }
 
@@ -68,19 +68,19 @@ func cmdShell(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	usage := errors.New("用法：harmonia shell install|uninstall，或 harmonia shell system-vars on|off")
+	usage := errors.New("用法：harmonia shell on|off，或 harmonia shell system-vars on|off")
 	if len(f.args) == 0 {
 		return usage
 	}
-	a, err := app.Load(false)
+	a, err := app.Load(true)
 	if err != nil {
 		return err
 	}
 	switch {
-	case f.args[0] == "install" && len(f.args) == 1:
-		return shellInstall(a, f.bools["yes"])
-	case f.args[0] == "uninstall" && len(f.args) == 1:
-		if err := a.SetSystemEnv(false); err != nil {
+	case f.args[0] == "on" && len(f.args) == 1:
+		return shellInstall(ctx, a, f.bools["yes"])
+	case f.args[0] == "off" && len(f.args) == 1:
+		if err := a.SetShellEnabled(ctx, false); err != nil {
 			return err
 		}
 		fmt.Println("已关闭，写入用户环境变量的内容已经恢复原状。已经打开的终端和程序里还留有旧值，关闭后即消失。")
@@ -91,7 +91,7 @@ func cmdShell(ctx context.Context, args []string) error {
 	return usage
 }
 
-func shellInstall(a *app.App, yes bool) error {
+func shellInstall(ctx context.Context, a *app.App, yes bool) error {
 	st, err := a.SystemEnv()
 	if err != nil {
 		return err
@@ -107,12 +107,8 @@ func shellInstall(a *app.App, yes bool) error {
 			return nil
 		}
 	}
-	if err := a.SetSystemEnv(true); err != nil {
+	if err := a.SetShellEnabled(ctx, true); err != nil {
 		return err
-	}
-	if !a.Config.Paired() {
-		fmt.Println("已开启。接入账号后，变量会自动写入用户环境变量。")
-		return nil
 	}
 	if st, err = a.SystemEnv(); err != nil {
 		return err
@@ -168,5 +164,5 @@ func shellSystemVars(ctx context.Context, a *app.App, args []string, yes bool) e
 
 // removeIntegration 在卸载时把写入用户环境变量的内容恢复原状。
 func removeIntegration(a *app.App) error {
-	return a.SetSystemEnv(false)
+	return a.ClearSystemEnv()
 }

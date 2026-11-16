@@ -71,6 +71,8 @@ export type Device = {
   rotation_required: number;
   system_vars: number;
   auto_update: number;
+  shell_enabled: number;
+  shell_state: string | null;
   /** 设备能看到的变量范围最近一次变化时的 seq（docs/protocol.md 3.4 的 full）。 */
   visibility_seq: number;
   /** 设备最近一次同步时上报的客户端版本，没有上报过时为空。 */

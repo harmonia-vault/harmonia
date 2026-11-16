@@ -43,8 +43,9 @@ set -eu
 test_dir=$(mktemp -d)
 trap 'rm -rf "$test_dir"' EXIT
 GOOS=linux CGO_ENABLED=0 go test -c -o "$test_dir/installer.test" .
+GOOS=linux CGO_ENABLED=0 go build -o "$test_dir/harmonia" ./cmd/harmonia
 cp install.sh "$test_dir/install.sh"
-docker run --rm -v "$test_dir:/tests:ro" -w /tests bash:5.2.21 sh -c 'apk add --no-cache curl zsh >/dev/null && ./installer.test -test.v'
+docker run --rm -e HARMONIA_INSTALL_TEST_BINARY=/tests/harmonia -v "$test_dir:/tests:ro" -w /tests bash:5.2.21 sh -c 'apk add --no-cache curl zsh >/dev/null && ./installer.test -test.v'
 '''
 
 [tasks.fmt-cli]

@@ -7,6 +7,7 @@ import 'approval.dart' show AuthorizationsSection;
 import 'approval_list.dart';
 import 'device_grants.dart';
 import 'device_update.dart';
+import 'device_shell.dart';
 import 'vaults.dart' show askName, LeaveWhenGone;
 import 'lock.dart';
 import 'pairing.dart';
@@ -259,6 +260,7 @@ class _DevicePageState extends State<DevicePage> with LeaveWhenGone {
           if (!d.isManager) ...[
             DeviceGrants(c: c, deviceId: d.id),
             AuthorizationsSection(c: c, device: d),
+            DeviceShellSection(c: c, device: d),
             CliUpdateSection(c: c, deviceId: d.id),
             if (d.platform == 'windows') ...[
               const SectionTitle('系统变量'),

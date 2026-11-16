@@ -167,6 +167,15 @@ Future<void> main(List<String> argv) async {
         for (final a in args.sublist(1)) byEnv[envId(a.split(':')[0])]!.copyWith(active: !a.endsWith(':off')),
       ]);
       print('ok');
+    case 'shell':
+      final v = await loaded();
+      if (args.length > 1) {
+        await v.setShellEnabled(device(args[0]).id, args[1] == 'on');
+      }
+      final current = device(args[0]);
+      print(
+        '${current.shellEnabled ? 'on' : 'off'}\t${current.shellPending ? 'pending' : current.shellError ?? 'applied'}',
+      );
     case 'system-vars':
       // 修改某台设备的“写入系统变量”开关：system-vars <设备名> on|off。
       final v = await loaded();

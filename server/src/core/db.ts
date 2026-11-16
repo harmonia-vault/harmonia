@@ -227,6 +227,11 @@ export const MIGRATIONS: string[][] = [
     `DROP TABLE env_renumber`,
     `UPDATE meta SET value = value + 1 WHERE key = 'head_seq'`,
   ],
+  // Shell 集成的设备开关与最后执行结果。
+  [
+    `ALTER TABLE devices ADD COLUMN shell_enabled INTEGER NOT NULL DEFAULT 0`,
+    `ALTER TABLE devices ADD COLUMN shell_state TEXT`,
+  ],
 ];
 
 /** 执行迁移；upTo 只给测试用，迁移到指定版本为止。 */

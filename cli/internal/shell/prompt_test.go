@@ -278,3 +278,33 @@ func TestInstallReplacesMarkedBlock(t *testing.T) {
 		t.Fatal("脚本缺失仍显示已安装")
 	}
 }
+
+// 预装时没有变量文件，当前终端无需重新 source 就能反复开关。
+func TestPromptPreparedDisabledThenToggle(t *testing.T) {
+	for _, name := range []string{"bash", "zsh"} {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			env := filepath.Join(dir, "env.sh")
+			if err := Prepare(env, []Target{{Shell: name, Path: filepath.Join(dir, "rc")}}); err != nil {
+				t.Fatal(err)
+			}
+			s := startShell(t, name, dir)
+			s.run("export RESTORE=before; unset ADDED")
+			s.run(". " + Quote(IntegrationFile(env)))
+			for _, value := range []string{"first", "second"} {
+				writeEnv(t, env, map[string]string{"RESTORE": value, "ADDED": "new"})
+				s.run("")
+				if got := s.run(`printf '%s|%s\n' "$RESTORE" "$ADDED"`); got != value+"|new" {
+					t.Fatalf("开启未刷新：%q", got)
+				}
+				if err := os.Remove(env); err != nil {
+					t.Fatal(err)
+				}
+				s.run("")
+				if got := s.run(`printf '%s|%s\n' "$RESTORE" "${ADDED-unset}"`); got != "before|unset" {
+					t.Fatalf("关闭未恢复：%q", got)
+				}
+			}
+		})
+	}
+}

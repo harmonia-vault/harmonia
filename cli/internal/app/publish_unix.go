@@ -11,17 +11,14 @@ import (
 	"github.com/harmonia-vault/harmonia/cli/internal/state"
 )
 
-// ShellEnabled 判断是否开启了 Shell 集成：以集成脚本 shell.sh 是否存在为准（shell install 写入，
-// shell uninstall 删除）。不看 rc 文件：rc 可能是手动添加的符号链接，后台服务看到的 ZDOTDIR 也可能不同。
-func ShellEnabled(d *state.Dir) bool {
-	_, err := os.Stat(shell.IntegrationFile(d.EnvFile()))
-	return err == nil
-}
-
 // publish 把生效的变量写入 env.sh，返回是否有变化。没有开启 Shell 集成时不保留明文副本，删除 env.sh。
-func publish(d *state.Dir, _ *state.Cache, vars map[string]string) (bool, error) {
-	if !ShellEnabled(d) {
+func publish(d *state.Dir, cache *state.Cache, vars map[string]string) (bool, error) {
+	if !cache.ShellEnabled {
 		return removeEnvFile(d)
+	}
+	if err := shell.Ready(d.EnvFile()); err != nil {
+		changed, cleanupErr := removeEnvFile(d)
+		return changed, errors.Join(err, cleanupErr)
 	}
 	data := shell.Render(vars)
 	old, _ := os.ReadFile(d.EnvFile())

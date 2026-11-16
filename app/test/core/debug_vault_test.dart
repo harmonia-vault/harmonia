@@ -6,6 +6,7 @@ import 'package:harmonia/core/api.dart';
 import 'package:harmonia/core/crypto.dart';
 import 'package:harmonia/core/debug_account.dart';
 import 'package:harmonia/core/debug_vault.dart';
+import 'package:harmonia/core/debug_network.dart';
 import 'package:harmonia/core/models.dart';
 import 'package:harmonia/core/vault.dart';
 
@@ -84,6 +85,22 @@ void main() {
     expect(device.grants.single.active, isFalse);
     await operations.revokeDevice(request.id);
     expect(operations.devices.where((d) => d.id == request.id), isEmpty);
+  });
+
+  test('Shell 开关只改变示例设备，离线设备保持等待且不改变环境授权', () async {
+    final Vault operations = vault;
+    final device = operations.devices.singleWhere((d) => d.id == 'debug-mac');
+    final grants = device.grants.map((g) => g.toJson()).toList();
+    await operations.setShellEnabled(device.id, true);
+    expect(device.shellEnabled, isTrue);
+    expect(device.shellPending, isFalse);
+    expect(device.shellError, isNull);
+    expect(device.grants.map((g) => g.toJson()).toList(), grants);
+    vault.offlineDevices.add(device.id);
+    await operations.setShellEnabled(device.id, false);
+    expect(device.shellEnabled, isFalse);
+    expect(device.shellPending, isTrue);
+    expect(operations.devices.singleWhere((d) => d.id == 'debug-computer').shellEnabled, isFalse);
   });
 
   test('离线和失败操作不改变已有数据，重置与新会话恢复样例', () async {

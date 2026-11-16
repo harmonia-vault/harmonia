@@ -89,6 +89,11 @@ type Variable struct {
 	Seq        int64  `json:"seq"`
 }
 
+type ShellState struct {
+	Enabled bool    `json:"enabled"`
+	Error   *string `json:"error"`
+}
+
 type Sync struct {
 	Seq int64 `json:"seq"`
 	// Full 表示 Variables 是范围内的完整列表，客户端用它整体替换缓存。
@@ -101,7 +106,9 @@ type Sync struct {
 		// SystemVars 是这台设备的“写入系统变量”开关，只有 Windows 上使用。
 		SystemVars bool `json:"systemVars"`
 		// AutoUpdate 是这台设备的“自动更新”开关，由后台服务执行。
-		AutoUpdate bool `json:"autoUpdate"`
+		AutoUpdate   bool        `json:"autoUpdate"`
+		ShellEnabled bool        `json:"shellEnabled"`
+		ShellState   *ShellState `json:"shellState"`
 	} `json:"self"`
 	Environments []Environment `json:"environments"`
 	VaultNames   []VaultName   `json:"vaultNames"`
