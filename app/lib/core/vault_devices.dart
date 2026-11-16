@@ -132,6 +132,12 @@ mixin VaultDevices {
     await sync();
   }
 
+  /// 修改设备的自动加载开关，实际执行结果由电脑同步回报。
+  Future<void> setShellEnabled(String id, bool on) async {
+    await api!.device('PATCH', '/api/v1/devices/$id', body: {'shellEnabled': on});
+    await sync();
+  }
+
   /// 修改某台设备的“写入系统变量”开关（docs/protocol.md 3.2）。
   Future<void> setSystemVars(String id, bool on) async {
     try {

@@ -148,6 +148,11 @@ class DeviceInfo {
   /// “自动更新”开关，只有电脑上的命令行使用，由它的后台服务执行。
   bool get autoUpdate => json['autoUpdate'] as bool? ?? false;
 
+  bool get shellEnabled => json['shellEnabled'] as bool;
+  Map<String, dynamic>? get shellState => (json['shellState'] as Map?)?.cast<String, dynamic>();
+  bool get shellPending => shellState == null || shellState!['enabled'] != shellEnabled;
+  String? get shellError => shellState?['error'] as String?;
+
   /// 按激活顺序排列。
   List<Grant> get grants =>
       (json['grants'] as List).map((g) => Grant.fromJson((g as Map).cast<String, dynamic>())).toList()

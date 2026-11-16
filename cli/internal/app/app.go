@@ -89,6 +89,7 @@ func (a *App) Sync(ctx context.Context) error {
 	}
 	cache.SystemVars = res.Self.SystemVars
 	cache.AutoUpdate = res.Self.AutoUpdate
+	cache.ShellEnabled = res.Self.ShellEnabled
 	if err := a.Dir.SaveCache(cache); err != nil {
 		return err
 	}
@@ -109,7 +110,8 @@ func (a *App) Sync(ctx context.Context) error {
 		return err
 	}
 	_, err = a.writeEnvLocked(cache)
-	return err
+	reportErr := a.reportShellState(ctx, cache.ShellEnabled, err, res.Self.ShellState)
+	return errors.Join(err, reportErr)
 }
 
 // pruneOverridesLocked 删除已无法访问的环境（授权被撤销或环境被删除）留下的本机覆盖（设计文档 19.2）。
@@ -191,6 +193,9 @@ func (a *App) RefreshEnvFile() (bool, error) {
 }
 
 func (a *App) writeEnvLocked(cache *state.Cache) (bool, error) {
+	if !cache.ShellEnabled {
+		return publish(a.Dir, cache, nil)
+	}
 	ov, err := a.Dir.Overrides()
 	if err != nil {
 		return false, err

@@ -5,6 +5,7 @@ import 'account.dart';
 import 'api.dart';
 import 'crypto.dart';
 import 'debug_vault.dart';
+import 'debug_network.dart';
 import 'vault.dart';
 
 class DebugAccount extends AccountService {

@@ -19,16 +19,18 @@ import (
 // vaultServer 是一个有状态的模拟服务器：变量库 E（名称“共享”）和引用它全部变量的环境 ENV（名称 dev），
 // 按批量写入接口保存变量，同步时全部返回。
 type vaultServer struct {
-	mu      sync.Mutex
-	name    string
-	envs    []api.Environment
-	rename  map[string]string // 变量库里的原名 → 环境里的名字
-	locked  bool              // 为 true 时环境没有“全部变量”的引用，不能新增变量
-	envKey  []byte
-	sealed  api.Envelope
-	vars    map[string]string // 变量名 → 密文
-	seq     int64
-	batches int
+	mu           sync.Mutex
+	name         string
+	envs         []api.Environment
+	rename       map[string]string // 变量库里的原名 → 环境里的名字
+	locked       bool              // 为 true 时环境没有“全部变量”的引用，不能新增变量
+	envKey       []byte
+	sealed       api.Envelope
+	vars         map[string]string // 变量名 → 密文
+	seq          int64
+	batches      int
+	shellEnabled bool
+	shellState   *api.ShellState
 	// tamper 不为 nil 时，批量写入后由它改写保存的密文（模拟别的设备同时修改）。
 	tamper func(name, ct string) string
 }
@@ -66,10 +68,24 @@ func (s *vaultServer) handler(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{
 			"seq":          s.seq,
 			"full":         true,
-			"self":         map[string]any{"id": "D", "kind": "client", "name": s.name},
+			"self":         map[string]any{"id": "D", "kind": "client", "name": s.name, "shellEnabled": s.shellEnabled, "shellState": s.shellState},
 			"environments": envs, "envelopes": envelopes, "variables": vars,
 			"vaultNames": []api.VaultName{{ID: "E", Name: "共享"}}, "vaults": []api.Vault{{ID: "E", KeyVersion: "1"}},
 		})
+	case r.URL.Path == "/api/v1/devices/self/shell-state":
+		var result api.ShellState
+		json.NewDecoder(r.Body).Decode(&result)
+		s.shellState = &result
+		w.Write([]byte(`{"ok":true}`))
+	case r.URL.Path == "/api/v1/devices/self" && r.Method == "PATCH":
+		var body struct {
+			ShellEnabled bool `json:"shellEnabled"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		s.shellEnabled = body.ShellEnabled
+		s.shellState = nil
+		w.Write([]byte(`{"ok":true}`))
+
 	case r.Method == "DELETE" && strings.HasPrefix(r.URL.Path, "/api/v1/vaults/E/variables/"):
 		s.seq++
 		delete(s.vars, strings.TrimPrefix(r.URL.Path, "/api/v1/vaults/E/variables/"))

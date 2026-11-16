@@ -79,6 +79,8 @@ function snapshot(deps: Deps, d: Device, since: number): Record<string, unknown>
         rotationRequired: !!d.rotation_required,
         systemVars: !!d.system_vars,
         autoUpdate: !!d.auto_update,
+        shellEnabled: !!d.shell_enabled,
+        shellState: d.shell_state === null ? null : JSON.parse(d.shell_state),
       },
       environments: envs.map((e) => {
         const { items, shadowed } = expand(e.refs, names);
@@ -151,6 +153,8 @@ function managerPart(deps: Deps, d: Device, allVaults: VaultRow[], vaultById: Ma
       version: x.version,
       systemVars: !!x.system_vars,
       autoUpdate: !!x.auto_update,
+      shellEnabled: !!x.shell_enabled,
+      shellState: x.shell_state === null ? null : JSON.parse(x.shell_state),
       grants: grants
         .filter((g) => g.device_id === x.id)
         .map((g) => ({

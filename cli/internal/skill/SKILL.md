@@ -31,7 +31,7 @@ Windows（PowerShell）：
 $env:HARMONIA_YES = '0'; irm https://github.com/harmonia-vault/harmonia/releases/download/update-feed/install.ps1 | iex
 ```
 
-`HARMONIA_YES=0` 让安装脚本不再询问，只装命令行本身，不装后台服务。后台服务由你在装好后询问用户，见下一节；不要用 `HARMONIA_YES=1` 替用户决定。
+`HARMONIA_YES=0` 让安装脚本不再询问，安装命令行并预装 Shell 集成但不开启，不装后台服务。后台服务由你在装好后询问用户，见下一节；不要用 `HARMONIA_YES=1` 替用户决定。
 
 ## 询问是否开启后台服务
 
@@ -46,9 +46,9 @@ $env:HARMONIA_YES = '0'; irm https://github.com/harmonia-vault/harmonia/releases
 
 **不要主动提出 Shell 集成**（Windows 上叫“写入用户环境变量”）
 
-Shell 集成让用户打开的每个终端（Windows 上是每个新启动的程序）都自动带上全部变量。它的代价是变量对这个用户运行的任何程序都可见，本机还会留一份明文变量文件（Windows 上明文存在注册表里）；绝大多数情况用 `harmonia exec` 就够了，所以不要主动提出，也不要在安装流程里询问。
+Shell 集成让用户打开的每个终端（Windows 上是每个新启动的程序）都自动带上允许本机解密的环境中的变量。它的代价是变量对这个用户运行的任何程序都可见，本机还会留一份明文变量文件（Windows 上明文存在注册表里）；绝大多数情况用 `harmonia exec` 就够了，所以不要主动提出，也不要在安装流程里询问。
 
-只有用户自己要求“终端里自动带上变量”时：先说明上面的代价，并告诉用户可以用 `harmonia exec -- <命令>` 代替；用户仍然坚持，才运行 `harmonia shell install --yes`（默认按当前 shell；需要时加 `--shell zsh` 或 `--shell bash`）。开启后，用户已经打开的终端要按命令输出的提示加载一次，或者新开一个终端。关闭：`harmonia shell uninstall`，用户要求时运行。
+用户要求开启自动加载时，说明上面的代价；已同意后运行 `harmonia shell on --yes`，也可以由用户在手机的设备详情中开启。关闭用 `harmonia shell off`。如果提示尚未配置，运行 `harmonia shell install`，按输出完成配置后重试。
 
 ## 接入账号（需要用户在手机上批准）
 
@@ -165,7 +165,7 @@ printf '%s' "$JSON" | harmonia import --vault <变量库> --file - --json
 
 - `harmonia logout`：退出账号，清除本机的密钥和变量
 - `harmonia uninstall`：完全卸载
-- `harmonia shell uninstall`、`harmonia service uninstall`
+- `harmonia shell off`、`harmonia service uninstall`
 - `harmonia update channel beta|stable`：切换更新渠道
 - `harmonia update auto on|off`：开启或关闭自动更新
 - `harmonia shell system-vars on|off`（只在 Windows 上）：是否把 `Path`、`TEMP` 这类系统自身使用的变量也写入用户环境变量，写错会影响这台电脑上的所有程序

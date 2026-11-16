@@ -44,8 +44,6 @@ type Original struct {
 
 // Record 保存在数据目录的 sysenv.json 中。
 type Record struct {
-	// Enabled 是“写入用户环境变量”的开关，退出登录后保留。
-	Enabled bool `json:"enabled"`
 	// Managed 是 Harmonia 正在托管的变量名，以及它们被接管之前的状态。
 	Managed map[string]Original `json:"managed"`
 }

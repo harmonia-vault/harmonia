@@ -2,20 +2,16 @@
 import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:http/http.dart' as http;
+import 'debug_network.dart';
 
 import 'api.dart';
 import 'crypto.dart';
 import 'debug_approvals.dart';
+import 'debug_shell.dart';
 import 'models.dart';
 import 'refs.dart';
 import 'store.dart';
 import 'vault.dart';
-
-class DebugNetworkClient extends http.BaseClient {
-  @override
-  Future<http.StreamedResponse> send(http.BaseRequest request) async => throw StateError('页面调试不能访问网络');
-}
 
 enum DebugScenario { normal, empty, offline, failure }
 
@@ -24,7 +20,7 @@ const debugEnvironmentId = 'ZGVtby1lbnYtaWQtc2FtcA';
 /// 页面调试里更新源的最新版本：带后缀的版本走测试版渠道。
 String debugCliLatest(String version) => version.contains('-') ? '0.10.1-rc.1' : '0.10.0';
 
-class DebugVault extends Vault with DebugApprovals {
+class DebugVault extends Vault with DebugApprovals, DebugShell {
   DebugVault(HCrypto crypto) : super(crypto, MemoryStore(), MemoryStore()) {
     api = ApiClient('https://debug.invalid', client: DebugNetworkClient());
     reset();
@@ -37,6 +33,7 @@ class DebugVault extends Vault with DebugApprovals {
   void Function()? onSimulatedChange;
 
   /// 后台服务没有连上服务器的示例电脑。
+  @override
   final offlineDevices = <String>{};
 
   /// 模拟电脑完成更新所用的时间。
@@ -80,6 +77,8 @@ class DebugVault extends Vault with DebugApprovals {
     'createdAt': 1791763200000,
     'lastSeenAt': 1791792000000,
     'version': version,
+    'shellEnabled': false,
+    'shellState': {'enabled': false, 'error': null},
     'grants': grants.map((g) => {...g.toJson(), 'active': g.active, 'position': g.position}).toList(),
   };
 

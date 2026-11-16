@@ -108,6 +108,12 @@ case "${user_shell##*/}" in
   sh) configure_path "$HOME/.profile" ;;
   *) printf '未自动配置 %s，请将 %s 加入该终端的 PATH。\n' "${user_shell##*/}" "$DEST" ;;
 esac
+# 预装加载入口；设备开关默认关闭，不生成明文变量文件。
+case "${user_shell##*/}" in
+  zsh|bash)
+    "$DEST/harmonia" shell install --shell "${user_shell##*/}" || echo "Shell 集成没有配置完成，请按上面的提示处理后运行 harmonia shell install。"
+    ;;
+esac
 # HARMONIA_YES=1 时不询问，直接安装后台服务；HARMONIA_YES=0 时不询问，不装；
 # 否则有终端可以交互时询问，直接回车即安装；没有终端时只提示命令。
 # Shell 集成会让变量对这个用户的所有程序可见，安装脚本不开启它（docs/rewrite-plan.md 5.8）。

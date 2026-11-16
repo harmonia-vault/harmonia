@@ -40,6 +40,7 @@ type Cache struct {
 	Seq          int64             `json:"seq"`
 	SystemVars   bool              `json:"systemVars"`
 	AutoUpdate   bool              `json:"autoUpdate"`
+	ShellEnabled bool              `json:"shellEnabled"`
 	Environments []api.Environment `json:"environments"`
 	VaultNames   []api.VaultName   `json:"vaultNames"`
 	Envelopes    []api.Envelope    `json:"envelopes"`

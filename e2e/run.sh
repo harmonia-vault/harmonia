@@ -107,7 +107,11 @@ expect_eq "$(cli export --all --format json 2>/dev/null | grep -c OPENAI_API_KEY
 
 step "开启 Shell 集成后才写出 env.sh"
 mkdir -p "$TMP/home"
-HOME="$TMP/home" cli shell install --yes --shell bash >/dev/null
+HOME="$TMP/home" cli shell install --shell bash >/dev/null
+[ -e "$TMP/cli/env.sh" ] && fail "预装 Shell 集成不应开启"
+expect_eq "$(manager phone shell e2e-laptop on)" $'on\tpending' "手机开启后等待电脑执行"
+cli sync >/dev/null
+expect_eq "$(manager phone shell e2e-laptop)" $'on\tapplied' "电脑回报开启结果"
 expect_eq "$(bash -c ". '$TMP/cli/env.sh'; printf %s \"\$OPENAI_API_KEY\"")" "sk-first 'quoted' \$(no)" "env.sh 内容"
 
 step "在手机上让电脑更新：后台服务不在线时给出下一步"
@@ -459,8 +463,11 @@ cli sync >/dev/null || fail "退出管理登录不应影响日常登录"
 kill -INT $MGR_PID; wait $MGR_PID 2>/dev/null || true; MGR_PID=""
 
 step "关闭 Shell 集成时删除变量文件，后台服务不再写出"
-HOME="$TMP/home" cli shell uninstall >/dev/null
-[ -e "$TMP/cli/env.sh" ] || [ -e "$TMP/cli/shell.sh" ] && fail "关闭 Shell 集成后 env.sh、shell.sh 应当删除"
+manager phone shell e2e-laptop off >/dev/null
+cli sync >/dev/null
+expect_eq "$(manager phone shell e2e-laptop)" $'off\tapplied' "电脑回报关闭结果"
+[ -e "$TMP/cli/env.sh" ] && fail "关闭 Shell 集成后 env.sh 应当删除"
+[ -e "$TMP/cli/shell.sh" ] || fail "关闭 Shell 集成后应保留加载脚本"
 cli sync >/dev/null
 [ -e "$TMP/cli/env.sh" ] && fail "关闭 Shell 集成后同步不应再写出 env.sh"
 

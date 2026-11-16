@@ -90,7 +90,7 @@ harmonia login https://你的服务器地址
 <details>
 <summary>Shell 集成（不推荐）</summary>
 
-`harmonia shell install` 让你打开的每个终端都自动带上全部变量，手机上修改后按一次空回车即可使用新值。代价是变量对这个用户运行的任何程序都可见，本机还会留一份明文变量文件 `~/.harmonia/env.sh`；多数情况下用 `harmonia exec` 就够了，所以安装时不会开启它。支持 Bash 5.1 及以上、Zsh 5.0 及以上；`harmonia shell uninstall` 关闭并删除变量文件。
+安装 CLI 时会准备好 Shell 集成，默认关闭。在手机的设备详情中开启后，终端会自动加载已允许本机解密的环境中的变量；按一次空回车即可应用变化。支持 Bash 5.1 及以上、Zsh 5.0 及以上。也可以用 `harmonia shell on` 开启、`harmonia shell off` 关闭。
 
 </details>
 
@@ -100,7 +100,7 @@ Windows 10（1809 及以上）、Windows 11 都可以用，系统自带的 Windo
 
 和其他系统一样，推荐用 `harmonia exec -- <命令>` 运行需要变量的程序。Windows 上与 Shell 集成对应的是把变量写入**用户环境变量**（“系统属性 → 环境变量”里的用户变量），同样不推荐，安装时不会开启：
 
-- 用 `harmonia shell install`、`harmonia shell uninstall` 开关。
+- 在手机的设备详情中开启或关闭“写入用户环境变量”。
 - 开启后，**新启动**的程序都能读到变量，包括 cmd、PowerShell 和图形界面程序。已经打开的终端和程序不会变，变量同步后要新开终端；想在当前终端马上用到最新值，用 `harmonia exec -- <命令>`。
 - 已有的同名用户变量会先记下原值，变量删除、环境停用、退出登录或卸载之后恢复。
 - `Path`、`TEMP` 这类系统自身使用的变量默认不写入，`harmonia status` 会列出。确实需要时，在 App 里这台电脑的“设备详情”中打开“写入系统变量”，或运行 `harmonia shell system-vars on`。
@@ -199,7 +199,7 @@ ExecStart=/home/me/.local/bin/harmonia exec -- /usr/bin/node /srv/agent/index.js
 
 **不保证的：**
 
-- 变量下发到设备后，风险由使用者承担：同一用户的任何进程（包括 AI Agent）都能读到注入的变量、开启 Shell 集成时的 `~/.harmonia/env.sh`，以及本机的设备密钥。没有开启 Shell 集成时不生成 `env.sh`，变量只以密文缓存保存（用 `harmonia override` 设置的本机覆盖值除外，它是明文）；`harmonia shell uninstall` 会删除 `env.sh`。撤销收不回已经复制或泄露的值，必要时请到服务商处更换密钥。
+- 变量下发到设备后，风险由使用者承担：同一用户的任何进程（包括 AI Agent）都能读到注入的变量、开启 Shell 集成时的 `~/.harmonia/env.sh`，以及本机的设备密钥。没有开启 Shell 集成时不生成 `env.sh`，变量只以密文缓存保存（用 `harmonia override` 设置的本机覆盖值除外，它是明文）；`harmonia shell off` 会删除 `env.sh`。撤销收不回已经复制或泄露的值，必要时请到服务商处更换密钥。
 - 手机被他人拿到并解开锁屏不在防护范围内，请用另一台管理设备或恢复码移除它。
 - 服务端被攻破时，可能拒绝服务、回滚数据，或假装执行撤销。
 - 服务端能看到变量名、环境名、设备名和访问时间。
